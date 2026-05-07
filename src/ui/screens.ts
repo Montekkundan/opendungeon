@@ -1,4 +1,4 @@
-import { fonts, measureText, type ASCIIFontName } from "@opentui/core"
+import { fonts, measureText, type ASCIIFontName, type OptimizedBuffer } from "@opentui/core"
 import { activeAssetPack } from "../assets/packs.js"
 import { d20FrameCount, d20RollSprite } from "../assets/d20Sprites.js"
 import { animatedPixelSprite, pixelSprite, type PixelSprite, type PixelSpriteId, type SpriteAnimationId } from "../assets/pixelSprites.js"
@@ -103,8 +103,15 @@ type QuickbarItem = {
 }
 
 export function draw(model: AppModel, width: number, height: number) {
-  const canvas = new Canvas(width, height, "#111820")
+  return renderCanvas(model, width, height).toStyledText()
+}
 
+export function paint(model: AppModel, width: number, height: number, buffer: OptimizedBuffer) {
+  renderCanvas(model, width, height).paint(buffer)
+}
+
+function renderCanvas(model: AppModel, width: number, height: number) {
+  const canvas = new Canvas(width, height, "#111820")
   if (model.screen === "start") drawStart(canvas, model)
   if (model.screen === "character") drawCharacter(canvas, model)
   if (model.screen === "mode") drawMode(canvas, model)
@@ -115,7 +122,7 @@ export function draw(model: AppModel, width: number, height: number) {
   if (model.screen === "game") drawGame(canvas, model)
   if (model.dialog) drawDialog(canvas, model)
 
-  return canvas.toStyledText()
+  return canvas
 }
 
 export function currentStartItem(model: AppModel) {

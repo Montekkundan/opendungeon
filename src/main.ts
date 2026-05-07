@@ -1,4 +1,4 @@
-import { TextRenderable, createCliRenderer, type KeyEvent } from "@opentui/core"
+import { FrameBufferRenderable, createCliRenderer, type KeyEvent } from "@opentui/core"
 import {
   createSession,
   cycleTarget,
@@ -18,8 +18,8 @@ import {
   currentMode,
   currentStartItem,
   currentSettingItem,
-  draw,
   moveSelection,
+  paint,
   type AppModel,
 } from "./ui/screens.js"
 import { shouldUseThreeRenderer } from "./rendering/threeAssets.js"
@@ -56,24 +56,25 @@ const renderer = await createCliRenderer({
   exitOnCtrlC: false,
   screenMode: "alternate-screen",
   targetFps: 30,
+  maxFps: 30,
+  consoleMode: model.debugView ? "console-overlay" : "disabled",
+  openConsoleOnError: model.debugView,
   backgroundColor: "#05070a",
 })
+renderer.setTerminalTitle("opendungeon")
 
-const screen = new TextRenderable(renderer, {
+const screen = new FrameBufferRenderable(renderer, {
   id: "screen",
-  content: draw(model, renderer.terminalWidth, renderer.terminalHeight),
   position: "absolute",
   left: 0,
   top: 0,
-  width: "100%",
-  height: "100%",
-  truncate: false,
-  selectable: false,
+  width: renderer.terminalWidth,
+  height: renderer.terminalHeight,
 })
 
 renderer.root.add(screen)
 renderer.on("resize", refresh)
-renderer.start()
+refresh()
 
 renderer.keyInput.on("keypress", (key: KeyEvent) => {
   if (key.ctrl && key.name === "c") {
@@ -482,7 +483,12 @@ function saveUserSettings(status: string) {
 
 function refresh() {
   if (destroyed) return
-  screen.content = draw(model, renderer.terminalWidth, renderer.terminalHeight)
+  const width = renderer.terminalWidth
+  const height = renderer.terminalHeight
+  if (screen.width !== width) screen.width = width
+  if (screen.height !== height) screen.height = height
+  if (screen.frameBuffer.width !== width || screen.frameBuffer.height !== height) screen.frameBuffer.resize(width, height)
+  paint(model, width, height, screen.frameBuffer)
   renderer.requestRender()
 }
 

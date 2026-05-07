@@ -1,10 +1,12 @@
-import { RGBA, StyledText, fg, type TextChunk } from "@opentui/core"
+import { RGBA, StyledText, fg, type OptimizedBuffer, type TextChunk } from "@opentui/core"
 
 type Cell = {
   text: string
   fg: string
   bg?: string
 }
+
+const colorCache = new Map<string, RGBA>()
 
 export class Canvas {
   private cells: Cell[][]
@@ -57,10 +59,27 @@ export class Canvas {
     }
     return new StyledText(chunks)
   }
+
+  paint(buffer: OptimizedBuffer) {
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        const cell = this.cells[y][x]
+        buffer.setCell(x, y, cell.text, rgba(cell.fg), rgba(cell.bg ?? this.defaultBg))
+      }
+    }
+  }
 }
 
 function toChunk(cell: Cell): TextChunk {
   const chunk = fg(cell.fg)(cell.text)
   if (cell.bg) chunk.bg = RGBA.fromHex(cell.bg)
   return chunk
+}
+
+function rgba(color: string) {
+  const cached = colorCache.get(color)
+  if (cached) return cached
+  const parsed = RGBA.fromHex(color)
+  colorCache.set(color, parsed)
+  return parsed
 }
