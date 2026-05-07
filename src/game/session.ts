@@ -22,6 +22,8 @@ export type GameSession = {
   dungeon: Dungeon
   log: string[]
   inventory: string[]
+  turn: number
+  status: "running" | "dead" | "victory"
 }
 
 const lootEvents = {
@@ -56,23 +58,26 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
     dungeon,
     log: ["Dev jokes hide in loot."],
     inventory: ["Rusty blade", "Dew vial"],
+    turn: 0,
+    status: "running",
   }
 }
 
 export function tryMove(session: GameSession, dx: number, dy: number) {
+  if (session.status !== "running") return
   const next = { x: session.player.x + dx, y: session.player.y + dy }
   const actor = actorAt(session.dungeon.actors, next)
 
   if (actor) {
-    session.focus = Math.max(0, session.focus - 1)
-    removeActor(session.dungeon.actors, actor)
-    session.log.unshift(defeatMessage(actor.kind))
+    attack(session, actor)
+    advanceTurn(session)
     return
   }
 
   const tile = tileAt(session.dungeon, next)
   if (tile === "wall" || tile === "void") {
     session.log.unshift("Cold stone blocks the way.")
+    trimLog(session)
     return
   }
 
@@ -88,6 +93,27 @@ export function tryMove(session: GameSession, dx: number, dy: number) {
     session.log.unshift("You move through the dark.")
   }
 
+  advanceTurn(session)
+}
+
+export function rest(session: GameSession) {
+  if (session.status !== "running") return
+  session.focus = Math.min(session.maxFocus, session.focus + 1)
+  session.log.unshift("You steady your breath. Focus returns.")
+  advanceTurn(session)
+}
+
+export function usePotion(session: GameSession) {
+  const index = session.inventory.indexOf("Deploy nerve potion")
+  if (index < 0) {
+    session.log.unshift("No potion in the pack.")
+    trimLog(session)
+    return
+  }
+
+  session.inventory.splice(index, 1)
+  session.hp = Math.min(session.maxHp, session.hp + 5)
+  session.log.unshift("Potion used. The pulse settles.")
   trimLog(session)
 }
 
@@ -98,6 +124,20 @@ export function actorAt(actors: Actor[], point: Point): Actor | undefined {
 function removeActor(actors: Actor[], actor: Actor) {
   const index = actors.indexOf(actor)
   if (index >= 0) actors.splice(index, 1)
+}
+
+function attack(session: GameSession, actor: Actor) {
+  const focusBonus = session.focus > 0 ? 1 : 0
+  actor.hp -= 2 + focusBonus
+  session.focus = Math.max(0, session.focus - 1)
+
+  if (actor.hp <= 0) {
+    removeActor(session.dungeon.actors, actor)
+    session.log.unshift(defeatMessage(actor.kind))
+    return
+  }
+
+  session.log.unshift(`You strike the ${actor.kind}. It still stands.`)
 }
 
 function defeatMessage(kind: Actor["kind"]) {
@@ -116,7 +156,53 @@ function descend(session: GameSession) {
   session.floor += 1
   session.dungeon = createDungeon(session.seed, session.floor)
   session.player = { ...session.dungeon.playerStart }
+  session.focus = Math.min(session.maxFocus, session.focus + 2)
   session.log.unshift(`Floor ${session.floor}. Same seed, darker shape.`)
+}
+
+function advanceTurn(session: GameSession) {
+  session.turn += 1
+  moveEnemies(session)
+  if (session.hp <= 0) {
+    session.hp = 0
+    session.status = "dead"
+    session.log.unshift("You fall beneath the dungeon's build.")
+  }
+  trimLog(session)
+}
+
+function moveEnemies(session: GameSession) {
+  for (const actor of [...session.dungeon.actors]) {
+    const distance = manhattan(actor.position, session.player)
+    if (distance === 1) {
+      session.hp -= actor.damage
+      session.log.unshift(`${label(actor.kind)} hits for ${actor.damage}.`)
+      continue
+    }
+
+    if (distance > 8) continue
+
+    const step = stepToward(actor.position, session.player)
+    const occupied = actorAt(session.dungeon.actors, step)
+    if (tileAt(session.dungeon, step) === "floor" && !occupied) actor.position = step
+  }
+}
+
+function stepToward(from: Point, to: Point): Point {
+  const dx = Math.sign(to.x - from.x)
+  const dy = Math.sign(to.y - from.y)
+  if (Math.abs(to.x - from.x) > Math.abs(to.y - from.y)) return { x: from.x + dx, y: from.y }
+  return { x: from.x, y: from.y + dy }
+}
+
+function manhattan(a: Point, b: Point) {
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
+}
+
+function label(kind: Actor["kind"]) {
+  if (kind === "slime") return "Slime"
+  if (kind === "ghoul") return "Ghoul"
+  return "Necromancer"
 }
 
 function trimLog(session: GameSession) {

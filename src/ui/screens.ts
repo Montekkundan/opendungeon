@@ -156,7 +156,9 @@ function drawHud(canvas: Canvas, session: GameSession) {
   canvas.write(25, 1, bar("FOCUS", session.focus, session.maxFocus, 14), "#7dffb2")
   canvas.write(canvas.width - 33, 0, `Floor ${session.floor}  Seed ${session.seed}`, "#d6a85c")
   canvas.write(canvas.width - 33, 1, `Mode ${session.mode}  Art ${activeAssetPack.name}`, "#8f9ba8")
-  canvas.write(1, 2, "i inventory   ? help   esc pause/settings", "#66717d")
+  const status = session.status === "running" ? `Turn ${session.turn}` : session.status.toUpperCase()
+  canvas.write(canvas.width - 33, 2, status, session.status === "dead" ? "#d56b8c" : "#66717d")
+  canvas.write(1, 2, "i inventory   h potion   r rest   ? help   esc pause", "#66717d")
 }
 
 function drawBottomLog(canvas: Canvas, session: GameSession) {
@@ -188,8 +190,8 @@ function drawDialog(canvas: Canvas, model: AppModel) {
   if (model.dialog === "help") {
     canvas.write(x + 3, y + 2, "Controls", "#f4d06f")
     canvas.write(x + 3, y + 4, "Move: arrows/WASD    Confirm: Enter    Back: Esc", "#d8dee9")
-    canvas.write(x + 3, y + 5, "Inventory: i         Help: ?           Quit: q", "#d8dee9")
-    canvas.write(x + 3, y + 7, "Fight by bumping enemies. Stairs descend to a new generated floor.", "#8f9ba8")
+    canvas.write(x + 3, y + 5, "Inventory: i         Potion: h         Rest: r", "#d8dee9")
+    canvas.write(x + 3, y + 7, "Bump enemies to attack. Stairs descend to a generated floor.", "#8f9ba8")
   }
 
   if (model.dialog === "pause") {

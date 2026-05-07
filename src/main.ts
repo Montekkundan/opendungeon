@@ -1,5 +1,5 @@
 import { Text, createCliRenderer, type KeyEvent } from "@opentui/core"
-import { createSession, tryMove } from "./game/session.js"
+import { createSession, rest, tryMove, usePotion } from "./game/session.js"
 import {
   currentClass,
   currentMode,
@@ -87,6 +87,14 @@ function handleGameKey(key: KeyEvent) {
   }
   if (key.name === "i") {
     model.dialog = "inventory"
+    return
+  }
+  if (key.name === "r") {
+    rest(model.session)
+    return
+  }
+  if (key.name === "h") {
+    usePotion(model.session)
     return
   }
   if (key.name === "?" || (key.shift && key.name === "/")) {

@@ -10,6 +10,8 @@ export type Actor = {
   id: string
   kind: ActorId
   position: Point
+  hp: number
+  damage: number
 }
 
 export type Dungeon = {
@@ -141,10 +143,17 @@ function spawnActors(tiles: TileId[][], rooms: Room[], rng: Rng, floor: number):
       y: rng.int(room.y + 1, room.y + room.height - 2),
     }
     if (tiles[position.y][position.x] !== "floor") continue
-    actors.push({ id: `enemy-${actors.length}`, kind: rng.pick(enemyKinds), position })
+    const kind = rng.pick(enemyKinds)
+    actors.push({ id: `enemy-${actors.length}`, kind, position, ...enemyStats(kind, floor) })
   }
 
   return actors
+}
+
+function enemyStats(kind: ActorId, floor: number) {
+  if (kind === "necromancer") return { hp: 4 + floor, damage: 3 }
+  if (kind === "ghoul") return { hp: 3 + floor, damage: 2 }
+  return { hp: 2 + floor, damage: 1 }
 }
 
 function createRoomZones(width: number, height: number): Room[] {
