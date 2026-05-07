@@ -32,8 +32,11 @@ const model: AppModel = {
   message: "",
   debugView: process.env.DUNGEON_DEBUG_VIEW === "1",
   rendererBackend: shouldUseThreeRenderer() ? "three" : "terminal",
+  diceRollAnimation: null,
 }
 let submittedSession: GameSession | null = null
+let diceTimer: ReturnType<typeof setTimeout> | null = null
+let destroyed = false
 
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
@@ -60,7 +63,7 @@ renderer.start()
 
 renderer.keyInput.on("keypress", (key: KeyEvent) => {
   if (key.ctrl && key.name === "c") {
-    renderer.destroy()
+    destroyApp()
     return
   }
 
@@ -71,7 +74,7 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
   }
 
   if (key.name === "q") {
-    renderer.destroy()
+    destroyApp()
     return
   }
 
@@ -85,6 +88,7 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
 function handleDialogKey(key: KeyEvent) {
   if (key.name === "escape" || key.name === "return" || key.name === "enter" || key.name === "linefeed") model.dialog = null
   if (model.dialog === "pause" && key.name === "s") model.dialog = "settings"
+  if (model.dialog === "pause" && key.name === "q") destroyApp()
 }
 
 function handleMenuKey(key: KeyEvent) {
@@ -173,7 +177,10 @@ function handleCombatKey(key: KeyEvent) {
     return
   }
   if (key.name === "return" || key.name === "enter" || key.name === "linefeed" || key.name === "space") {
+    const previousRoll = model.session.combat.lastRoll
     performCombatAction(model.session)
+    const nextRoll = model.session.combat.lastRoll
+    if (nextRoll && nextRoll !== previousRoll) startDiceRollAnimation(nextRoll.d20)
   }
 }
 
@@ -190,7 +197,7 @@ function confirmMenu() {
       model.menuIndex = model.modeIndex
     }
     if (item === "Settings") model.dialog = "settings"
-    if (item === "Quit") renderer.destroy()
+    if (item === "Quit") destroyApp()
     return
   }
 
@@ -216,8 +223,39 @@ function startRun() {
 }
 
 function refresh() {
+  if (destroyed) return
   screen.content = draw(model, renderer.terminalWidth, renderer.terminalHeight)
   renderer.requestRender()
+}
+
+function startDiceRollAnimation(result: number) {
+  model.diceRollAnimation = {
+    result,
+    startedAt: Date.now(),
+    durationMs: 820,
+  }
+  queueDiceAnimationFrame()
+}
+
+function queueDiceAnimationFrame() {
+  if (diceTimer || destroyed) return
+  diceTimer = setTimeout(() => {
+    diceTimer = null
+    const animation = model.diceRollAnimation
+    if (!animation || destroyed) return
+
+    const done = Date.now() - animation.startedAt >= animation.durationMs
+    if (done) model.diceRollAnimation = null
+    refresh()
+    if (!done) queueDiceAnimationFrame()
+  }, 33)
+}
+
+function destroyApp() {
+  destroyed = true
+  if (diceTimer) clearTimeout(diceTimer)
+  diceTimer = null
+  renderer.destroy()
 }
 
 function maybeSubmitLobbyResult() {

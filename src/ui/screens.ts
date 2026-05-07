@@ -1,4 +1,5 @@
 import { activeAssetPack } from "../assets/packs.js"
+import { d20FrameCount, d20RollSprite } from "../assets/d20Sprites.js"
 import { pixelSprite, type PixelSprite, type PixelSpriteId } from "../assets/pixelSprites.js"
 import {
   actorAt,
@@ -20,6 +21,12 @@ type TileRenderStyle = {
 export type ScreenId = "start" | "character" | "mode" | "game"
 export type DialogId = "settings" | "inventory" | "help" | "log" | "pause" | null
 
+export type DiceRollAnimation = {
+  result: number
+  startedAt: number
+  durationMs: number
+}
+
 export type AppModel = {
   screen: ScreenId
   dialog: DialogId
@@ -31,6 +38,7 @@ export type AppModel = {
   message: string
   debugView: boolean
   rendererBackend: "terminal" | "three"
+  diceRollAnimation?: DiceRollAnimation | null
 }
 
 const startItems = ["Begin descent", "Character", "Multiplayer", "Settings", "Quit"]
@@ -162,7 +170,7 @@ function drawMode(canvas: Canvas, model: AppModel) {
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.max(2, Math.floor((canvas.height - height) / 2))
   drawPanel(canvas, x, y, width, height, "Run Mode", UI.gold)
-  drawD20Icon(canvas, x + 6, y + 5, UI.gold)
+  drawD20Sprite(canvas, x + 5, y + 4, 20, d20FrameCount() - 1, 10, 5)
 
   modeOptions.forEach((option, index) => {
     const selected = model.modeIndex === index
@@ -181,8 +189,8 @@ function drawGame(canvas: Canvas, model: AppModel) {
   const session = model.session
   drawMap(canvas, session, model.debugView)
   drawHud(canvas, session)
-  if (!model.debugView) drawQuickbar(canvas, session)
-  if (session.combat.active) drawCombatPanel(canvas, session)
+  if (!model.debugView) drawQuickbar(canvas, session, model.diceRollAnimation)
+  if (session.combat.active) drawCombatPanel(canvas, session, model.diceRollAnimation)
   if (session.status !== "running") drawRunEnd(canvas, session)
 }
 
@@ -406,7 +414,7 @@ function drawHud(canvas: Canvas, session: GameSession) {
   canvas.write(rightX + rightW - 6, 5, String(session.gold), UI.gold, UI.panel)
 }
 
-function drawQuickbar(canvas: Canvas, session: GameSession) {
+function drawQuickbar(canvas: Canvas, session: GameSession, animation?: DiceRollAnimation | null) {
   const height = gameQuickbarHeight(canvas)
   if (!height) return
   const slotCount = 6
@@ -436,7 +444,7 @@ function drawQuickbar(canvas: Canvas, session: GameSession) {
     canvas.fill(slotX + 1, y + 2, slotWidth - 3, height - 4, " ", UI.panel2, UI.panel2)
     canvas.border(slotX, y + 1, slotWidth - 1, height - 2, edge)
     canvas.write(slotX + 1, y + 1, item.key, item.active ? UI.gold : UI.muted, UI.panel2)
-    if (item.custom === "d20") drawD20Icon(canvas, slotX + 3, y + 2, item.active ? UI.gold : UI.soft)
+    if (item.custom === "d20") drawD20Sprite(canvas, slotX + 2, y + 2, diceResult(session, animation), diceFrame(session, animation), 8, 3, item.active, animation)
     else if (item.sprite) drawMiniIcon(canvas, slotX + 3, y + 2, item.sprite, 7, 3)
     canvas.write(slotX + 1, y + height - 3, trim(item.label, slotWidth - 3), item.active ? UI.gold : UI.soft, UI.panel2)
     if (item.count !== undefined && item.count !== "0") {
@@ -446,7 +454,7 @@ function drawQuickbar(canvas: Canvas, session: GameSession) {
   })
 }
 
-function drawCombatPanel(canvas: Canvas, session: GameSession) {
+function drawCombatPanel(canvas: Canvas, session: GameSession, animation?: DiceRollAnimation | null) {
   const width = Math.min(58, Math.max(38, Math.floor(canvas.width * 0.35)))
   const height = Math.min(18, Math.max(14, canvas.height - gameHudHeight(canvas) - gameQuickbarHeight(canvas) - 2))
   const x = Math.max(1, canvas.width - width - 2)
@@ -456,7 +464,7 @@ function drawCombatPanel(canvas: Canvas, session: GameSession) {
   const roll = session.combat.lastRoll
 
   drawPanel(canvas, x, y, width, height, "Turn Combat", UI.gold)
-  drawD20Icon(canvas, x + width - 10, y + 1, roll?.hit ? UI.focus : UI.hp)
+  drawD20Sprite(canvas, x + width - 11, y + 1, diceResult(session, animation), diceFrame(session, animation), 8, 3, true, animation)
 
   canvas.write(x + 2, y + 3, "Targets", UI.brass, UI.panel)
   targets.slice(0, 4).forEach((target, index) => {
@@ -486,8 +494,8 @@ function drawCombatPanel(canvas: Canvas, session: GameSession) {
   const diceX = x + width - 15
   const diceY = y + height - 5
   canvas.border(diceX, diceY, 12, 4, roll?.hit ? UI.focus : UI.hp)
-  drawD20Icon(canvas, diceX + 1, diceY + 1, roll?.hit ? UI.focus : UI.gold)
-  canvas.write(diceX + 6, diceY + 1, roll ? String(roll.d20).padStart(2, "0") : "d20", roll?.hit ? UI.focus : UI.gold)
+  drawD20Sprite(canvas, diceX + 1, diceY + 1, diceResult(session, animation), diceFrame(session, animation), 5, 2, true, animation)
+  canvas.write(diceX + 7, diceY + 1, roll ? String(roll.d20).padStart(2, "0") : "d20", roll?.hit ? UI.focus : UI.gold)
   canvas.write(diceX + 2, diceY + 2, roll ? `${roll.total}/${roll.dc}` : "roll", UI.ink)
 
   const footer = roll ? `${roll.skill} ${roll.hit ? "hit" : "miss"} ${roll.target}` : "Enter rolls selected skill"
@@ -536,10 +544,42 @@ function drawMiniIcon(canvas: Canvas, x: number, y: number, sprite: PixelSpriteI
   drawPixelBlock(canvas, x, y, pixelSprite(sprite, width, height), dim)
 }
 
-function drawD20Icon(canvas: Canvas, x: number, y: number, color = UI.gold) {
-  canvas.write(x + 1, y, "/\\", color)
-  canvas.write(x, y + 1, "<20>", color)
-  canvas.write(x + 1, y + 2, "\\/", color)
+function drawD20Sprite(
+  canvas: Canvas,
+  x: number,
+  y: number,
+  result: number,
+  frame: number,
+  width = 10,
+  height = 5,
+  moving = false,
+  animation?: DiceRollAnimation | null,
+) {
+  const shake = moving && animation ? diceShake(frame) : { x: 0, y: 0 }
+  drawPixelBlock(canvas, x + shake.x, y + shake.y, d20RollSprite(result, frame, width, height), 1)
+}
+
+function diceResult(session: GameSession, animation?: DiceRollAnimation | null) {
+  return animation?.result ?? session.combat.lastRoll?.d20 ?? 20
+}
+
+function diceFrame(_session: GameSession, animation?: DiceRollAnimation | null) {
+  if (!animation) return d20FrameCount() - 1
+  const elapsed = Date.now() - animation.startedAt
+  const progress = clamp(elapsed / animation.durationMs, 0, 1)
+  return clamp(Math.floor(progress * d20FrameCount()), 0, d20FrameCount() - 1)
+}
+
+function diceShake(frame: number) {
+  const pattern = [
+    { x: -1, y: 0 },
+    { x: 1, y: -1 },
+    { x: 0, y: 1 },
+    { x: -1, y: 1 },
+    { x: 1, y: 0 },
+    { x: 0, y: -1 },
+  ]
+  return pattern[frame % pattern.length]
 }
 
 function drawDialogFrame(
@@ -556,7 +596,7 @@ function drawDialogFrame(
   canvas.border(x, y, width, height, UI.gold)
   canvas.fill(x + 1, y + 1, width - 2, 2, " ", UI.panel2, UI.panel2)
   canvas.write(x + 4, y + 1, title.toUpperCase(), UI.gold, UI.panel2)
-  if (icon === "d20") drawD20Icon(canvas, x + width - 10, y + 1, UI.gold)
+  if (icon === "d20") drawD20Sprite(canvas, x + width - 12, y + 1, 20, d20FrameCount() - 1, 9, 3)
   else drawMiniIcon(canvas, x + width - 12, y + 1, icon, 7, 2)
 }
 
@@ -770,4 +810,8 @@ function fitPattern(text: string, width: number) {
 
 function wrap(value: number, count: number) {
   return (value + count) % count
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value))
 }
