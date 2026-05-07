@@ -29,6 +29,8 @@ export type GameSession = {
   level: number
   kills: number
   finalFloor: number
+  visible: Set<string>
+  seen: Set<string>
 }
 
 const lootEvents = {
@@ -46,7 +48,7 @@ const heroStats: Record<HeroClass, { title: string; hp: number; focus: number }>
 export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", classId: HeroClass = "ranger"): GameSession {
   const dungeon = createDungeon(seed, 1)
   const stats = heroStats[classId]
-  return {
+  const session: GameSession = {
     mode,
     hero: {
       name: "Mira",
@@ -70,7 +72,11 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
     level: 1,
     kills: 0,
     finalFloor: 5,
+    visible: new Set(),
+    seen: new Set(),
   }
+  revealAroundPlayer(session)
+  return session
 }
 
 export function tryMove(session: GameSession, dx: number, dy: number) {
@@ -93,8 +99,12 @@ export function tryMove(session: GameSession, dx: number, dy: number) {
 
   session.player = next
 
-  if (tile === "stairs") descend(session)
-  else if (tile in lootEvents) {
+  if (tile === "stairs") {
+    descend(session)
+    if (session.status === "running") advanceTurn(session)
+    else trimLog(session)
+    return
+  } else if (tile in lootEvents) {
     const lootTile = tile as keyof typeof lootEvents
     session.log.unshift(lootEvents[lootTile])
     session.gold += lootTile === "relic" ? 12 : lootTile === "chest" ? 20 : 4
@@ -194,14 +204,18 @@ function descend(session: GameSession) {
   session.floor += 1
   session.dungeon = createDungeon(session.seed, session.floor)
   session.player = { ...session.dungeon.playerStart }
+  session.visible = new Set()
+  session.seen = new Set()
   session.hp = Math.min(session.maxHp, session.hp + 3)
   session.focus = Math.min(session.maxFocus, session.focus + 2)
+  revealAroundPlayer(session)
   session.log.unshift(`Floor ${session.floor}. Same seed, darker shape.`)
 }
 
 function advanceTurn(session: GameSession) {
   session.turn += 1
   moveEnemies(session)
+  revealAroundPlayer(session)
   if (session.hp <= 0) {
     session.hp = 0
     session.status = "dead"
@@ -246,4 +260,51 @@ function label(kind: Actor["kind"]) {
 
 function trimLog(session: GameSession) {
   while (session.log.length > 8) session.log.pop()
+}
+
+function revealAroundPlayer(session: GameSession) {
+  const nextVisible = new Set<string>()
+  const radius = 7 + Math.floor(session.focus / 3)
+  for (let y = session.player.y - radius; y <= session.player.y + radius; y++) {
+    for (let x = session.player.x - radius; x <= session.player.x + radius; x++) {
+      if (x < 0 || y < 0 || x >= session.dungeon.width || y >= session.dungeon.height) continue
+      const point = { x, y }
+      if (manhattan(session.player, point) > radius) continue
+      if (!hasLineOfSight(session, point)) continue
+      const key = pointKey(point)
+      nextVisible.add(key)
+      session.seen.add(key)
+    }
+  }
+  session.visible = nextVisible
+}
+
+function hasLineOfSight(session: GameSession, target: Point) {
+  const dx = Math.abs(target.x - session.player.x)
+  const dy = Math.abs(target.y - session.player.y)
+  const sx = session.player.x < target.x ? 1 : -1
+  const sy = session.player.y < target.y ? 1 : -1
+  let error = dx - dy
+  let x = session.player.x
+  let y = session.player.y
+
+  while (x !== target.x || y !== target.y) {
+    const doubledError = error * 2
+    if (doubledError > -dy) {
+      error -= dy
+      x += sx
+    }
+    if (doubledError < dx) {
+      error += dx
+      y += sy
+    }
+    if (x === target.x && y === target.y) return true
+    if (tileAt(session.dungeon, { x, y }) === "wall") return false
+  }
+
+  return true
+}
+
+export function pointKey(point: Point) {
+  return `${point.x},${point.y}`
 }

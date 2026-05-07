@@ -1,5 +1,5 @@
 import { activeAssetPack } from "../assets/packs.js"
-import { actorAt, type GameSession, type HeroClass, type MultiplayerMode } from "../game/session.js"
+import { actorAt, pointKey, type GameSession, type HeroClass, type MultiplayerMode } from "../game/session.js"
 import { Canvas } from "./canvas.js"
 
 type TileRenderStyle = {
@@ -135,8 +135,11 @@ function drawMap(canvas: Canvas, session: GameSession, debugView: boolean) {
     for (let sx = 0; sx < viewWidth; sx++) {
       const x = startX + sx
       const y = startY + sy
-      const actor = actorAt(session.dungeon.actors, { x, y })
-      const style = tileStyle(session, x, y, debugView)
+      const point = { x, y }
+      const visible = session.visible.has(pointKey(point))
+      const seen = session.seen.has(pointKey(point))
+      const actor = visible ? actorAt(session.dungeon.actors, point) : undefined
+      const style = tileStyle(session, x, y, debugView, visible, seen)
       canvas.write(sx * tileWidth, hudHeight + sy, style.glyph, style.fg, style.bg)
 
       if (session.player.x === x && session.player.y === y) drawSprite(canvas, sx * tileWidth, hudHeight + sy, "hero", debugView)
@@ -145,15 +148,16 @@ function drawMap(canvas: Canvas, session: GameSession, debugView: boolean) {
   }
 }
 
-function tileStyle(session: GameSession, x: number, y: number, debugView: boolean): TileRenderStyle {
+function tileStyle(session: GameSession, x: number, y: number, debugView: boolean, visible: boolean, seen: boolean): TileRenderStyle {
   const tile = session.dungeon.tiles[y]?.[x] ?? "void"
   if (debugView) return debugTileStyle(session, x, y)
+  if (!seen) return { glyph: "  ", fg: "#05070a", bg: "#05070a" }
   if (tile === "floor") return { glyph: "  ", fg: "#24484a", bg: textureColor(x, y) }
   if (tile === "wall") return { glyph: "  ", fg: "#3e444b", bg: stoneColor(x, y) }
-  if (tile === "stairs") return { glyph: "▣ ", fg: "#1b1115", bg: "#b4915a" }
-  if (tile === "potion") return { glyph: "● ", fg: "#f4a6b8", bg: textureColor(x, y) }
-  if (tile === "relic") return { glyph: "◆ ", fg: "#f4d06f", bg: textureColor(x, y) }
-  if (tile === "chest") return { glyph: "▤ ", fg: "#2d1d17", bg: "#9a6c4e" }
+  if (tile === "stairs") return visible ? { glyph: "▣ ", fg: "#1b1115", bg: "#b4915a" } : { glyph: "  ", fg: "#302b25", bg: dimTextureColor(x, y) }
+  if (tile === "potion") return visible ? { glyph: "● ", fg: "#f4a6b8", bg: textureColor(x, y) } : { glyph: "  ", fg: "#302b25", bg: dimTextureColor(x, y) }
+  if (tile === "relic") return visible ? { glyph: "◆ ", fg: "#f4d06f", bg: textureColor(x, y) } : { glyph: "  ", fg: "#302b25", bg: dimTextureColor(x, y) }
+  if (tile === "chest") return visible ? { glyph: "▤ ", fg: "#2d1d17", bg: "#9a6c4e" } : { glyph: "  ", fg: "#302b25", bg: dimTextureColor(x, y) }
   return { glyph: "  ", fg: "#05070a", bg: "#05070a" }
 }
 
@@ -187,6 +191,14 @@ function textureColor(x: number, y: number) {
   if (n === 1) return "#24484a"
   if (n === 2) return "#2b5350"
   return "#203d40"
+}
+
+function dimTextureColor(x: number, y: number) {
+  const n = (x * 13 + y * 17) % 7
+  if (n === 0) return "#172b2c"
+  if (n === 1) return "#132326"
+  if (n === 2) return "#162729"
+  return "#101c1f"
 }
 
 function stoneColor(x: number, y: number) {
