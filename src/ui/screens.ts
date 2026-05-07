@@ -261,7 +261,8 @@ function drawSaves(canvas: Canvas, model: AppModel) {
     canvas.write(detailX + 4, listY + 3, "so the local format stays useful offline.", UI.soft, UI.panel)
   }
 
-  canvas.center(canvas.height - 3, "Enter load  ↑↓ choose save  r refresh  Esc title", UI.muted)
+  if (model.saveStatus) canvas.center(canvas.height - 4, trim(model.saveStatus, canvas.width - 4), UI.focus)
+  canvas.center(canvas.height - 3, "Enter load  ↑↓ choose save  r refresh  d delete  Esc title", UI.muted)
 }
 
 function drawCloud(canvas: Canvas, model: AppModel) {

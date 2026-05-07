@@ -11,7 +11,7 @@ import {
   type HeroClass,
   type MultiplayerMode,
 } from "./game/session.js"
-import { listSaves, loadSave, saveSession, type SaveSummary } from "./game/saveStore.js"
+import { deleteSave, listSaves, loadSave, saveSession, type SaveSummary } from "./game/saveStore.js"
 import {
   currentClass,
   currentMode,
@@ -43,6 +43,7 @@ const model: AppModel = {
 let submittedSession: GameSession | null = null
 let diceTimer: ReturnType<typeof setTimeout> | null = null
 let destroyed = false
+let pendingDeleteSaveId: string | null = null
 
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
@@ -105,10 +106,21 @@ function handleDialogKey(key: KeyEvent) {
 
 function handleMenuKey(key: KeyEvent) {
   if (model.screen === "saves") {
-    if (key.name === "up" || key.name === "w") moveSelection(model, -1)
-    if (key.name === "down" || key.name === "s") moveSelection(model, 1)
-    if (key.name === "r") refreshSaveList()
+    if (key.name === "up" || key.name === "w") {
+      pendingDeleteSaveId = null
+      moveSelection(model, -1)
+    }
+    if (key.name === "down" || key.name === "s") {
+      pendingDeleteSaveId = null
+      moveSelection(model, 1)
+    }
+    if (key.name === "r") {
+      pendingDeleteSaveId = null
+      refreshSaveList()
+    }
+    if (key.name === "d") deleteSelectedSave()
     if (key.name === "escape") {
+      pendingDeleteSaveId = null
       model.screen = "start"
       model.menuIndex = 0
     }
@@ -282,6 +294,7 @@ function loadSelectedSave() {
   }
 
   try {
+    pendingDeleteSaveId = null
     const session = loadSave(summary.id)
     session.log.unshift(`Loaded local save: ${summary.name}.`)
     while (session.log.length > 8) session.log.pop()
@@ -298,6 +311,30 @@ function loadSelectedSave() {
     const status = error instanceof Error ? error.message : "Save failed to load."
     refreshSaveList()
     model.saveStatus = status
+  }
+}
+
+function deleteSelectedSave() {
+  const summary = model.saves[model.saveIndex]
+  if (!summary) {
+    model.saveStatus = "No local save selected."
+    return
+  }
+
+  if (pendingDeleteSaveId !== summary.id) {
+    pendingDeleteSaveId = summary.id
+    model.saveStatus = `Press d again to delete ${summary.name}.`
+    return
+  }
+
+  try {
+    deleteSave(summary.id)
+    pendingDeleteSaveId = null
+    refreshSaveList()
+    model.saveStatus = `Deleted ${summary.name}.`
+  } catch (error) {
+    pendingDeleteSaveId = null
+    model.saveStatus = error instanceof Error ? error.message : "Save delete failed."
   }
 }
 
