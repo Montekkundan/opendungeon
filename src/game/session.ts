@@ -1,16 +1,27 @@
 import { createDungeon, setTile, tileAt, type Actor, type Dungeon, type Point } from "./dungeon.js"
 
 export type MultiplayerMode = "solo" | "coop" | "race"
+export type HeroClass = "warden" | "arcanist" | "ranger"
+
+export type Hero = {
+  name: string
+  classId: HeroClass
+  title: string
+}
 
 export type GameSession = {
   mode: MultiplayerMode
+  hero: Hero
   seed: number
   floor: number
   player: Point
   hp: number
+  maxHp: number
   focus: number
+  maxFocus: number
   dungeon: Dungeon
   log: string[]
+  inventory: string[]
 }
 
 const lootEvents = {
@@ -19,17 +30,32 @@ const lootEvents = {
   chest: "Chest opened: rollback scroll.",
 } as const
 
-export function createSession(seed = 2423368, mode: MultiplayerMode = "solo"): GameSession {
+const heroStats: Record<HeroClass, { title: string; hp: number; focus: number }> = {
+  warden: { title: "Warden of Stone", hp: 16, focus: 5 },
+  arcanist: { title: "Arcanist of Ash", hp: 10, focus: 10 },
+  ranger: { title: "Ranger of Hollow Paths", hp: 12, focus: 7 },
+}
+
+export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", classId: HeroClass = "ranger"): GameSession {
   const dungeon = createDungeon(seed, 1)
+  const stats = heroStats[classId]
   return {
     mode,
+    hero: {
+      name: "Mira",
+      classId,
+      title: stats.title,
+    },
     seed,
     floor: 1,
     player: { ...dungeon.playerStart },
-    hp: 12,
-    focus: 7,
+    hp: stats.hp,
+    maxHp: stats.hp,
+    focus: stats.focus,
+    maxFocus: stats.focus,
     dungeon,
     log: ["Dev jokes hide in loot."],
+    inventory: ["Rusty blade", "Dew vial"],
   }
 }
 
@@ -54,7 +80,9 @@ export function tryMove(session: GameSession, dx: number, dy: number) {
 
   if (tile === "stairs") descend(session)
   else if (tile in lootEvents) {
-    session.log.unshift(lootEvents[tile as keyof typeof lootEvents])
+    const lootTile = tile as keyof typeof lootEvents
+    session.log.unshift(lootEvents[lootTile])
+    session.inventory.unshift(inventoryItem(lootTile))
     setTile(session.dungeon, next, "floor")
   } else {
     session.log.unshift("You move through the dark.")
@@ -76,6 +104,12 @@ function defeatMessage(kind: Actor["kind"]) {
   if (kind === "slime") return "Slime dissolved. Cache warmed."
   if (kind === "ghoul") return "Ghoul banished. Ticket closed."
   return "Necromancer silenced. Dead branch pruned."
+}
+
+function inventoryItem(tile: keyof typeof lootEvents) {
+  if (tile === "potion") return "Deploy nerve potion"
+  if (tile === "relic") return "Missing env var"
+  return "Rollback scroll"
 }
 
 function descend(session: GameSession) {

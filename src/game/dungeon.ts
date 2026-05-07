@@ -29,19 +29,12 @@ type Room = {
   height: number
 }
 
-export function createDungeon(seed: number, floor: number, width = 38, height = 18): Dungeon {
+export function createDungeon(seed: number, floor: number, width = 96, height = 48): Dungeon {
   const rng = createRng(seed + floor * 9973)
   const tiles: TileId[][] = Array.from({ length: height }, () =>
     Array.from({ length: width }, (): TileId => "wall"),
   )
-  const zones = [
-    { x: 1, y: 1, width: 12, height: 7 },
-    { x: 14, y: 1, width: 11, height: 7 },
-    { x: 26, y: 2, width: 11, height: 7 },
-    { x: 2, y: 10, width: 13, height: 7 },
-    { x: 17, y: 10, width: 19, height: 7 },
-  ]
-  const rooms = zones.map((zone) => createRoomInZone(zone, rng))
+  const rooms = createRoomZones(width, height).map((zone) => createRoomInZone(zone, rng))
 
   for (const room of rooms) {
     carveRoom(tiles, room)
@@ -128,7 +121,7 @@ function placeFeature(tiles: TileId[][], point: Point, tile: TileId) {
 
 function scatterFeatures(tiles: TileId[][], rooms: Room[], rng: Rng) {
   const featureTiles: TileId[] = ["potion", "relic", "chest"]
-  for (const room of rooms.slice(1, 5)) {
+  for (const room of rooms.slice(1, 18)) {
     const point = {
       x: rng.int(room.x + 1, room.x + room.width - 2),
       y: rng.int(room.y + 1, room.y + room.height - 2),
@@ -141,7 +134,7 @@ function spawnActors(tiles: TileId[][], rooms: Room[], rng: Rng, floor: number):
   const actors: Actor[] = []
   const enemyKinds: ActorId[] = floor > 2 ? ["slime", "ghoul", "necromancer"] : ["slime", "ghoul"]
 
-  for (const room of rooms.slice(0, 5)) {
+  for (const room of rooms.slice(0, 18)) {
     if (rng.next() < 0.35) continue
     const position = {
       x: rng.int(room.x + 1, room.x + room.width - 2),
@@ -152,4 +145,18 @@ function spawnActors(tiles: TileId[][], rooms: Room[], rng: Rng, floor: number):
   }
 
   return actors
+}
+
+function createRoomZones(width: number, height: number): Room[] {
+  const zones: Room[] = []
+  const zoneWidth = 13
+  const zoneHeight = 8
+
+  for (let y = 1; y < height - zoneHeight - 1; y += zoneHeight + 1) {
+    for (let x = 1; x < width - zoneWidth - 1; x += zoneWidth + 1) {
+      zones.push({ x, y, width: zoneWidth, height: zoneHeight })
+    }
+  }
+
+  return zones
 }

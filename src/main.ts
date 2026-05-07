@@ -1,9 +1,24 @@
-import { Box, Text, createCliRenderer, type KeyEvent } from "@opentui/core"
-import { activeAssetPack } from "./assets/packs.js"
+import { Text, createCliRenderer, type KeyEvent } from "@opentui/core"
 import { createSession, tryMove } from "./game/session.js"
-import { renderMap } from "./ui/renderMap.js"
+import {
+  currentClass,
+  currentMode,
+  currentStartItem,
+  draw,
+  moveSelection,
+  type AppModel,
+} from "./ui/screens.js"
 
-const session = createSession()
+const model: AppModel = {
+  screen: "start",
+  dialog: null,
+  menuIndex: 0,
+  classIndex: 2,
+  modeIndex: 0,
+  seed: 2423368,
+  session: createSession(),
+  message: "",
+}
 
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
@@ -12,113 +27,130 @@ const renderer = await createCliRenderer({
   backgroundColor: "#05070a",
 })
 
-const title = Text({
-  content: "Dungeon Dev Crawl",
-  fg: "#d6a85c",
-})
-
-const mapText = Text({
-  content: renderMap(session),
+const screen = Text({
+  content: draw(model, renderer.terminalWidth, renderer.terminalHeight),
+  position: "absolute",
+  left: 0,
+  top: 0,
+  width: "100%",
+  height: "100%",
   truncate: false,
+  selectable: false,
 })
 
-const statsText = Text({
-  content: stats(),
-  fg: "#d8dee9",
-})
-
-const packText = Text({
-  content: packSummary(),
-  fg: "#8f9ba8",
-})
-
-const logText = Text({
-  content: session.log.join("\n"),
-  fg: "#b5bec6",
-})
-
-renderer.root.add(
-  Box(
-    {
-      width: "100%",
-      height: "100%",
-      flexDirection: "row",
-      gap: 1,
-      padding: 1,
-    },
-    Box(
-      {
-        width: session.dungeon.width + 4,
-        height: session.dungeon.height + 6,
-        borderStyle: "rounded",
-        padding: 1,
-        flexDirection: "column",
-        gap: 1,
-      },
-      title,
-      mapText,
-      Text({ content: "Move: arrows/WASD  Quit: q or Ctrl+C", fg: "#66717d" }),
-    ),
-    Box(
-      {
-        flexGrow: 1,
-        minWidth: 32,
-        height: session.dungeon.height + 6,
-        borderStyle: "rounded",
-        padding: 1,
-        flexDirection: "column",
-        gap: 1,
-      },
-      Text({ content: "Run Sheet", fg: "#d6a85c" }),
-      statsText,
-      packText,
-      Text({ content: "Multiplayer\nCo-op + race planned", fg: "#7dffb2" }),
-      Text({ content: "Log", fg: "#d6a85c" }),
-      logText,
-    ),
-  ),
-)
-
-function refresh() {
-  mapText.content = renderMap(session)
-  statsText.content = stats() as never
-  logText.content = session.log.join("\n") as never
-}
-
-function stats() {
-  return `HP ${session.hp}/12  Focus ${session.focus}\nFloor ${session.floor}   Seed ${session.seed}\nMode ${session.mode}`
-}
-
-function packSummary() {
-  return `Art ${activeAssetPack.name}\n${activeAssetPack.mood}\nLicense CC0`
-}
+renderer.root.add(screen)
+renderer.on("resize", refresh)
 
 renderer.keyInput.on("keypress", (key: KeyEvent) => {
-  if ((key.ctrl && key.name === "c") || key.name === "q" || key.name === "escape") {
+  if (key.ctrl && key.name === "c") {
     renderer.destroy()
+    return
+  }
+
+  if (model.dialog) {
+    handleDialogKey(key)
+    refresh()
+    return
+  }
+
+  if (key.name === "q") {
+    renderer.destroy()
+    return
+  }
+
+  if (model.screen === "game") handleGameKey(key)
+  else handleMenuKey(key)
+
+  refresh()
+})
+
+function handleDialogKey(key: KeyEvent) {
+  if (key.name === "escape" || key.name === "return") model.dialog = null
+  if (model.dialog === "pause" && key.name === "s") model.dialog = "settings"
+}
+
+function handleMenuKey(key: KeyEvent) {
+  if (key.name === "up" || key.name === "w") moveSelection(model, -1)
+  if (key.name === "down" || key.name === "s") moveSelection(model, 1)
+  if (key.name === "escape") {
+    model.screen = "start"
+    model.menuIndex = 0
+  }
+  if (key.name === "?" || (key.shift && key.name === "/")) model.dialog = "help"
+  if (key.name === "return" || key.name === "enter" || key.name === "space") confirmMenu()
+}
+
+function handleGameKey(key: KeyEvent) {
+  if (key.name === "escape") {
+    model.dialog = "pause"
+    return
+  }
+  if (key.name === "i") {
+    model.dialog = "inventory"
+    return
+  }
+  if (key.name === "?" || (key.shift && key.name === "/")) {
+    model.dialog = "help"
     return
   }
 
   switch (key.name) {
     case "up":
     case "w":
-      tryMove(session, 0, -1)
+      tryMove(model.session, 0, -1)
       break
     case "down":
     case "s":
-      tryMove(session, 0, 1)
+      tryMove(model.session, 0, 1)
       break
     case "left":
     case "a":
-      tryMove(session, -1, 0)
+      tryMove(model.session, -1, 0)
       break
     case "right":
     case "d":
-      tryMove(session, 1, 0)
+      tryMove(model.session, 1, 0)
       break
-    default:
-      return
+  }
+}
+
+function confirmMenu() {
+  if (model.screen === "start") {
+    const item = currentStartItem(model)
+    if (item === "Begin descent") startRun()
+    if (item === "Character") {
+      model.screen = "character"
+      model.menuIndex = model.classIndex
+    }
+    if (item === "Multiplayer") {
+      model.screen = "mode"
+      model.menuIndex = model.modeIndex
+    }
+    if (item === "Settings") model.dialog = "settings"
+    if (item === "Quit") renderer.destroy()
+    return
   }
 
-  refresh()
-})
+  if (model.screen === "character") {
+    model.classIndex = model.menuIndex
+    model.screen = "start"
+    model.menuIndex = 0
+    return
+  }
+
+  if (model.screen === "mode") {
+    model.modeIndex = model.menuIndex
+    model.screen = "start"
+    model.menuIndex = 0
+  }
+}
+
+function startRun() {
+  model.session = createSession(model.seed, currentMode(model).id, currentClass(model).id)
+  model.screen = "game"
+  model.dialog = null
+}
+
+function refresh() {
+  screen.content = draw(model, renderer.terminalWidth, renderer.terminalHeight)
+}
