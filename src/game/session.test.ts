@@ -34,6 +34,25 @@ describe("game session", () => {
     expect(session.inventory).not.toContain("Deploy nerve potion")
   })
 
+  test("locks final stairs until the guardian is defeated", () => {
+    const session = createSession(1234)
+    session.floor = session.finalFloor
+    const target = { x: session.player.x + 1, y: session.player.y }
+    setTile(session.dungeon, target, "stairs")
+    session.dungeon.actors.push({
+      id: "final-guardian",
+      kind: "necromancer",
+      position: { x: target.x + 1, y: target.y },
+      hp: 10,
+      damage: 4,
+    })
+
+    tryMove(session, 1, 0)
+
+    expect(session.status).toBe("running")
+    expect(session.log[0]).toContain("sealed")
+  })
+
   test("renders start and game screens to a full terminal-sized surface", () => {
     const session = createSession()
     const start = draw(

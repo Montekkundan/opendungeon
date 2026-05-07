@@ -100,6 +100,11 @@ export function tryMove(session: GameSession, dx: number, dy: number) {
   session.player = next
 
   if (tile === "stairs") {
+    if (hasFinalGuardian(session)) {
+      session.log.unshift("The final gate is sealed by the necromancer.")
+      trimLog(session)
+      return
+    }
     descend(session)
     if (session.status === "running") advanceTurn(session)
     else trimLog(session)
@@ -233,6 +238,7 @@ function moveEnemies(session: GameSession) {
       continue
     }
 
+    if (actor.id === "final-guardian") continue
     if (distance > 8) continue
 
     const step = stepToward(actor.position, session.player)
@@ -256,6 +262,10 @@ function label(kind: Actor["kind"]) {
   if (kind === "slime") return "Slime"
   if (kind === "ghoul") return "Ghoul"
   return "Necromancer"
+}
+
+function hasFinalGuardian(session: GameSession) {
+  return session.dungeon.actors.some((actor) => actor.id === "final-guardian")
 }
 
 function trimLog(session: GameSession) {

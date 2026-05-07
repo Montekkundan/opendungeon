@@ -52,13 +52,16 @@ export function createDungeon(seed: number, floor: number, width = 96, height = 
   placeFeature(tiles, center(lastRoom), "stairs")
   scatterFeatures(tiles, rooms, rng)
 
+  const actors = spawnActors(tiles, rooms.slice(1), rng, floor)
+  if (floor >= 5) actors.push(finalGuardian(center(lastRoom), floor))
+
   return {
     width,
     height,
     seed,
     floor,
     tiles,
-    actors: spawnActors(tiles, rooms.slice(1), rng, floor),
+    actors,
     playerStart,
   }
 }
@@ -154,6 +157,16 @@ function enemyStats(kind: ActorId, floor: number) {
   if (kind === "necromancer") return { hp: 4 + floor, damage: 3 }
   if (kind === "ghoul") return { hp: 3 + floor, damage: 2 }
   return { hp: 2 + floor, damage: 1 }
+}
+
+function finalGuardian(position: Point, floor: number): Actor {
+  return {
+    id: "final-guardian",
+    kind: "necromancer",
+    position,
+    hp: 12 + floor,
+    damage: 4,
+  }
 }
 
 function createRoomZones(width: number, height: number): Room[] {
