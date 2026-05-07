@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createSession, tryMove, usePotion } from "./session.js"
+import { createSession, performCombatAction, selectSkill, tryMove, usePotion } from "./session.js"
 import { setTile } from "./dungeon.js"
 import { draw } from "../ui/screens.js"
 
@@ -32,6 +32,46 @@ describe("game session", () => {
 
     expect(session.hp).toBe(7)
     expect(session.inventory).not.toContain("Deploy nerve potion")
+  })
+
+  test("bumping an enemy enters d20 combat", () => {
+    const session = createSession(1234)
+    const target = { x: session.player.x + 1, y: session.player.y }
+    setTile(session.dungeon, target, "floor")
+    session.dungeon.actors.push({
+      id: "test-slime",
+      kind: "slime",
+      position: target,
+      hp: 6,
+      damage: 1,
+    })
+
+    tryMove(session, 1, 0)
+
+    expect(session.combat.active).toBe(true)
+    expect(session.combat.actorIds).toContain("test-slime")
+    expect(session.log[0]).toContain("Combat starts")
+  })
+
+  test("combat action rolls d20 against selected target", () => {
+    const session = createSession(1234)
+    const target = { x: session.player.x + 1, y: session.player.y }
+    setTile(session.dungeon, target, "floor")
+    session.dungeon.actors.push({
+      id: "test-ghoul",
+      kind: "ghoul",
+      position: target,
+      hp: 20,
+      damage: 0,
+    })
+
+    tryMove(session, 1, 0)
+    selectSkill(session, 0)
+    performCombatAction(session)
+
+    expect(session.combat.lastRoll?.d20).toBeGreaterThanOrEqual(1)
+    expect(session.combat.lastRoll?.d20).toBeLessThanOrEqual(20)
+    expect(session.turn).toBe(1)
   })
 
   test("locks final stairs until the guardian is defeated", () => {

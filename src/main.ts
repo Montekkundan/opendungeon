@@ -1,5 +1,16 @@
 import { TextRenderable, createCliRenderer, type KeyEvent } from "@opentui/core"
-import { createSession, rest, tryMove, usePotion, type GameSession, type HeroClass, type MultiplayerMode } from "./game/session.js"
+import {
+  createSession,
+  cycleTarget,
+  performCombatAction,
+  rest,
+  selectSkill,
+  tryMove,
+  usePotion,
+  type GameSession,
+  type HeroClass,
+  type MultiplayerMode,
+} from "./game/session.js"
 import {
   currentClass,
   currentMode,
@@ -123,6 +134,11 @@ function handleGameKey(key: KeyEvent) {
     return
   }
 
+  if (model.session.combat.active) {
+    handleCombatKey(key)
+    return
+  }
+
   switch (key.name) {
     case "up":
     case "w":
@@ -140,6 +156,24 @@ function handleGameKey(key: KeyEvent) {
     case "d":
       tryMove(model.session, 1, 0)
       break
+  }
+}
+
+function handleCombatKey(key: KeyEvent) {
+  if (key.name === "tab" || key.name === "right" || key.name === "d") {
+    cycleTarget(model.session, 1)
+    return
+  }
+  if (key.name === "left" || key.name === "a") {
+    cycleTarget(model.session, -1)
+    return
+  }
+  if (key.name === "1" || key.name === "2" || key.name === "3") {
+    selectSkill(model.session, Number(key.name) - 1)
+    return
+  }
+  if (key.name === "return" || key.name === "enter" || key.name === "linefeed" || key.name === "space") {
+    performCombatAction(model.session)
   }
 }
 

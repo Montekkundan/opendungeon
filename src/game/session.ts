@@ -9,6 +9,36 @@ export type Hero = {
   title: string
 }
 
+export type CombatSkillId = "strike" | "aimed-shot" | "arcane-burst"
+
+export type CombatSkill = {
+  id: CombatSkillId
+  name: string
+  cost: number
+  dc: number
+  damage: number
+  text: string
+}
+
+export type CombatRoll = {
+  d20: number
+  total: number
+  dc: number
+  hit: boolean
+  critical: boolean
+  skill: string
+  target: string
+}
+
+export type CombatState = {
+  active: boolean
+  actorIds: string[]
+  selectedTarget: number
+  selectedSkill: number
+  lastRoll?: CombatRoll
+  message: string
+}
+
 export type GameSession = {
   mode: MultiplayerMode
   hero: Hero
@@ -31,6 +61,7 @@ export type GameSession = {
   finalFloor: number
   visible: Set<string>
   seen: Set<string>
+  combat: CombatState
 }
 
 const lootEvents = {
@@ -44,6 +75,33 @@ const heroStats: Record<HeroClass, { title: string; hp: number; focus: number }>
   arcanist: { title: "Arcanist of Ash", hp: 10, focus: 10 },
   ranger: { title: "Ranger of Hollow Paths", hp: 12, focus: 7 },
 }
+
+export const combatSkills: CombatSkill[] = [
+  {
+    id: "strike",
+    name: "Strike",
+    cost: 0,
+    dc: 10,
+    damage: 3,
+    text: "Reliable melee attack.",
+  },
+  {
+    id: "aimed-shot",
+    name: "Aimed Shot",
+    cost: 1,
+    dc: 13,
+    damage: 5,
+    text: "Harder hit with ranger precision.",
+  },
+  {
+    id: "arcane-burst",
+    name: "Arcane Burst",
+    cost: 2,
+    dc: 15,
+    damage: 8,
+    text: "High-risk focus spender.",
+  },
+]
 
 export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", classId: HeroClass = "ranger"): GameSession {
   const dungeon = createDungeon(seed, 1)
@@ -74,6 +132,13 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
     finalFloor: 5,
     visible: new Set(),
     seen: new Set(),
+    combat: {
+      active: false,
+      actorIds: [],
+      selectedTarget: 0,
+      selectedSkill: 0,
+      message: "",
+    },
   }
   revealAroundPlayer(session)
   return session
@@ -81,12 +146,17 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
 
 export function tryMove(session: GameSession, dx: number, dy: number) {
   if (session.status !== "running") return
+  if (session.combat.active) {
+    session.log.unshift("Initiative is locked. Choose a target and roll.")
+    trimLog(session)
+    return
+  }
+
   const next = { x: session.player.x + dx, y: session.player.y + dy }
   const actor = actorAt(session.dungeon.actors, next)
 
   if (actor) {
-    attack(session, actor)
-    advanceTurn(session)
+    startCombat(session, [actor])
     return
   }
 
@@ -124,12 +194,18 @@ export function tryMove(session: GameSession, dx: number, dy: number) {
 
 export function rest(session: GameSession) {
   if (session.status !== "running") return
+  if (session.combat.active) {
+    session.log.unshift("No resting while blades are out.")
+    trimLog(session)
+    return
+  }
   session.focus = Math.min(session.maxFocus, session.focus + 1)
   session.log.unshift("You steady your breath. Focus returns.")
   advanceTurn(session)
 }
 
 export function usePotion(session: GameSession) {
+  if (session.status !== "running") return
   const index = session.inventory.indexOf("Deploy nerve potion")
   if (index < 0) {
     session.log.unshift("No potion in the pack.")
@@ -140,11 +216,89 @@ export function usePotion(session: GameSession) {
   session.inventory.splice(index, 1)
   session.hp = Math.min(session.maxHp, session.hp + 5)
   session.log.unshift("Potion used. The pulse settles.")
-  trimLog(session)
+  if (session.combat.active) finishCombatRound(session, true)
+  else trimLog(session)
 }
 
 export function actorAt(actors: Actor[], point: Point): Actor | undefined {
   return actors.find((actor) => actor.position.x === point.x && actor.position.y === point.y)
+}
+
+export function combatTargets(session: GameSession): Actor[] {
+  if (!session.combat.active) return []
+  const targets = session.combat.actorIds
+    .map((id) => session.dungeon.actors.find((actor) => actor.id === id))
+    .filter((actor): actor is Actor => Boolean(actor))
+
+  session.combat.actorIds = targets.map((actor) => actor.id)
+  if (targets.length === 0) session.combat.selectedTarget = 0
+  else session.combat.selectedTarget = clamp(session.combat.selectedTarget, 0, targets.length - 1)
+
+  return targets
+}
+
+export function cycleTarget(session: GameSession, delta: number) {
+  const targets = combatTargets(session)
+  if (targets.length === 0) return
+  session.combat.selectedTarget = wrap(session.combat.selectedTarget + delta, targets.length)
+  const target = targets[session.combat.selectedTarget]
+  session.combat.message = `Targeting ${label(target.kind)}.`
+}
+
+export function selectSkill(session: GameSession, index: number) {
+  if (!session.combat.active) return
+  session.combat.selectedSkill = clamp(index, 0, combatSkills.length - 1)
+  const skill = combatSkills[session.combat.selectedSkill]
+  session.combat.message = `${skill.name}: d20 + ${proficiency(session)} vs DC ${skill.dc + enemyDefenseBonus(combatTargets(session)[session.combat.selectedTarget]?.kind)}.`
+}
+
+export function performCombatAction(session: GameSession) {
+  if (session.status !== "running" || !session.combat.active) return
+  const targets = combatTargets(session)
+  const target = targets[session.combat.selectedTarget]
+  if (!target) return
+
+  const skill = combatSkills[session.combat.selectedSkill]
+  if (session.focus < skill.cost) {
+    session.combat.message = "Not enough focus for that skill."
+    session.log.unshift(session.combat.message)
+    trimLog(session)
+    return
+  }
+
+  session.focus -= skill.cost
+  const d20 = rollD20(session, skill, target)
+  const total = d20 + proficiency(session)
+  const dc = skill.dc + enemyDefenseBonus(target.kind)
+  const critical = d20 === 20
+  const hit = critical || (d20 !== 1 && total >= dc)
+  const damage = critical ? skill.damage + session.level + 3 : skill.damage + Math.floor(session.level / 2)
+
+  session.combat.lastRoll = {
+    d20,
+    total,
+    dc,
+    hit,
+    critical,
+    skill: skill.name,
+    target: label(target.kind),
+  }
+
+  if (hit) {
+    target.hp -= damage
+    session.combat.message = `${skill.name} hits ${label(target.kind)} for ${damage}.`
+    session.log.unshift(`d20 ${d20}+${proficiency(session)} vs DC ${dc}: hit.`)
+    if (target.hp <= 0) defeatActor(session, target)
+  } else {
+    session.combat.message = `${skill.name} misses ${label(target.kind)}.`
+    session.log.unshift(`d20 ${d20}+${proficiency(session)} vs DC ${dc}: miss.`)
+  }
+
+  if (combatTargets(session).length > 0) finishCombatRound(session, true)
+  else {
+    endCombat(session, "The room falls silent.")
+    finishCombatRound(session, false)
+  }
 }
 
 function removeActor(actors: Actor[], actor: Actor) {
@@ -152,22 +306,40 @@ function removeActor(actors: Actor[], actor: Actor) {
   if (index >= 0) actors.splice(index, 1)
 }
 
-function attack(session: GameSession, actor: Actor) {
-  const focusBonus = session.focus > 0 ? 1 : 0
-  const levelBonus = Math.floor(session.level / 2)
-  actor.hp -= 2 + focusBonus + levelBonus
-  session.focus = Math.max(0, session.focus - 1)
+function startCombat(session: GameSession, actors: Actor[]) {
+  const nearby = nearbyHostiles(session)
+  const actorIds = [...actors, ...nearby]
+    .filter((actor, index, list) => list.findIndex((candidate) => candidate.id === actor.id) === index)
+    .map((actor) => actor.id)
 
-  if (actor.hp <= 0) {
-    removeActor(session.dungeon.actors, actor)
-    session.kills += 1
-    session.xp += xpFor(actor.kind)
-    maybeLevelUp(session)
-    session.log.unshift(defeatMessage(actor.kind))
-    return
+  if (actorIds.length === 0) return
+  session.combat = {
+    active: true,
+    actorIds,
+    selectedTarget: 0,
+    selectedSkill: session.combat.selectedSkill,
+    lastRoll: session.combat.lastRoll,
+    message: "Initiative rolled. Choose target, choose skill, then roll d20.",
   }
+  session.log.unshift("Combat starts. The d20 waits.")
+  trimLog(session)
+}
 
-  session.log.unshift(`You strike the ${actor.kind}. It still stands.`)
+function endCombat(session: GameSession, message: string) {
+  session.combat.active = false
+  session.combat.actorIds = []
+  session.combat.selectedTarget = 0
+  session.combat.message = message
+  session.log.unshift(message)
+  trimLog(session)
+}
+
+function defeatActor(session: GameSession, actor: Actor) {
+  removeActor(session.dungeon.actors, actor)
+  session.kills += 1
+  session.xp += xpFor(actor.kind)
+  session.log.unshift(defeatMessage(actor.kind))
+  maybeLevelUp(session)
 }
 
 function defeatMessage(kind: Actor["kind"]) {
@@ -219,7 +391,7 @@ function descend(session: GameSession) {
 
 function advanceTurn(session: GameSession) {
   session.turn += 1
-  moveEnemies(session)
+  if (!session.combat.active) moveEnemies(session)
   revealAroundPlayer(session)
   if (session.hp <= 0) {
     session.hp = 0
@@ -233,14 +405,48 @@ function moveEnemies(session: GameSession) {
   for (const actor of [...session.dungeon.actors]) {
     const distance = manhattan(actor.position, session.player)
     if (distance === 1) {
+      startCombat(session, [actor])
+      return
+    }
+
+    if (actor.id === "final-guardian") continue
+    if (distance > 8) continue
+
+    const step = stepToward(actor.position, session.player)
+    const occupied = actorAt(session.dungeon.actors, step)
+    if (tileAt(session.dungeon, step) === "floor" && !occupied) {
+      actor.position = step
+      if (manhattan(actor.position, session.player) === 1) {
+        startCombat(session, [actor])
+        return
+      }
+    }
+  }
+}
+
+function finishCombatRound(session: GameSession, enemiesAct: boolean) {
+  if (enemiesAct) combatEnemyTurn(session)
+  session.turn += 1
+  revealAroundPlayer(session)
+  if (session.hp <= 0) {
+    session.hp = 0
+    session.status = "dead"
+    session.log.unshift("You fall beneath the dungeon's build.")
+  }
+  combatTargets(session)
+  if (session.status === "running" && session.combat.active && session.combat.actorIds.length === 0) endCombat(session, "The room falls silent.")
+  trimLog(session)
+}
+
+function combatEnemyTurn(session: GameSession) {
+  for (const actor of combatTargets(session)) {
+    if (manhattan(actor.position, session.player) === 1) {
       session.hp -= actor.damage
       session.log.unshift(`${label(actor.kind)} hits for ${actor.damage}.`)
       continue
     }
 
     if (actor.id === "final-guardian") continue
-    if (distance > 8) continue
-
     const step = stepToward(actor.position, session.player)
     const occupied = actorAt(session.dungeon.actors, step)
     if (tileAt(session.dungeon, step) === "floor" && !occupied) actor.position = step
@@ -256,6 +462,31 @@ function stepToward(from: Point, to: Point): Point {
 
 function manhattan(a: Point, b: Point) {
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
+}
+
+function nearbyHostiles(session: GameSession) {
+  return session.dungeon.actors.filter((actor) => {
+    const key = pointKey(actor.position)
+    return session.visible.has(key) && manhattan(actor.position, session.player) <= 6
+  })
+}
+
+function proficiency(session: GameSession) {
+  const classBonus = session.hero.classId === "ranger" ? 2 : session.hero.classId === "arcanist" ? 1 : 0
+  return session.level + classBonus
+}
+
+function enemyDefenseBonus(kind: Actor["kind"] | undefined) {
+  if (kind === "necromancer") return 4
+  if (kind === "ghoul") return 2
+  return 0
+}
+
+function rollD20(session: GameSession, skill: CombatSkill, target: Actor) {
+  const skillSalt = combatSkills.findIndex((candidate) => candidate.id === skill.id) + 1
+  const targetSalt = target.id.split("").reduce((total, char) => total + char.charCodeAt(0), 0)
+  const value = session.seed * 1103515245 + session.floor * 9973 + session.turn * 7919 + session.kills * 313 + skillSalt * 101 + targetSalt
+  return (Math.abs(value) % 20) + 1
 }
 
 function label(kind: Actor["kind"]) {
@@ -317,4 +548,12 @@ function hasLineOfSight(session: GameSession, target: Point) {
 
 export function pointKey(point: Point) {
   return `${point.x},${point.y}`
+}
+
+function wrap(value: number, count: number) {
+  return (value + count) % count
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value))
 }

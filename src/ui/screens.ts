@@ -1,5 +1,13 @@
 import { activeAssetPack } from "../assets/packs.js"
-import { actorAt, pointKey, type GameSession, type HeroClass, type MultiplayerMode } from "../game/session.js"
+import {
+  actorAt,
+  combatSkills,
+  combatTargets,
+  pointKey,
+  type GameSession,
+  type HeroClass,
+  type MultiplayerMode,
+} from "../game/session.js"
 import { Canvas } from "./canvas.js"
 
 type TileRenderStyle = {
@@ -120,6 +128,7 @@ function drawGame(canvas: Canvas, model: AppModel) {
   const session = model.session
   drawMap(canvas, session, model.debugView)
   drawHud(canvas, session)
+  if (session.combat.active) drawCombatPanel(canvas, session)
   if (session.status !== "running") drawRunEnd(canvas, session)
 }
 
@@ -132,6 +141,8 @@ function drawMap(canvas: Canvas, session: GameSession, debugView: boolean) {
   const viewHeight = Math.max(4, Math.floor((canvas.height - hudHeight - logHeight) / tileHeight))
   const startX = session.player.x - Math.floor(viewWidth / 2)
   const startY = session.player.y - Math.floor(viewHeight / 2)
+  const targets = combatTargets(session)
+  const selectedTargetId = session.combat.active ? targets[session.combat.selectedTarget]?.id : undefined
 
   for (let sy = 0; sy < viewHeight; sy++) {
     for (let sx = 0; sx < viewWidth; sx++) {
@@ -147,7 +158,10 @@ function drawMap(canvas: Canvas, session: GameSession, debugView: boolean) {
       drawTileBlock(canvas, screenX, screenY, tileWidth, tileHeight, style)
 
       if (session.player.x === x && session.player.y === y) drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, "hero", debugView)
-      else if (actor) drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, actor.kind, debugView)
+      else if (actor) {
+        drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, actor.kind, debugView)
+        if (actor.id === selectedTargetId) drawTargetFrame(canvas, screenX, screenY, tileWidth, tileHeight, debugView)
+      }
     }
   }
 }
@@ -196,6 +210,14 @@ function drawSprite(canvas: Canvas, x: number, y: number, width: number, height:
   for (let row = 0; row < Math.min(height, lines.length); row++) {
     canvas.write(x, y + offsetY + row, fitPattern(lines[row], width), fgColor, "#24484a")
   }
+}
+
+function drawTargetFrame(canvas: Canvas, x: number, y: number, width: number, height: number, debugView: boolean) {
+  if (debugView) {
+    canvas.write(x, y, "[]", "#f4d06f")
+    return
+  }
+  canvas.border(x, y, width, height, "#f4d06f")
 }
 
 function floorStyle(x: number, y: number, visible: boolean): TileRenderStyle {
@@ -268,7 +290,53 @@ function drawHud(canvas: Canvas, session: GameSession) {
   if (canvas.width >= 96) canvas.write(canvas.width - 38, 1, `Mode ${session.mode}  Art ${activeAssetPack.name}`, "#8f9ba8")
   const status = session.status === "running" ? `Turn ${session.turn}` : session.status.toUpperCase()
   if (canvas.width >= 96) canvas.write(canvas.width - 38, 2, status, session.status === "dead" ? "#d56b8c" : "#66717d")
-  canvas.write(1, 2, trim("i inventory   l log   h potion   r rest   ? help   esc pause", canvas.width < 96 ? canvas.width - progress.length - 4 : 58), "#66717d")
+  const controls = session.combat.active
+    ? "tab target   1-3 skill   enter/space roll   h potion   l log   esc pause"
+    : "i inventory   l log   h potion   r rest   ? help   esc pause"
+  canvas.write(1, 2, trim(controls, canvas.width < 96 ? canvas.width - progress.length - 4 : 72), "#66717d")
+}
+
+function drawCombatPanel(canvas: Canvas, session: GameSession) {
+  const width = Math.min(52, Math.max(34, Math.floor(canvas.width * 0.34)))
+  const height = Math.min(17, Math.max(13, canvas.height - 8))
+  const x = Math.max(1, canvas.width - width - 2)
+  const y = Math.max(5, canvas.height - height - 2)
+  const targets = combatTargets(session)
+  const selectedSkill = combatSkills[session.combat.selectedSkill]
+  const roll = session.combat.lastRoll
+
+  canvas.fill(x, y, width, height, " ", "#05070a", "#05070a")
+  canvas.border(x, y, width, height, "#d6a85c")
+  canvas.write(x + 2, y + 1, "COMBAT", "#f4d06f")
+  canvas.write(x + width - 10, y + 1, "d20", "#d56b8c")
+
+  canvas.write(x + 2, y + 3, "Targets", "#d6a85c")
+  targets.slice(0, 4).forEach((target, index) => {
+    const selected = index === session.combat.selectedTarget
+    const text = `${selected ? ">" : " "} ${label(target.kind)} HP ${target.hp}`
+    canvas.write(x + 2, y + 4 + index, trim(text, width - 20), selected ? "#f4d06f" : "#d8dee9")
+  })
+
+  const skillX = x + Math.floor(width / 2)
+  canvas.write(skillX, y + 3, "Skills", "#d6a85c")
+  combatSkills.forEach((skill, index) => {
+    const selected = index === session.combat.selectedSkill
+    const unavailable = session.focus < skill.cost
+    const text = `${index + 1} ${skill.name} F${skill.cost}`
+    canvas.write(skillX, y + 4 + index, trim(text, width - (skillX - x) - 2), unavailable ? "#66717d" : selected ? "#7dffb2" : "#d8dee9")
+  })
+
+  canvas.write(x + 2, y + height - 6, trim(selectedSkill.text, width - 4), "#8f9ba8")
+  canvas.write(x + 2, y + height - 5, trim(session.combat.message, width - 4), "#d8dee9")
+
+  const diceX = x + width - 15
+  const diceY = y + height - 5
+  canvas.border(diceX, diceY, 12, 4, roll?.hit ? "#7dffb2" : "#d56b8c")
+  canvas.write(diceX + 2, diceY + 1, roll ? `d20 ${roll.d20}` : "d20 --", roll?.hit ? "#7dffb2" : "#f4d06f")
+  canvas.write(diceX + 2, diceY + 2, roll ? `${roll.total}/${roll.dc}` : "roll", "#d8dee9")
+
+  const footer = roll ? `${roll.skill} ${roll.hit ? "hit" : "miss"} ${roll.target}` : "Enter rolls selected skill"
+  canvas.write(x + 2, y + height - 2, trim(footer, width - 4), "#66717d")
 }
 
 function writeRight(canvas: Canvas, y: number, text: string, color: string) {
@@ -306,7 +374,8 @@ function drawDialog(canvas: Canvas, model: AppModel) {
     canvas.write(x + 3, y + 2, "Controls", "#f4d06f")
     canvas.write(x + 3, y + 4, "Move: arrows/WASD    Confirm: Enter    Back: Esc", "#d8dee9")
     canvas.write(x + 3, y + 5, "Inventory: i         Log: l           Potion: h         Rest: r", "#d8dee9")
-    canvas.write(x + 3, y + 7, "Bump enemies to attack. Stairs descend to a generated floor.", "#8f9ba8")
+    canvas.write(x + 3, y + 7, "Combat: Tab target   1-3 skill   Enter/Space rolls d20.", "#8f9ba8")
+    canvas.write(x + 3, y + 8, "Stairs descend to a generated floor after guardians fall.", "#8f9ba8")
   }
 
   if (model.dialog === "pause") {
@@ -355,6 +424,12 @@ function bar(label: string, value: number, max: number, width: number) {
 
 function runScore(session: GameSession) {
   return Math.max(0, session.floor * 100 + session.gold * 2 + session.kills * 25 + session.level * 50 - session.turn)
+}
+
+function label(kind: string) {
+  if (kind === "slime") return "Slime"
+  if (kind === "ghoul") return "Ghoul"
+  return "Necromancer"
 }
 
 function trim(text: string, width: number) {
