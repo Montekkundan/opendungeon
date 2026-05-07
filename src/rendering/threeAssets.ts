@@ -1,36 +1,37 @@
-import type { AnimationDefinition, ResourceConfig, SpriteDefinition } from "@opentui/three"
+import { SpriteResourceManager, type ResourceConfig, type SpriteDefinition } from "@opentui/three"
 
 export type ThreeAssetManifest = {
   resources: Record<string, ResourceConfig>
-  sprites: Record<string, SpriteDefinition>
-}
-
-const dawngeonPreviewResource: ResourceConfig = {
-  imagePath: "assets/dawngeon/preview.png",
-  sheetNumFrames: 1,
-}
-
-const previewAnimation: AnimationDefinition = {
-  resource: dawngeonPreviewResource as never,
-  animNumFrames: 1,
-  animFrameOffset: 0,
-  frameDuration: 1000,
-  loop: false,
 }
 
 export const dawngeonThreeAssets: ThreeAssetManifest = {
   resources: {
-    preview: dawngeonPreviewResource,
-  },
-  sprites: {
     preview: {
+      imagePath: "assets/dawngeon/preview.png",
+      sheetNumFrames: 1,
+    },
+  },
+}
+
+export async function createDawngeonSpriteDefinitions(resourceManager: SpriteResourceManager): Promise<Record<string, SpriteDefinition>> {
+  const previewResource = await resourceManager.createResource(dawngeonThreeAssets.resources.preview)
+
+  return {
+    preview: {
+      id: "dawngeon-preview",
       initialAnimation: "idle",
       animations: {
-        idle: previewAnimation,
+        idle: {
+          resource: previewResource,
+          animNumFrames: 1,
+          animFrameOffset: 0,
+          frameDuration: 1000,
+          loop: false,
+        },
       },
       scale: 1,
     },
-  },
+  }
 }
 
 export function shouldUseThreeRenderer() {
