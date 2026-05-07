@@ -5,6 +5,7 @@ import { join } from "node:path"
 import { createSession, performCombatAction, selectSkill, tryMove, usePotion } from "./session.js"
 import { setTile } from "./dungeon.js"
 import { listSaves, loadSave, saveSession } from "./saveStore.js"
+import { defaultSettings, loadSettings, profilePath, saveSettings } from "./settingsStore.js"
 import { draw } from "../ui/screens.js"
 
 describe("game session", () => {
@@ -114,6 +115,10 @@ describe("game session", () => {
         saveStatus: "",
         debugView: false,
         rendererBackend: "terminal",
+        settings: defaultSettings,
+        settingsIndex: 0,
+        settingsReturnScreen: "start",
+        inputMode: null,
       },
       80,
       24,
@@ -148,6 +153,37 @@ describe("game session", () => {
     } finally {
       if (previousSaveDir === undefined) delete process.env.OPENDUNGEON_SAVE_DIR
       else process.env.OPENDUNGEON_SAVE_DIR = previousSaveDir
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("persists local profile settings separately from saves", () => {
+    const previousProfileDir = process.env.OPENDUNGEON_PROFILE_DIR
+    const dir = mkdtempSync(join(tmpdir(), "opendungeon-profile-test-"))
+    process.env.OPENDUNGEON_PROFILE_DIR = dir
+
+    try {
+      saveSettings({
+        ...defaultSettings,
+        username: "dev-runner",
+        githubUsername: "terminal-host",
+        cloudProvider: "github",
+        highContrast: true,
+        reduceMotion: true,
+        controlScheme: "vim",
+      })
+
+      const loaded = loadSettings()
+
+      expect(profilePath().startsWith(dir)).toBe(true)
+      expect(loaded.username).toBe("dev-runner")
+      expect(loaded.githubUsername).toBe("terminal-host")
+      expect(loaded.cloudProvider).toBe("github")
+      expect(loaded.highContrast).toBe(true)
+      expect(loaded.controlScheme).toBe("vim")
+    } finally {
+      if (previousProfileDir === undefined) delete process.env.OPENDUNGEON_PROFILE_DIR
+      else process.env.OPENDUNGEON_PROFILE_DIR = previousProfileDir
       rmSync(dir, { recursive: true, force: true })
     }
   })

@@ -12,10 +12,12 @@ import {
   type MultiplayerMode,
 } from "./game/session.js"
 import { deleteSave, listSaves, loadSave, saveSession, type SaveSummary } from "./game/saveStore.js"
+import { loadSettings, saveSettings, type UserSettings } from "./game/settingsStore.js"
 import {
   currentClass,
   currentMode,
   currentStartItem,
+  currentSettingItem,
   draw,
   moveSelection,
   type AppModel,
@@ -23,6 +25,7 @@ import {
 import { shouldUseThreeRenderer } from "./rendering/threeAssets.js"
 
 const initialSaves = listSaves()
+const initialSettings = loadSettings()
 
 const model: AppModel = {
   screen: "start",
@@ -38,6 +41,10 @@ const model: AppModel = {
   saveStatus: "",
   debugView: env("OPENDUNGEON_DEBUG_VIEW", "DUNGEON_DEBUG_VIEW") === "1",
   rendererBackend: shouldUseThreeRenderer() ? "three" : "terminal",
+  settings: initialSettings,
+  settingsIndex: 0,
+  settingsReturnScreen: "start",
+  inputMode: null,
   diceRollAnimation: null,
 }
 let submittedSession: GameSession | null = null
@@ -74,6 +81,12 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
     return
   }
 
+  if (model.inputMode) {
+    handleInputKey(key)
+    refresh()
+    return
+  }
+
   if (isSaveKey(key)) {
     saveCurrentRun()
     refresh()
@@ -100,17 +113,20 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
 
 function handleDialogKey(key: KeyEvent) {
   if (key.name === "escape" || key.name === "return" || key.name === "enter" || key.name === "linefeed") model.dialog = null
-  if (model.dialog === "pause" && key.name === "s") model.dialog = "settings"
+  if (model.dialog === "pause" && key.name === "s") {
+    model.dialog = null
+    openSettings("game")
+  }
   if (model.dialog === "pause" && key.name === "q") destroyApp()
 }
 
 function handleMenuKey(key: KeyEvent) {
   if (model.screen === "saves") {
-    if (key.name === "up" || key.name === "w") {
+    if (isUpKey(key)) {
       pendingDeleteSaveId = null
       moveSelection(model, -1)
     }
-    if (key.name === "down" || key.name === "s") {
+    if (isDownKey(key)) {
       pendingDeleteSaveId = null
       moveSelection(model, 1)
     }
@@ -124,20 +140,46 @@ function handleMenuKey(key: KeyEvent) {
       model.screen = "start"
       model.menuIndex = 0
     }
-    if (key.name === "return" || key.name === "enter" || key.name === "linefeed" || key.name === "space") loadSelectedSave()
+    if (isConfirmKey(key)) loadSelectedSave()
     return
   }
 
   if (model.screen === "cloud") {
-    if (key.name === "escape" || key.name === "return" || key.name === "enter" || key.name === "linefeed" || key.name === "space") {
+    if (isUpKey(key)) moveSelection(model, -1)
+    if (isDownKey(key)) moveSelection(model, 1)
+    if (key.name === "u") startInput("githubUsername")
+    if (key.name === "escape") {
       model.screen = "start"
+      model.menuIndex = 0
+    }
+    if (isConfirmKey(key)) confirmCloud()
+    return
+  }
+
+  if (model.screen === "settings") {
+    if (isUpKey(key)) moveSelection(model, -1)
+    if (isDownKey(key)) moveSelection(model, 1)
+    if (key.name === "u") startInput("username")
+    if (key.name === "c") {
+      model.screen = "controls"
+      model.menuIndex = 0
+    }
+    if (key.name === "escape") closeSettings()
+    if (isConfirmKey(key)) changeCurrentSetting()
+    return
+  }
+
+  if (model.screen === "controls") {
+    if (key.name === "s") openSettings(model.settingsReturnScreen)
+    if (key.name === "escape" || isConfirmKey(key)) {
+      model.screen = model.settingsReturnScreen === "game" ? "game" : "start"
       model.menuIndex = 0
     }
     return
   }
 
-  if (key.name === "up" || key.name === "w") moveSelection(model, -1)
-  if (key.name === "down" || key.name === "s") moveSelection(model, 1)
+  if (isUpKey(key)) moveSelection(model, -1)
+  if (isDownKey(key)) moveSelection(model, 1)
   if (model.screen === "start" && key.name === "c") loadLatestSave()
   if (model.screen === "start" && key.name === "n") model.seed = randomSeed()
   if (key.name === "escape") {
@@ -145,12 +187,12 @@ function handleMenuKey(key: KeyEvent) {
     model.menuIndex = 0
   }
   if (key.name === "?" || (key.shift && key.name === "/")) model.dialog = "help"
-  if (key.name === "return" || key.name === "enter" || key.name === "linefeed" || key.name === "space") confirmMenu()
+  if (isConfirmKey(key)) confirmMenu()
 }
 
 function handleGameKey(key: KeyEvent) {
   if (model.session.status !== "running") {
-    if (key.name === "return" || key.name === "enter" || key.name === "linefeed" || key.name === "space") startRun()
+    if (isConfirmKey(key)) startRun()
     if (key.name === "escape") {
       model.screen = "start"
       model.menuIndex = 0
@@ -188,32 +230,16 @@ function handleGameKey(key: KeyEvent) {
     return
   }
 
-  switch (key.name) {
-    case "up":
-    case "w":
-      tryMove(model.session, 0, -1)
-      break
-    case "down":
-    case "s":
-      tryMove(model.session, 0, 1)
-      break
-    case "left":
-    case "a":
-      tryMove(model.session, -1, 0)
-      break
-    case "right":
-    case "d":
-      tryMove(model.session, 1, 0)
-      break
-  }
+  const move = movementForKey(key, model.settings)
+  if (move) tryMove(model.session, move.dx, move.dy)
 }
 
 function handleCombatKey(key: KeyEvent) {
-  if (key.name === "tab" || key.name === "right" || key.name === "d") {
+  if (key.name === "tab" || isRightKey(key)) {
     cycleTarget(model.session, 1)
     return
   }
-  if (key.name === "left" || key.name === "a") {
+  if (isLeftKey(key)) {
     cycleTarget(model.session, -1)
     return
   }
@@ -221,7 +247,7 @@ function handleCombatKey(key: KeyEvent) {
     selectSkill(model.session, Number(key.name) - 1)
     return
   }
-  if (key.name === "return" || key.name === "enter" || key.name === "linefeed" || key.name === "space") {
+  if (isConfirmKey(key)) {
     const previousRoll = model.session.combat.lastRoll
     performCombatAction(model.session)
     const nextRoll = model.session.combat.lastRoll
@@ -243,11 +269,16 @@ function confirmMenu() {
       model.screen = "mode"
       model.menuIndex = model.modeIndex
     }
-    if (item === "Cloud saves") {
+    if (item === "Cloud login") {
       model.screen = "cloud"
       model.menuIndex = 0
     }
-    if (item === "Settings") model.dialog = "settings"
+    if (item === "Settings") openSettings("start")
+    if (item === "Controls") {
+      model.screen = "controls"
+      model.menuIndex = 0
+      model.settingsReturnScreen = "start"
+    }
     if (item === "Quit") destroyApp()
     return
   }
@@ -360,6 +391,95 @@ function saveCurrentRun() {
   while (model.session.log.length > 8) model.session.log.pop()
 }
 
+function confirmCloud() {
+  if (model.menuIndex === 0) {
+    if (!model.settings.githubUsername) {
+      startInput("githubUsername")
+      return
+    }
+    model.settings.cloudProvider = "github"
+    saveUserSettings("GitHub profile selected. Device login is still on the roadmap.")
+    return
+  }
+
+  if (model.menuIndex === 1) {
+    model.settings.cloudProvider = "local"
+    saveUserSettings("Local profile selected. Cloud sync remains off.")
+    return
+  }
+
+  model.screen = "start"
+  model.menuIndex = 0
+}
+
+function openSettings(returnScreen: AppModel["settingsReturnScreen"]) {
+  model.screen = "settings"
+  model.settingsReturnScreen = returnScreen
+  model.menuIndex = model.settingsIndex
+}
+
+function closeSettings() {
+  model.inputMode = null
+  model.screen = model.settingsReturnScreen === "game" ? "game" : "start"
+  model.menuIndex = 0
+}
+
+function changeCurrentSetting() {
+  const item = currentSettingItem(model)
+  if (item.id === "username") {
+    startInput("username")
+    return
+  }
+  if (item.id === "controlScheme") model.settings.controlScheme = cycleValue(model.settings.controlScheme, ["hybrid", "arrows", "vim"])
+  if (item.id === "highContrast") model.settings.highContrast = !model.settings.highContrast
+  if (item.id === "reduceMotion") model.settings.reduceMotion = !model.settings.reduceMotion
+  if (item.id === "backgroundFx") model.settings.backgroundFx = cycleValue(model.settings.backgroundFx, ["low", "normal", "dense"])
+  if (item.id === "tileScale") model.settings.tileScale = cycleValue(model.settings.tileScale, ["auto", "medium", "large"])
+  if (item.id === "music") model.settings.music = !model.settings.music
+  if (item.id === "sound") model.settings.sound = !model.settings.sound
+  saveUserSettings("Settings saved locally.")
+}
+
+function startInput(field: NonNullable<AppModel["inputMode"]>["field"]) {
+  model.inputMode = {
+    field,
+    draft: field === "username" ? model.settings.username : model.settings.githubUsername,
+  }
+}
+
+function handleInputKey(key: KeyEvent) {
+  const input = model.inputMode
+  if (!input) return
+
+  if (key.name === "escape") {
+    model.inputMode = null
+    return
+  }
+  if (isConfirmKey(key)) {
+    const value = cleanProfileText(input.draft)
+    if (input.field === "username") model.settings.username = value || "local-crawler"
+    if (input.field === "githubUsername") {
+      model.settings.githubUsername = value
+      if (value) model.settings.cloudProvider = "github"
+    }
+    model.inputMode = null
+    saveUserSettings(`${input.field === "username" ? "Player name" : "GitHub profile"} saved locally.`)
+    return
+  }
+  if (key.name === "backspace" || key.name === "delete") {
+    input.draft = input.draft.slice(0, -1)
+    return
+  }
+  if (key.ctrl || key.meta || key.option) return
+  const text = key.sequence && key.sequence.length === 1 ? key.sequence : ""
+  if (/^[\w .-]$/.test(text) && input.draft.length < 24) input.draft += text
+}
+
+function saveUserSettings(status: string) {
+  saveSettings(model.settings)
+  model.saveStatus = status
+}
+
 function refresh() {
   if (destroyed) return
   screen.content = draw(model, renderer.terminalWidth, renderer.terminalHeight)
@@ -467,6 +587,34 @@ function isSaveKey(key: KeyEvent) {
   return model.screen === "game" && ((key.ctrl && key.name === "s") || key.name === "f5")
 }
 
+function isConfirmKey(key: KeyEvent) {
+  return key.name === "return" || key.name === "enter" || key.name === "linefeed" || key.name === "space"
+}
+
+function isUpKey(key: KeyEvent) {
+  return key.name === "up" || (model.settings.controlScheme !== "arrows" && key.name === "w") || (model.settings.controlScheme === "vim" && key.name === "k")
+}
+
+function isDownKey(key: KeyEvent) {
+  return key.name === "down" || (model.settings.controlScheme !== "arrows" && key.name === "s") || (model.settings.controlScheme === "vim" && key.name === "j")
+}
+
+function isLeftKey(key: KeyEvent) {
+  return key.name === "left" || (model.settings.controlScheme !== "arrows" && key.name === "a") || (model.settings.controlScheme === "vim" && key.name === "h")
+}
+
+function isRightKey(key: KeyEvent) {
+  return key.name === "right" || (model.settings.controlScheme !== "arrows" && key.name === "d") || (model.settings.controlScheme === "vim" && key.name === "l")
+}
+
+function movementForKey(key: KeyEvent, settings: UserSettings) {
+  if (key.name === "up" || (settings.controlScheme !== "arrows" && key.name === "w") || (settings.controlScheme === "vim" && key.name === "k")) return { dx: 0, dy: -1 }
+  if (key.name === "down" || (settings.controlScheme !== "arrows" && key.name === "s") || (settings.controlScheme === "vim" && key.name === "j")) return { dx: 0, dy: 1 }
+  if (key.name === "left" || (settings.controlScheme !== "arrows" && key.name === "a") || (settings.controlScheme === "vim" && key.name === "h")) return { dx: -1, dy: 0 }
+  if (key.name === "right" || (settings.controlScheme !== "arrows" && key.name === "d") || (settings.controlScheme === "vim" && key.name === "l")) return { dx: 1, dy: 0 }
+  return null
+}
+
 function indexForSave(saves: SaveSummary[], summary: SaveSummary) {
   const index = saves.findIndex((save) => save.id === summary.id)
   return index >= 0 ? index : 0
@@ -486,6 +634,15 @@ function modeIndexFor(mode: MultiplayerMode) {
 
 function env(primary: string, fallback: string) {
   return process.env[primary] ?? process.env[fallback]
+}
+
+function cycleValue<const T extends string>(current: T, values: readonly T[]) {
+  const index = values.indexOf(current)
+  return values[(index + 1) % values.length]
+}
+
+function cleanProfileText(value: string) {
+  return value.replace(/[^\w .-]/g, "").trim().slice(0, 24)
 }
 
 function clamp(value: number, min: number, max: number) {

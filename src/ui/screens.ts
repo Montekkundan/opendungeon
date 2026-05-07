@@ -12,6 +12,7 @@ import {
   type MultiplayerMode,
 } from "../game/session.js"
 import { saveDirectory, type SaveSummary } from "../game/saveStore.js"
+import { profilePath, type UserSettings } from "../game/settingsStore.js"
 import { Canvas } from "./canvas.js"
 
 type TileRenderStyle = {
@@ -20,8 +21,9 @@ type TileRenderStyle = {
   pattern: string[]
 }
 
-export type ScreenId = "start" | "character" | "mode" | "saves" | "cloud" | "game"
+export type ScreenId = "start" | "character" | "mode" | "saves" | "cloud" | "settings" | "controls" | "game"
 export type DialogId = "settings" | "inventory" | "help" | "log" | "pause" | null
+export type InputMode = { field: "username" | "githubUsername"; draft: string } | null
 
 export type DiceRollAnimation = {
   result: number
@@ -43,10 +45,14 @@ export type AppModel = {
   saveStatus: string
   debugView: boolean
   rendererBackend: "terminal" | "three"
+  settings: UserSettings
+  settingsIndex: number
+  settingsReturnScreen: ScreenId
+  inputMode: InputMode
   diceRollAnimation?: DiceRollAnimation | null
 }
 
-const startItems = ["Continue last", "New descent", "Load save", "Character", "Multiplayer", "Cloud saves", "Settings", "Quit"]
+const startItems = ["Continue last", "New descent", "Load save", "Character", "Multiplayer", "Cloud login", "Settings", "Controls", "Quit"]
 const classOptions: Array<{ id: HeroClass; name: string; text: string }> = [
   { id: "warden", name: "Warden", text: "High HP, low focus. Holds corridors." },
   { id: "arcanist", name: "Arcanist", text: "Low HP, high focus. Deletes threats." },
@@ -57,6 +63,16 @@ const modeOptions: Array<{ id: MultiplayerMode; name: string; text: string }> = 
   { id: "coop", name: "Co-op", text: "Shared dungeon host. Network hook later." },
   { id: "race", name: "Race", text: "Same seed, separate runs. Fastest descent wins." },
 ]
+const settingsOptions = [
+  { id: "username", name: "Player name", text: "Saved locally and later used by cloud sync." },
+  { id: "controlScheme", name: "Control scheme", text: "Movement and menu navigation preference." },
+  { id: "highContrast", name: "High contrast", text: "Brighter borders and selected states." },
+  { id: "reduceMotion", name: "Reduce motion", text: "Quieter background and dice movement." },
+  { id: "backgroundFx", name: "Background FX", text: "How much title-screen dungeon rain appears." },
+  { id: "tileScale", name: "Map scale", text: "How close the dungeon camera feels." },
+  { id: "music", name: "Music", text: "Stored for the future audio layer." },
+  { id: "sound", name: "SFX", text: "Stored for combat and loot feedback later." },
+] as const
 
 const UI = {
   bg: "#05070a",
@@ -94,6 +110,8 @@ export function draw(model: AppModel, width: number, height: number) {
   if (model.screen === "mode") drawMode(canvas, model)
   if (model.screen === "saves") drawSaves(canvas, model)
   if (model.screen === "cloud") drawCloud(canvas, model)
+  if (model.screen === "settings") drawSettings(canvas, model)
+  if (model.screen === "controls") drawControls(canvas, model)
   if (model.screen === "game") drawGame(canvas, model)
   if (model.dialog) drawDialog(canvas, model)
 
@@ -112,6 +130,10 @@ export function currentMode(model: AppModel) {
   return modeOptions[model.modeIndex]
 }
 
+export function currentSettingItem(model: AppModel) {
+  return settingsOptions[model.settingsIndex]
+}
+
 export function moveSelection(model: AppModel, delta: number) {
   if (model.screen === "game") return
   if (model.screen === "saves") {
@@ -119,44 +141,62 @@ export function moveSelection(model: AppModel, delta: number) {
     return
   }
 
-  const count = model.screen === "character" ? classOptions.length : model.screen === "mode" ? modeOptions.length : startItems.length
+  const count =
+    model.screen === "character"
+      ? classOptions.length
+      : model.screen === "mode"
+        ? modeOptions.length
+        : model.screen === "cloud"
+          ? 3
+        : model.screen === "settings"
+          ? settingsOptions.length
+          : startItems.length
   model.menuIndex = wrap(model.menuIndex + delta, count)
   if (model.screen === "character") model.classIndex = model.menuIndex
   if (model.screen === "mode") model.modeIndex = model.menuIndex
+  if (model.screen === "settings") model.settingsIndex = model.menuIndex
 }
 
 function drawStart(canvas: Canvas, model: AppModel) {
-  drawDungeonBackdrop(canvas, model.seed)
-  const width = Math.min(100, canvas.width - 8)
-  const height = Math.min(28, canvas.height - 6)
+  drawDungeonBackdrop(canvas, model.seed, model.settings)
+  const width = Math.min(86, canvas.width - 8)
   const x = Math.floor((canvas.width - width) / 2)
-  const y = Math.max(2, Math.floor((canvas.height - height) / 2))
-  drawPanel(canvas, x, y, width, height, "opendungeon", UI.gold)
-  drawPixelBlock(canvas, x + 5, y + 5, pixelSprite(classSprite(currentClass(model).id), 12, 6), 1)
-  drawMiniIcon(canvas, x + 5, y + 14, "relic", 8, 3)
-  drawMiniIcon(canvas, x + 16, y + 14, "coin", 8, 3)
-  const brandHeight = drawBrand(canvas, x + 22, y + 3, width - 28, UI.panel)
-  const copyY = y + 4 + brandHeight
-  canvas.write(x + 22, copyY, trim("Dark fantasy terminal crawl. Cursed loot. d20 trouble.", width - 28), UI.ink, UI.panel)
-  canvas.write(x + 22, copyY + 2, `Hero ${currentClass(model).name}   Mode ${currentMode(model).name}   Seed ${model.seed}`, UI.brass, UI.panel)
-  canvas.write(x + 22, copyY + 4, `Local saves ${model.saves.length}   Art ${activeAssetPack.name} by ${activeAssetPack.author}`, UI.soft, UI.panel)
-  if (model.saveStatus && width >= 92) canvas.write(x + 22, copyY + 6, trim(model.saveStatus, width - 28), UI.focus, UI.panel)
+  const compact = canvas.height < 30
+  const brandY = compact ? 3 : Math.max(3, Math.floor(canvas.height * 0.23))
+  const brandHeight = compact ? drawCompactBrand(canvas, brandY, width) : drawBrand(canvas, x, brandY, width, UI.bg)
+  const summaryY = brandY + brandHeight + 1
+  const profile = model.settings.username || "local-crawler"
+  canvas.center(summaryY, trim(`@${profile}  ${currentClass(model).name}  ${currentMode(model).name}  seed ${model.seed}`, width), UI.brass, UI.bg)
+  if (!compact) canvas.center(summaryY + 2, trim(`local saves ${model.saves.length}   art ${activeAssetPack.name}   profile ${profilePath()}`, width), UI.soft, UI.bg)
 
-  const menuX = x + Math.max(22, Math.floor(width * 0.52))
-  const menuSpacing = height < 22 ? 1 : 2
-  const menuY = Math.min(y + height - 3 - (startItems.length - 1) * menuSpacing, y + Math.max(12, Math.floor(height * 0.55)))
-  startItems.forEach((item, index) => {
+  const cardW = Math.min(72, width)
+  const cardX = Math.floor((canvas.width - cardW) / 2)
+  const cardY = compact ? summaryY + 3 : Math.min(canvas.height - 14, summaryY + 5)
+  drawCommandBox(canvas, cardX, cardY, cardW, startItems[model.menuIndex], startHint(model))
+
+  const listY = cardY + 4
+  const visibleRows = Math.max(4, Math.min(startItems.length, canvas.height - listY - 4))
+  const offset = scrollOffset(model.menuIndex, visibleRows, startItems.length)
+  startItems.slice(offset, offset + visibleRows).forEach((item, visibleIndex) => {
+    const index = offset + visibleIndex
     const selected = model.menuIndex === index
-    const row = menuY + index * menuSpacing
-    if (selected) canvas.fill(menuX - 2, row, Math.min(26, width - (menuX - x) - 4), 1, " ", UI.panel3, UI.panel3)
-    canvas.write(menuX, row, `${selected ? ">" : " "} ${item}`, selected ? UI.gold : UI.ink, selected ? UI.panel3 : UI.panel)
+    drawPlainSelectRow(canvas, cardX, listY + visibleIndex, cardW, item, selected, startItemMeta(item, model))
   })
+  if (offset > 0) canvas.write(cardX + cardW - 4, listY - 1, "↑", UI.muted, UI.bg)
+  if (offset + visibleRows < startItems.length) canvas.write(cardX + cardW - 4, listY + visibleRows, "↓", UI.muted, UI.bg)
 
-  canvas.center(canvas.height - 3, "Enter select  c continue  ↑↓ navigate  n new seed  ? help  q quit", UI.muted)
+  if (model.saveStatus && canvas.height > 30) canvas.center(canvas.height - 5, trim(model.saveStatus, canvas.width - 4), UI.focus, UI.bg)
+  drawFooter(canvas, [
+    ["Enter", "select"],
+    ["↑↓", "navigate"],
+    ["n", "new seed"],
+    ["?", "help"],
+    ["q", "quit"],
+  ])
 }
 
 function drawCharacter(canvas: Canvas, model: AppModel) {
-  drawDungeonBackdrop(canvas, model.seed + 2)
+  drawDungeonBackdrop(canvas, model.seed + 2, model.settings)
   const width = Math.min(90, canvas.width - 8)
   const height = Math.min(22, canvas.height - 6)
   const x = Math.floor((canvas.width - width) / 2)
@@ -167,18 +207,20 @@ function drawCharacter(canvas: Canvas, model: AppModel) {
     const selected = model.classIndex === index
     const row = y + 4 + index * 5
     const sprite = classSprite(option.id)
-    canvas.fill(x + 3, row - 1, width - 6, 4, " ", selected ? UI.panel3 : UI.panel2, selected ? UI.panel3 : UI.panel2)
-    canvas.border(x + 3, row - 1, width - 6, 4, selected ? UI.gold : UI.edgeDim)
+    drawSelectCard(canvas, x + 3, row - 1, width - 6, 4, selected)
     drawPixelBlock(canvas, x + 6, row, pixelSprite(sprite, 8, 3), selected ? 1 : 0.5)
     canvas.write(x + 17, row, `${selected ? ">" : " "} ${option.name}`, selected ? UI.gold : UI.ink, selected ? UI.panel3 : UI.panel2)
     canvas.write(x + 21, row + 1, option.text, selected ? UI.ink : UI.soft, selected ? UI.panel3 : UI.panel2)
   })
 
-  canvas.center(canvas.height - 3, "Enter confirm  Esc title", UI.muted)
+  drawFooter(canvas, [
+    ["Enter", "confirm"],
+    ["Esc", "title"],
+  ])
 }
 
 function drawMode(canvas: Canvas, model: AppModel) {
-  drawDungeonBackdrop(canvas, model.seed + 4)
+  drawDungeonBackdrop(canvas, model.seed + 4, model.settings)
   const width = Math.min(86, canvas.width - 8)
   const height = Math.min(22, canvas.height - 6)
   const x = Math.floor((canvas.width - width) / 2)
@@ -190,17 +232,21 @@ function drawMode(canvas: Canvas, model: AppModel) {
     const selected = model.modeIndex === index
     const row = y + 4 + index * 4
     const rowX = x + 18
-    if (selected) canvas.fill(rowX - 2, row, width - 24, 2, " ", UI.panel3, UI.panel3)
+    if (selected) drawSelectCard(canvas, rowX - 2, row - 1, width - 24, 3, true)
     canvas.write(rowX, row, `${selected ? ">" : " "} ${option.name}`, selected ? UI.gold : UI.ink, selected ? UI.panel3 : UI.panel)
     canvas.write(rowX + 4, row + 1, option.text, selected ? UI.ink : UI.soft, selected ? UI.panel3 : UI.panel)
   })
 
   canvas.write(x + 4, y + height - 4, `Host lobby: bun run host -- --mode ${currentMode(model).id} --seed ${model.seed}`, UI.soft, UI.panel)
   canvas.write(x + 4, y + height - 3, "Friends reuse the shared seed for co-op or race runs.", UI.muted, UI.panel)
+  drawFooter(canvas, [
+    ["Enter", "confirm"],
+    ["Esc", "title"],
+  ])
 }
 
 function drawSaves(canvas: Canvas, model: AppModel) {
-  drawDungeonBackdrop(canvas, model.seed + 8)
+  drawDungeonBackdrop(canvas, model.seed + 8, model.settings)
   const width = Math.min(108, canvas.width - 8)
   const height = Math.min(30, canvas.height - 6)
   const x = Math.floor((canvas.width - width) / 2)
@@ -261,53 +307,142 @@ function drawSaves(canvas: Canvas, model: AppModel) {
     canvas.write(detailX + 4, listY + 3, "so the local format stays useful offline.", UI.soft, UI.panel)
   }
 
-  if (model.saveStatus) canvas.center(canvas.height - 4, trim(model.saveStatus, canvas.width - 4), UI.focus)
-  canvas.center(canvas.height - 3, "Enter load  ↑↓ choose save  r refresh  d delete  Esc title", UI.muted)
+  if (model.saveStatus) canvas.center(canvas.height - 5, trim(model.saveStatus, canvas.width - 4), UI.focus)
+  drawFooter(canvas, [
+    ["Enter", "load"],
+    ["↑↓", "choose"],
+    ["r", "refresh"],
+    ["d", "delete"],
+    ["Esc", "title"],
+  ])
 }
 
 function drawCloud(canvas: Canvas, model: AppModel) {
-  drawDungeonBackdrop(canvas, model.seed + 12)
-  const width = Math.min(100, canvas.width - 8)
-  const height = Math.min(27, canvas.height - 6)
+  drawDungeonBackdrop(canvas, model.seed + 12, model.settings)
+  const width = Math.min(74, canvas.width - 8)
+  const x = Math.floor((canvas.width - width) / 2)
+  const compact = canvas.height < 30
+  const brandY = compact ? 4 : Math.max(4, Math.floor(canvas.height * 0.3))
+  const brandHeight = compact ? drawCompactBrand(canvas, brandY, width) : drawBrand(canvas, x, brandY, width, UI.bg)
+  const inputY = brandY + brandHeight + 3
+  const editing = model.inputMode?.field === "githubUsername"
+  const githubName = editing ? model.inputMode?.draft ?? "" : model.settings.githubUsername
+  const shownName = githubName || "github username"
+
+  drawCommandBox(canvas, x, inputY, width, shownName, "GitHub cloud identity")
+  canvas.write(x + 3, inputY + 1, editing ? ">" : " ", editing ? UI.gold : UI.muted, UI.panel2)
+  canvas.write(x + 5, inputY + 1, editing ? `${shownName}_` : shownName, editing ? UI.ink : UI.soft, UI.panel2)
+
+  const rowY = inputY + (compact ? 4 : 5)
+  drawPlainSelectRow(canvas, x, rowY, width, "Sign in with GitHub", model.menuIndex === 0, "device auth later; saves stay local now")
+  drawPlainSelectRow(canvas, x, rowY + 2, width, "Use local profile", model.menuIndex === 1, `profile @${model.settings.username}`)
+  drawPlainSelectRow(canvas, x, rowY + 4, width, "Back to title", model.menuIndex === 2, "return without syncing")
+
+  if (!compact) {
+    canvas.center(rowY + 8, trim("Cloud sync will use GitHub login, encrypted save envelopes, and conflict prompts.", width), UI.soft, UI.bg)
+    canvas.center(rowY + 10, trim(`Local profile: ${profilePath()}`, width), UI.muted, UI.bg)
+  }
+  drawFooter(canvas, [
+    ["Enter", "confirm"],
+    ["u", "edit name"],
+    ["Esc", "title"],
+  ])
+}
+
+function drawSettings(canvas: Canvas, model: AppModel) {
+  drawDungeonBackdrop(canvas, model.seed + 16, model.settings)
+  const width = Math.min(104, canvas.width - 8)
+  const height = Math.min(30, canvas.height - 6)
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.max(2, Math.floor((canvas.height - height) / 2))
-  drawPanel(canvas, x, y, width, height, "Cloud Saves", UI.gold)
-  drawBrand(canvas, x + 4, y + 3, Math.min(width - 8, 58), UI.panel)
+  drawPanel(canvas, x, y, width, height, "Settings", model.settings.highContrast ? UI.focus : UI.gold)
 
-  const leftX = x + 4
-  const rowY = y + 10
-  canvas.write(leftX, rowY - 2, "SYNC PLAN", UI.brass, UI.panel)
+  const listX = x + 4
+  const listY = y + 4
+  const listW = Math.min(50, Math.floor(width * 0.52))
+  const rowGap = 3
+  const visibleRows = Math.max(3, Math.min(settingsOptions.length, Math.floor((height - 7) / rowGap)))
+  const offset = scrollOffset(model.settingsIndex, visibleRows, settingsOptions.length)
+  settingsOptions.slice(offset, offset + visibleRows).forEach((option, visibleIndex) => {
+    const index = offset + visibleIndex
+    const selected = model.settingsIndex === index
+    const rowY = listY + visibleIndex * rowGap
+    drawSelectCard(canvas, listX, rowY, listW, 2, selected)
+    canvas.write(listX + 2, rowY, `${selected ? ">" : " "} ${option.name}`, selected ? UI.gold : UI.ink, selected ? UI.panel3 : UI.panel2)
+    canvas.write(listX + listW - 18, rowY, trim(settingValue(model.settings, option.id), 16), selected ? UI.focus : UI.soft, selected ? UI.panel3 : UI.panel2)
+    canvas.write(listX + 4, rowY + 1, trim(option.text, listW - 6), selected ? UI.ink : UI.muted, selected ? UI.panel3 : UI.panel2)
+  })
+  if (offset > 0) canvas.write(listX + listW - 3, listY - 1, "↑", UI.muted, UI.panel)
+  if (offset + visibleRows < settingsOptions.length) canvas.write(listX + listW - 3, listY + visibleRows * rowGap, "↓", UI.muted, UI.panel)
+
+  const detailX = listX + listW + 4
+  const detailW = width - (detailX - x) - 4
+  const detailH = Math.min(19, height - 8)
+  drawPanel(canvas, detailX, listY, detailW, detailH, "Local Profile", UI.edge)
+  drawMiniIcon(canvas, detailX + 3, listY + 3, "focus-gem", 8, 3)
+  const editing = model.inputMode?.field === "username"
+  const name = editing ? `${model.inputMode?.draft ?? ""}_` : `@${model.settings.username}`
+  if (detailH > 8) drawSettingRow(canvas, detailX + 3, listY + 7, detailW - 6, "Player", name)
+  if (detailH > 10) drawSettingRow(canvas, detailX + 3, listY + 9, detailW - 6, "Profile", profilePath())
+  if (detailH > 12) drawSettingRow(canvas, detailX + 3, listY + 11, detailW - 6, "Saves", saveDirectory())
+  if (detailH > 14) drawSettingRow(canvas, detailX + 3, listY + 13, detailW - 6, "Cloud", model.settings.cloudProvider === "github" ? "GitHub selected" : "local-only")
+  if (detailH > 17) canvas.write(detailX + 3, listY + 16, "Settings are saved immediately on this computer.", UI.soft, UI.panel)
+
+  drawFooter(canvas, [
+    ["Enter", "change"],
+    ["u", "edit name"],
+    ["c", "controls"],
+    ["Esc", model.settingsReturnScreen === "game" ? "game" : "title"],
+  ])
+}
+
+function drawControls(canvas: Canvas, model: AppModel) {
+  drawDungeonBackdrop(canvas, model.seed + 18, model.settings)
+  const width = Math.min(96, canvas.width - 8)
+  const height = Math.min(28, canvas.height - 6)
+  const x = Math.floor((canvas.width - width) / 2)
+  const y = Math.max(2, Math.floor((canvas.height - height) / 2))
+  drawPanel(canvas, x, y, width, height, "Controls & Accessibility", UI.gold)
+
   const rows = [
-    ["Provider", "GitHub account login with device auth."],
-    ["Storage", "Private Gist or private repo branch containing save envelopes."],
-    ["Offline", "Local saves remain the source of truth when disconnected."],
-    ["Conflict", "Manual saves keep history; newest autosave wins only autosave."],
-    ["Security", "Encrypt save payloads before upload once accounts ship."],
-    ["Prototype", "OPENDUNGEON_GITHUB_TOKEN can power CLI-only sync later."],
+    ["Move", controlMoveText(model.settings.controlScheme)],
+    ["Menus", "Arrows always work. WASD follows the selected control scheme."],
+    ["Combat", "Tab selects an enemy. 1-3 selects a skill. Enter rolls d20."],
+    ["Inventory", "I opens pack. H drinks potion. L opens run log."],
+    ["Run", "R rests outside combat. Esc pauses. Ctrl+S/F5 saves locally."],
+    ["Accessibility", accessibilitySummary(model.settings)],
+    ["Visuals", `Map scale ${model.settings.tileScale}. Background FX ${model.settings.backgroundFx}.`],
+    ["Audio", `Music ${onOff(model.settings.music)}. SFX ${onOff(model.settings.sound)}.`],
   ]
 
-  rows.slice(0, Math.max(2, Math.floor((height - 13) / 2))).forEach((row, index) => {
-    drawSettingRow(canvas, leftX, rowY + index * 2, width - 8, row[0], row[1])
+  const visibleRows = Math.max(4, Math.min(rows.length, Math.floor((height - 8) / 2)))
+  rows.slice(0, visibleRows).forEach((row, index) => {
+    const rowY = y + 4 + index * 2
+    drawKeycap(canvas, x + 4, rowY, row[0])
+    canvas.write(x + 20, rowY, trim(row[1], width - 24), index === 5 ? UI.gold : UI.ink, UI.panel)
   })
 
-  const noteY = y + height - 6
-  canvas.write(leftX, noteY, "This screen is intentionally separate from local save/load.", UI.ink, UI.panel)
-  canvas.write(leftX, noteY + 1, "The next code step is a CloudSaveAdapter using the same JSON envelope.", UI.soft, UI.panel)
-  canvas.write(leftX, noteY + 2, `Local save path: ${trim(saveDirectory(), width - 25)}`, UI.muted, UI.panel)
-  canvas.center(canvas.height - 3, "Esc title", UI.muted)
+  if (height > 24) {
+    canvas.write(x + 4, y + height - 5, "Change these values in Settings. They are stored in the local profile file.", UI.soft, UI.panel)
+    canvas.write(x + 4, y + height - 4, trim(profilePath(), width - 8), UI.muted, UI.panel)
+  }
+  drawFooter(canvas, [
+    ["s", "settings"],
+    ["Esc", model.settingsReturnScreen === "game" ? "game" : "title"],
+  ])
 }
 
 function drawGame(canvas: Canvas, model: AppModel) {
   const session = model.session
-  drawMap(canvas, session, model.debugView)
+  drawMap(canvas, session, model.debugView, model.settings)
   drawHud(canvas, session)
-  if (!model.debugView) drawQuickbar(canvas, session, model.diceRollAnimation)
-  if (session.combat.active) drawCombatPanel(canvas, session, model.diceRollAnimation)
+  if (!model.debugView) drawQuickbar(canvas, session, model.diceRollAnimation, model.settings)
+  if (session.combat.active) drawCombatPanel(canvas, session, model.diceRollAnimation, model.settings)
   if (session.status !== "running") drawRunEnd(canvas, session)
 }
 
-function drawMap(canvas: Canvas, session: GameSession, debugView: boolean) {
-  const tileSize = mapTileSize(canvas, debugView)
+function drawMap(canvas: Canvas, session: GameSession, debugView: boolean, settings: UserSettings) {
+  const tileSize = mapTileSize(canvas, debugView, settings.tileScale)
   const tileWidth = tileSize.width
   const tileHeight = tileSize.height
   const hudHeight = debugView ? 4 : gameHudHeight(canvas)
@@ -348,13 +483,15 @@ function drawMap(canvas: Canvas, session: GameSession, debugView: boolean) {
   }
 }
 
-function mapTileSize(canvas: Canvas, debugView: boolean) {
+function mapTileSize(canvas: Canvas, debugView: boolean, preference: UserSettings["tileScale"]) {
   if (debugView) return { width: 2, height: 1 }
 
   const forced = process.env.OPENDUNGEON_TILE_SCALE
   if (forced === "compact") return { width: 8, height: 4 }
   if (forced === "medium") return { width: 12, height: 6 }
   if (forced === "large") return { width: 16, height: 8 }
+  if (preference === "medium") return { width: 12, height: 6 }
+  if (preference === "large") return { width: 16, height: 8 }
 
   if (canvas.width >= 132 && canvas.height >= 38) return { width: 16, height: 8 }
   if (canvas.width >= 96 && canvas.height >= 30) return { width: 12, height: 6 }
@@ -556,7 +693,7 @@ function drawHud(canvas: Canvas, session: GameSession) {
   canvas.write(rightX + rightW - 6, 5, String(session.gold), UI.gold, UI.panel)
 }
 
-function drawQuickbar(canvas: Canvas, session: GameSession, animation?: DiceRollAnimation | null) {
+function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollAnimation | null | undefined, settings: UserSettings) {
   const height = gameQuickbarHeight(canvas)
   if (!height) return
   const slotCount = 6
@@ -586,7 +723,7 @@ function drawQuickbar(canvas: Canvas, session: GameSession, animation?: DiceRoll
     canvas.fill(slotX + 1, y + 2, slotWidth - 3, height - 4, " ", UI.panel2, UI.panel2)
     canvas.border(slotX, y + 1, slotWidth - 1, height - 2, edge)
     canvas.write(slotX + 1, y + 1, item.key, item.active ? UI.gold : UI.muted, UI.panel2)
-    if (item.custom === "d20") drawD20Sprite(canvas, slotX + 2, y + 2, diceResult(session, animation), diceFrame(session, animation), 8, 3, item.active, animation)
+    if (item.custom === "d20") drawD20Sprite(canvas, slotX + 2, y + 2, diceResult(session, animation), diceFrame(session, animation), 8, 3, item.active && !settings.reduceMotion, animation)
     else if (item.sprite) drawMiniIcon(canvas, slotX + 3, y + 2, item.sprite, 7, 3)
     canvas.write(slotX + 1, y + height - 3, trim(item.label, slotWidth - 3), item.active ? UI.gold : UI.soft, UI.panel2)
     if (item.count !== undefined && item.count !== "0") {
@@ -596,7 +733,7 @@ function drawQuickbar(canvas: Canvas, session: GameSession, animation?: DiceRoll
   })
 }
 
-function drawCombatPanel(canvas: Canvas, session: GameSession, animation?: DiceRollAnimation | null) {
+function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRollAnimation | null | undefined, settings: UserSettings) {
   const width = Math.min(58, Math.max(38, Math.floor(canvas.width * 0.35)))
   const height = Math.min(18, Math.max(14, canvas.height - gameHudHeight(canvas) - gameQuickbarHeight(canvas) - 2))
   const x = Math.max(1, canvas.width - width - 2)
@@ -606,7 +743,7 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation?: DiceR
   const roll = session.combat.lastRoll
 
   drawPanel(canvas, x, y, width, height, "Turn Combat", UI.gold)
-  drawD20Sprite(canvas, x + width - 11, y + 1, diceResult(session, animation), diceFrame(session, animation), 8, 3, true, animation)
+  drawD20Sprite(canvas, x + width - 11, y + 1, diceResult(session, animation), diceFrame(session, animation), 8, 3, !settings.reduceMotion, animation)
 
   canvas.write(x + 2, y + 3, "Targets", UI.brass, UI.panel)
   targets.slice(0, 4).forEach((target, index) => {
@@ -636,7 +773,7 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation?: DiceR
   const diceX = x + width - 15
   const diceY = y + height - 5
   canvas.border(diceX, diceY, 12, 4, roll?.hit ? UI.focus : UI.hp)
-  drawD20Sprite(canvas, diceX + 1, diceY + 1, diceResult(session, animation), diceFrame(session, animation), 5, 2, true, animation)
+  drawD20Sprite(canvas, diceX + 1, diceY + 1, diceResult(session, animation), diceFrame(session, animation), 5, 2, !settings.reduceMotion, animation)
   canvas.write(diceX + 7, diceY + 1, roll ? String(roll.d20).padStart(2, "0") : "d20", roll?.hit ? UI.focus : UI.gold)
   canvas.write(diceX + 2, diceY + 2, roll ? `${roll.total}/${roll.dc}` : "roll", UI.ink)
 
@@ -662,12 +799,56 @@ function drawPanel(canvas: Canvas, x: number, y: number, width: number, height: 
   }
 }
 
+function drawCommandBox(canvas: Canvas, x: number, y: number, width: number, labelText: string, hint: string) {
+  canvas.fill(x, y, width, 3, " ", "#1b1b1b", "#1b1b1b")
+  canvas.fill(x, y, 1, 3, " ", UI.focus, UI.focus)
+  canvas.write(x + 3, y + 1, trim(labelText, Math.floor(width * 0.58)), UI.ink, "#1b1b1b")
+  canvas.write(x + Math.max(18, width - hint.length - 3), y + 1, trim(hint, Math.floor(width * 0.38)), UI.muted, "#1b1b1b")
+}
+
+function drawPlainSelectRow(canvas: Canvas, x: number, y: number, width: number, labelText: string, selected: boolean, meta = "") {
+  const bg = selected ? UI.panel3 : UI.bg
+  if (selected) {
+    canvas.fill(x, y, width, 1, " ", bg, bg)
+    canvas.fill(x, y, 1, 1, " ", UI.gold, UI.gold)
+  }
+  canvas.write(x + 3, y, `${selected ? ">" : " "} ${labelText}`, selected ? UI.gold : UI.ink, bg)
+  if (meta && width > 42) canvas.write(x + Math.max(28, width - meta.length - 2), y, trim(meta, Math.max(8, width - 32)), selected ? UI.focus : UI.muted, bg)
+}
+
+function drawSelectCard(canvas: Canvas, x: number, y: number, width: number, height: number, selected: boolean) {
+  const bg = selected ? UI.panel3 : UI.panel2
+  canvas.fill(x, y, width, height, " ", bg, bg)
+  canvas.border(x, y, width, height + 1, selected ? UI.gold : UI.edgeDim)
+  if (selected) canvas.fill(x, y, 1, height, " ", UI.gold, UI.gold)
+}
+
+function drawFooter(canvas: Canvas, items: Array<[string, string]>) {
+  const textWidth = items.reduce((sum, item) => sum + item[0].length + item[1].length + 4, 0)
+  const width = Math.min(canvas.width - 4, Math.max(18, textWidth + 2))
+  const x = Math.floor((canvas.width - width) / 2)
+  const y = canvas.height - 2
+  canvas.fill(x, y, width, 1, " ", "#151a21", "#151a21")
+  let cursor = x + 1
+  for (const [key, labelText] of items) {
+    canvas.write(cursor, y, key, UI.gold, "#151a21")
+    cursor += key.length + 1
+    canvas.write(cursor, y, labelText, UI.ink, "#151a21")
+    cursor += labelText.length + 2
+  }
+}
+
 function drawBrand(canvas: Canvas, x: number, y: number, width: number, bg = UI.panel) {
   const font = brandFont(width)
   const measured = measureText({ text: "OPENDUNGEON", font })
   drawAsciiFont(canvas, x, y, width, "OPENDUNGEON", font, [UI.brass, UI.gold], bg)
   if (width > 24) canvas.write(x, y + measured.height, trim("terminal dungeon crawler", width), UI.soft, bg)
   return measured.height + (width > 24 ? 1 : 0)
+}
+
+function drawCompactBrand(canvas: Canvas, y: number, width: number) {
+  canvas.center(y, trim("opendungeon", width), UI.ink, UI.bg)
+  return 1
 }
 
 function brandFont(width: number): ASCIIFontName {
@@ -932,7 +1113,9 @@ function drawDialog(canvas: Canvas, model: AppModel) {
     canvas.write(x + 4, y + height - 4, "Race mode keeps the same seed so friends can replay the same generated crawl.", UI.soft, UI.panel)
   }
 
-  canvas.center(y + height - 2, "Esc close", UI.muted, UI.panel)
+  canvas.fill(x + Math.floor(width / 2) - 6, y + height - 2, 12, 1, " ", UI.panel3, UI.panel3)
+  canvas.write(x + Math.floor(width / 2) - 4, y + height - 2, "Esc", UI.gold, UI.panel3)
+  canvas.write(x + Math.floor(width / 2), y + height - 2, "close", UI.ink, UI.panel3)
 }
 
 function drawRunEnd(canvas: Canvas, session: GameSession) {
@@ -956,11 +1139,13 @@ function drawRunEnd(canvas: Canvas, session: GameSession) {
   canvas.center(y + 9, "Enter rerun this seed    Esc title    q quit", "#66717d")
 }
 
-function drawDungeonBackdrop(canvas: Canvas, seed: number) {
+function drawDungeonBackdrop(canvas: Canvas, seed: number, settings?: UserSettings) {
+  const dotMod = settings?.backgroundFx === "dense" ? 17 : settings?.backgroundFx === "low" || settings?.reduceMotion ? 37 : 23
+  const blockMod = settings?.backgroundFx === "dense" ? 43 : settings?.backgroundFx === "low" || settings?.reduceMotion ? 89 : 61
   for (let y = 0; y < canvas.height; y++) {
     for (let x = 0; x < canvas.width; x++) {
-      if ((x * 17 + y * 31 + seed) % 23 === 0) canvas.write(x, y, "·", "#1f3438")
-      else if ((x * 7 + y * 13 + seed) % 61 === 0) canvas.write(x, y, "█", "#181c22")
+      if ((x * 17 + y * 31 + seed) % dotMod === 0) canvas.write(x, y, "·", settings?.highContrast ? "#2e555b" : "#1f3438")
+      else if ((x * 7 + y * 13 + seed) % blockMod === 0) canvas.write(x, y, "█", settings?.highContrast ? "#222936" : "#181c22")
     }
   }
 }
@@ -995,6 +1180,54 @@ function label(kind: string) {
   if (kind === "slime") return "Slime"
   if (kind === "ghoul") return "Ghoul"
   return "Necromancer"
+}
+
+function startHint(model: AppModel) {
+  const item = currentStartItem(model)
+  if (item === "Continue last") return model.saves.length ? "latest save" : "no saves yet"
+  if (item === "New descent") return `${currentClass(model).name} / ${currentMode(model).name}`
+  if (item === "Load save") return `${model.saves.length} local`
+  if (item === "Cloud login") return model.settings.githubUsername ? `@${model.settings.githubUsername}` : "local-only"
+  if (item === "Settings") return "profile + accessibility"
+  if (item === "Controls") return model.settings.controlScheme
+  return "open"
+}
+
+function startItemMeta(item: string, model: AppModel) {
+  if (item === "Continue last") return model.saves.length ? "c" : "empty"
+  if (item === "New descent") return "play"
+  if (item === "Load save") return `${model.saves.length}`
+  if (item === "Character") return currentClass(model).name
+  if (item === "Multiplayer") return currentMode(model).name
+  if (item === "Cloud login") return model.settings.cloudProvider
+  if (item === "Settings") return "local"
+  if (item === "Controls") return model.settings.controlScheme
+  return ""
+}
+
+function settingValue(settings: UserSettings, id: (typeof settingsOptions)[number]["id"]) {
+  if (id === "username") return settings.username
+  if (id === "controlScheme") return settings.controlScheme
+  if (id === "highContrast") return onOff(settings.highContrast)
+  if (id === "reduceMotion") return onOff(settings.reduceMotion)
+  if (id === "backgroundFx") return settings.backgroundFx
+  if (id === "tileScale") return settings.tileScale
+  if (id === "music") return onOff(settings.music)
+  return onOff(settings.sound)
+}
+
+function controlMoveText(scheme: UserSettings["controlScheme"]) {
+  if (scheme === "arrows") return "Arrow keys only for movement."
+  if (scheme === "vim") return "Arrows, WASD, and HJKL movement."
+  return "Arrows and WASD movement."
+}
+
+function accessibilitySummary(settings: UserSettings) {
+  return `High contrast ${onOff(settings.highContrast)}. Reduce motion ${onOff(settings.reduceMotion)}.`
+}
+
+function onOff(value: boolean) {
+  return value ? "on" : "off"
 }
 
 function trim(text: string, width: number) {
