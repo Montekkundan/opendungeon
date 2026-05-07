@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { combatModifier, createSession, performCombatAction, resolveSkillCheck, selectSkill, tryMove, usePotion } from "./session.js"
+import { attemptFlee, combatModifier, createSession, performCombatAction, resolveSkillCheck, selectSkill, tryMove, usePotion } from "./session.js"
 import { setTile } from "./dungeon.js"
 import { listSaves, loadSave, saveSession } from "./saveStore.js"
 import { defaultSettings, loadSettings, profilePath, saveSettings } from "./settingsStore.js"
@@ -80,6 +80,65 @@ describe("game session", () => {
     expect(session.combat.lastRoll?.d20).toBeGreaterThanOrEqual(1)
     expect(session.combat.lastRoll?.d20).toBeLessThanOrEqual(20)
     expect(session.combat.lastRoll?.modifier).toBe(combatModifier(session, "strength"))
+    expect(session.turn).toBe(1)
+  })
+
+  test("enemies patrol until the player enters their aggro radius", () => {
+    const session = createSession(1234)
+    const start = { ...session.player }
+    session.dungeon.actors = []
+
+    for (let x = start.x; x <= start.x + 8; x++) setTile(session.dungeon, { x, y: start.y }, "floor")
+    setTile(session.dungeon, { x: start.x, y: start.y + 1 }, "floor")
+
+    session.dungeon.actors.push({
+      id: "sentinel-ghoul",
+      kind: "ghoul",
+      position: { x: start.x + 7, y: start.y },
+      hp: 8,
+      damage: 0,
+      ai: {
+        pattern: "sentinel",
+        origin: { x: start.x + 7, y: start.y },
+        aggroRadius: 3,
+        leashRadius: 6,
+        direction: 1,
+        alerted: false,
+      },
+    })
+
+    tryMove(session, 0, 1)
+    expect(session.combat.active).toBe(false)
+    expect(session.dungeon.actors[0].position).toEqual({ x: start.x + 7, y: start.y })
+
+    session.player = { x: start.x + 4, y: start.y }
+    tryMove(session, 1, 0)
+
+    expect(session.combat.active).toBe(true)
+    expect(session.combat.actorIds).toContain("sentinel-ghoul")
+  })
+
+  test("flee rolls d20 against dexterity luck and endurance pressure", () => {
+    const session = createSession(1234)
+    const target = { x: session.player.x + 1, y: session.player.y }
+    setTile(session.dungeon, target, "floor")
+    session.stats.dexterity = 30
+    session.stats.luck = 30
+    session.stats.endurance = 30
+    session.dungeon.actors.push({
+      id: "test-slime",
+      kind: "slime",
+      position: target,
+      hp: 6,
+      damage: 0,
+    })
+
+    tryMove(session, 1, 0)
+    const roll = attemptFlee(session)
+
+    expect(roll?.skill).toBe("Flee")
+    expect(roll?.hit).toBe(true)
+    expect(session.combat.active).toBe(false)
     expect(session.turn).toBe(1)
   })
 

@@ -2,6 +2,7 @@ import { FrameBufferRenderable, createCliRenderer, type KeyEvent } from "@opentu
 import {
   createSession,
   cycleTarget,
+  attemptFlee,
   dismissSkillCheck,
   performCombatAction,
   rest,
@@ -282,6 +283,11 @@ function handleCombatKey(key: KeyEvent) {
   }
   if (key.name === "1" || key.name === "2" || key.name === "3") {
     selectSkill(model.session, Number(key.name) - 1)
+    return
+  }
+  if (key.name === "f") {
+    const roll = attemptFlee(model.session)
+    if (roll) startDiceRollAnimation(roll.d20)
     return
   }
   if (isConfirmKey(key)) {

@@ -8,6 +8,9 @@ import {
   combatModifier,
   combatSkills,
   combatTargets,
+  enemyBehaviorText,
+  fleeDc,
+  fleeModifier,
   pointKey,
   skillCheckModifier,
   type GameSession,
@@ -424,7 +427,7 @@ function drawControls(canvas: Canvas, model: AppModel) {
   const rows = [
     ["Move", controlMoveText(model.settings.controlScheme)],
     ["Menus", "Arrows always work. WASD follows the selected control scheme."],
-    ["Combat", "Tab selects an enemy. 1-3 selects a skill. Enter rolls d20."],
+    ["Combat", "Tab selects an enemy. 1-3 selects a skill. Enter rolls d20. F flees."],
     ["Inventory", "I opens pack. H drinks potion. L opens run log."],
     ["Run", "R rests outside combat. Esc pauses. Ctrl+S/F5 saves locally."],
     ["Accessibility", accessibilitySummary(model.settings)],
@@ -725,20 +728,35 @@ function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollA
   const width = slotCount * slotWidth + 4
   const x = Math.max(2, Math.floor((canvas.width - width) / 2))
   const y = canvas.height - height
-  const items: QuickbarItem[] = [
-    { key: "1", label: "Strike", sprite: "sword", active: session.combat.active && session.combat.selectedSkill === 0 },
-    {
-      key: "H",
-      label: "Potion",
-      sprite: "potion",
-      count: String(countInventory(session, "Deploy nerve potion")),
-      active: session.combat.active && session.hp < session.maxHp,
-    },
-    { key: "G", label: "Gold", sprite: "coin", count: String(session.gold) },
-    { key: "R", label: "Relic", sprite: "relic", count: String(countInventory(session, "Missing env var")) },
-    { key: "D", label: "Roll", custom: "d20", active: session.combat.active },
-    { key: "I", label: "Pack", sprite: "scroll", count: String(session.inventory.length) },
-  ]
+  const items: QuickbarItem[] = session.combat.active
+    ? [
+        { key: "1", label: "Strike", sprite: "sword", active: session.combat.selectedSkill === 0 },
+        { key: "2", label: "Aimed", sprite: "bow", active: session.combat.selectedSkill === 1 },
+        { key: "3", label: "Burst", sprite: "staff", active: session.combat.selectedSkill === 2 },
+        {
+          key: "H",
+          label: "Potion",
+          sprite: "potion",
+          count: String(countInventory(session, "Deploy nerve potion")),
+          active: session.hp < session.maxHp,
+        },
+        { key: "F", label: "Flee", sprite: "map", active: true },
+        { key: "Ent", label: "Roll", custom: "d20", active: true },
+      ]
+    : [
+        { key: "1", label: "Strike", sprite: "sword" },
+        {
+          key: "H",
+          label: "Potion",
+          sprite: "potion",
+          count: String(countInventory(session, "Deploy nerve potion")),
+          active: session.hp < session.maxHp,
+        },
+        { key: "G", label: "Gold", sprite: "coin", count: String(session.gold) },
+        { key: "R", label: "Relic", sprite: "relic", count: String(countInventory(session, "Missing env var")) },
+        { key: "D", label: "Roll", custom: "d20" },
+        { key: "I", label: "Pack", sprite: "scroll", count: String(session.inventory.length) },
+      ]
 
   drawPanel(canvas, x, y, width, height - 1, session.combat.active ? "Action Bar" : "Pack", session.combat.active ? UI.gold : UI.edge)
   items.forEach((item, index) => {
@@ -763,51 +781,79 @@ function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollA
 }
 
 function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRollAnimation | null | undefined, settings: UserSettings) {
-  const width = Math.min(58, Math.max(38, Math.floor(canvas.width * 0.35)))
-  const height = Math.min(18, Math.max(14, canvas.height - gameHudHeight(canvas) - gameQuickbarHeight(canvas) - 2))
+  const width = Math.min(82, Math.max(58, Math.floor(canvas.width * 0.48)))
+  const height = Math.min(22, Math.max(20, canvas.height - gameQuickbarHeight(canvas) - 3))
   const x = Math.max(1, canvas.width - width - 2)
-  const y = Math.max(gameHudHeight(canvas) + 1, canvas.height - gameQuickbarHeight(canvas) - height - 1)
+  const y = Math.max(1, canvas.height - gameQuickbarHeight(canvas) - height - 1)
   const targets = combatTargets(session)
   const selectedSkill = combatSkills[session.combat.selectedSkill]
   const roll = session.combat.lastRoll
+  const targetW = Math.max(26, Math.floor(width * 0.43))
+  const actionX = x + targetW + 3
+  const actionW = width - targetW - 5
+  const diceW = 16
 
   drawPanel(canvas, x, y, width, height, "Turn Combat", UI.gold)
-  drawD20Sprite(canvas, x + width - 14, y + 1, diceResult(session, animation), diceFrame(session, animation), 11, 4, settings.diceSkin, !settings.reduceMotion, animation)
+  canvas.write(x + 2, y + 2, "Tab target", UI.muted, UI.panel)
+  canvas.write(x + 15, y + 2, "1-3 skill", UI.muted, UI.panel)
+  canvas.write(x + 27, y + 2, "F flee", UI.muted, UI.panel)
+  canvas.write(x + 36, y + 2, "Enter roll", UI.muted, UI.panel)
 
-  canvas.write(x + 2, y + 3, "Targets", UI.brass, UI.panel)
-  targets.slice(0, 4).forEach((target, index) => {
+  canvas.write(x + 2, y + 4, "Targets", UI.brass, UI.panel)
+  const targetLimit = height < 21 ? 2 : 3
+  targets.slice(0, targetLimit).forEach((target, index) => {
     const selected = index === session.combat.selectedTarget
-    const text = `${selected ? ">" : " "} ${label(target.kind)} HP ${target.hp}`
-    const row = y + 4 + index
-    if (selected) canvas.fill(x + 2, row, Math.floor(width / 2) - 4, 1, " ", UI.panel3, UI.panel3)
-    drawMiniIcon(canvas, x + 3, row, actorSpriteId(target.kind), 4, 1)
-    canvas.write(x + 8, row, trim(text, Math.floor(width / 2) - 9), selected ? UI.gold : UI.ink, selected ? UI.panel3 : UI.panel)
+    const cardY = y + 5 + index * 3
+    const bg = selected ? UI.panel3 : UI.panel2
+    canvas.fill(x + 2, cardY, targetW, 2, " ", bg, bg)
+    canvas.border(x + 2, cardY, targetW, 3, selected ? UI.gold : UI.edgeDim)
+    if (selected) canvas.fill(x + 3, cardY + 1, 1, 1, " ", UI.gold, UI.gold)
+    drawMiniIcon(canvas, x + 5, cardY + 1, actorSpriteId(target.kind), 7, 1, selected ? 1 : 0.75)
+    canvas.write(x + 13, cardY + 1, trim(`${selected ? ">" : " "} ${label(target.kind)}  HP ${target.hp}`, targetW - 15), selected ? UI.gold : UI.ink, bg)
+    canvas.write(x + 13, cardY + 2, trim(enemyBehaviorText(target), targetW - 15), target.ai?.alerted ? UI.hp : UI.muted, bg)
   })
 
-  const skillX = x + Math.floor(width / 2)
-  canvas.write(skillX, y + 3, "Skills", UI.brass, UI.panel)
+  canvas.write(actionX, y + 4, "Actions", UI.brass, UI.panel)
   combatSkills.forEach((skill, index) => {
     const selected = index === session.combat.selectedSkill
     const unavailable = session.focus < skill.cost
     const modifier = combatModifier(session, skill.stat)
-    const text = `${index + 1} ${skill.name} ${statAbbreviations[skill.stat]} ${formatModifier(modifier)} F${skill.cost}`
-    const row = y + 4 + index
-    if (selected) canvas.fill(skillX, row, width - (skillX - x) - 2, 1, " ", UI.panel3, UI.panel3)
-    canvas.write(skillX + 1, row, trim(text, width - (skillX - x) - 4), unavailable ? UI.muted : selected ? UI.focus : UI.ink, selected ? UI.panel3 : UI.panel)
+    const dc = skill.dc + targetDefenseBonus(targets[session.combat.selectedTarget]?.kind)
+    const row = y + 5 + index * 2
+    const bg = selected ? UI.panel3 : UI.panel2
+    canvas.fill(actionX, row, actionW, 1, " ", bg, bg)
+    if (selected) canvas.fill(actionX, row, 1, 1, " ", UI.gold, UI.gold)
+    canvas.write(actionX + 2, row, `${index + 1}`, selected ? UI.gold : UI.soft, bg)
+    canvas.write(actionX + 5, row, trim(skill.name, Math.max(6, actionW - 27)), unavailable ? UI.muted : selected ? UI.focus : UI.ink, bg)
+    canvas.write(actionX + Math.max(18, actionW - 22), row, `${statAbbreviations[skill.stat]} ${formatModifier(modifier)}`, unavailable ? UI.muted : UI.gold, bg)
+    canvas.write(actionX + actionW - 10, row, `DC ${dc}`, unavailable ? UI.muted : UI.soft, bg)
+    canvas.write(actionX + actionW - 4, row, `F${skill.cost}`, unavailable ? UI.hp : UI.muted, bg)
   })
 
-  canvas.fill(x + 2, y + height - 7, width - 4, 3, " ", UI.panel2, UI.panel2)
-  canvas.write(x + 3, y + height - 7, trim(selectedSkill.text, width - 6), UI.soft, UI.panel2)
-  canvas.write(x + 3, y + height - 6, trim(session.combat.message, width - 6), UI.ink, UI.panel2)
+  const fleeY = y + 11
+  canvas.fill(actionX, fleeY, actionW, 1, " ", UI.panel2, UI.panel2)
+  canvas.write(actionX + 2, fleeY, "F", UI.gold, UI.panel2)
+  canvas.write(actionX + 5, fleeY, "Flee", UI.ink, UI.panel2)
+  canvas.write(actionX + Math.max(18, actionW - 25), fleeY, `DEX/LCK ${formatModifier(fleeModifier(session))}`, UI.gold, UI.panel2)
+  canvas.write(actionX + actionW - 10, fleeY, `DC ${fleeDc(session)}`, UI.soft, UI.panel2)
 
-  const diceX = x + width - 18
-  const diceY = y + height - 7
-  canvas.border(diceX, diceY, 15, 6, roll?.hit ? UI.focus : UI.hp)
-  drawD20Sprite(canvas, diceX + 1, diceY + 1, diceResult(session, animation), diceFrame(session, animation), 8, 4, settings.diceSkin, !settings.reduceMotion, animation)
-  canvas.write(diceX + 10, diceY + 2, roll ? String(roll.d20).padStart(2, "0") : "d20", roll?.hit ? UI.focus : UI.gold)
-  canvas.write(diceX + 2, diceY + 4, roll ? `${roll.total}/${roll.dc}` : statAbbreviations[selectedSkill.stat], UI.ink)
+  const detailY = y + height - 7
+  const detailW = width - diceW - 7
+  canvas.fill(x + 2, detailY, detailW, 4, " ", UI.panel2, UI.panel2)
+  canvas.border(x + 2, detailY, detailW, 4, UI.edgeDim)
+  const detail = roll?.skill === "Flee" ? "Escape check uses Dexterity, Luck, Endurance, and level." : selectedSkill.text
+  writeWrapped(canvas, x + 4, detailY + 1, detailW - 4, [detail, session.combat.message], 2, UI.ink, UI.panel2)
 
-  const footer = roll ? `${roll.skill} ${roll.hit ? "hit" : "miss"} ${roll.target}` : "Enter rolls selected skill"
+  const diceX = x + width - diceW - 3
+  const diceY = detailY
+  const diceAccent = roll ? (roll.hit ? UI.focus : UI.hp) : UI.gold
+  canvas.fill(diceX, diceY, diceW, 5, " ", UI.panel2, UI.panel2)
+  canvas.border(diceX, diceY, diceW, 5, diceAccent)
+  drawD20Sprite(canvas, diceX + 1, diceY + 1, diceResult(session, animation), diceFrame(session, animation), 8, 3, settings.diceSkin, !settings.reduceMotion, animation)
+  canvas.write(diceX + 10, diceY + 1, roll ? String(roll.d20).padStart(2, "0") : "d20", diceAccent, UI.panel2)
+  canvas.write(diceX + 2, diceY + 3, roll ? `${roll.total}/${roll.dc}` : statAbbreviations[selectedSkill.stat], UI.ink, UI.panel2)
+
+  const footer = roll ? `${roll.skill} ${roll.hit ? (roll.skill === "Flee" ? "success" : "hit") : roll.skill === "Flee" ? "failed" : "miss"} ${roll.target}` : "Enter rolls selected skill. F attempts escape."
   canvas.write(x + 2, y + height - 2, trim(footer, width - 4), UI.muted, UI.panel)
 }
 
@@ -875,6 +921,24 @@ function drawCheckBar(canvas: Canvas, x: number, y: number, width: number, label
 
 function writeCentered(canvas: Canvas, x: number, y: number, width: number, text: string, fg: string, bg?: string) {
   canvas.write(x + Math.max(0, Math.floor((width - text.length) / 2)), y, text, fg, bg)
+}
+
+function writeWrapped(canvas: Canvas, x: number, y: number, width: number, paragraphs: string[], maxRows: number, fg: string, bg?: string) {
+  const words = paragraphs.join(" ").split(/\s+/).filter(Boolean)
+  const rows: string[] = []
+  let current = ""
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word
+    if (next.length <= width) {
+      current = next
+      continue
+    }
+    if (current) rows.push(current)
+    current = word
+    if (rows.length >= maxRows) break
+  }
+  if (current && rows.length < maxRows) rows.push(current)
+  rows.slice(0, maxRows).forEach((row, index) => canvas.write(x, y + index, trim(row, width), fg, bg))
 }
 
 function gameHudHeight(canvas: Canvas) {
@@ -1139,9 +1203,15 @@ function actorSpriteId(kind: string): PixelSpriteId {
   return "slime"
 }
 
+function targetDefenseBonus(kind: string | undefined) {
+  if (kind === "necromancer") return 4
+  if (kind === "ghoul") return 2
+  return 0
+}
+
 function compactControls(session: GameSession) {
   return session.combat.active
-    ? "Tab target   1-3 skill   Enter roll   U UI   H potion   Ctrl+S save"
+    ? "Tab target   1-3 skill   F flee   Enter roll   U UI   H potion"
     : "I inventory   L log   H potion   U UI   -/= camera   Ctrl+S save"
 }
 
@@ -1201,7 +1271,7 @@ function drawDialog(canvas: Canvas, model: AppModel) {
       ["Confirm", "Enter / Space"],
       ["Save", "Ctrl+S or F5 saves locally"],
       ["Pack", "I inventory, H potion, L log"],
-      ["Combat", "Tab target, 1-3 skill, Enter rolls d20"],
+      ["Combat", "Tab target, 1-3 skill, F flee, Enter rolls d20"],
       ["Camera", "- wider FOV, = closer view"],
       ["Overlay", "U hides or shows the UI for this run"],
       ["Run", "R rest, Esc pause, Q quit"],

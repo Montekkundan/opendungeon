@@ -1,4 +1,4 @@
-import { createDungeon, setTile, tileAt, type Actor, type Dungeon, type Point } from "./dungeon.js"
+import { createDungeon, enemyAi, setTile, tileAt, type Actor, type Dungeon, type EnemyAi, type Point } from "./dungeon.js"
 import {
   applyLevelGrowth,
   derivedMaxFocus,
@@ -338,6 +338,7 @@ export function normalizeSessionAfterLoad(session: GameSession): GameSession {
     selectedSkill: 0,
     message: "",
   }
+  session.dungeon.actors.forEach((actor, index) => ensureEnemyAi(actor, index, session.floor))
   return session
 }
 
@@ -372,6 +373,65 @@ export function selectSkill(session: GameSession, index: number) {
   const skill = combatSkills[session.combat.selectedSkill]
   const modifier = combatModifier(session, skill.stat)
   session.combat.message = `${skill.name}: d20 ${formatSigned(modifier)} ${statAbbreviations[skill.stat]} vs DC ${skill.dc + enemyDefenseBonus(combatTargets(session)[session.combat.selectedTarget]?.kind)}.`
+}
+
+export function fleeModifier(session: GameSession) {
+  return (
+    session.level +
+    statModifier(session.stats.dexterity) +
+    Math.max(0, statModifier(session.stats.luck)) +
+    Math.max(0, Math.floor(statModifier(session.stats.endurance) / 2))
+  )
+}
+
+export function fleeDc(session: GameSession) {
+  const targets = combatTargets(session)
+  const pressure = targets.reduce((highest, target) => Math.max(highest, enemyDefenseBonus(target.kind)), 0)
+  return 11 + Math.floor(session.floor / 2) + pressure + Math.min(4, Math.max(0, targets.length - 1))
+}
+
+export function attemptFlee(session: GameSession): CombatRoll | null {
+  if (session.status !== "running" || !session.combat.active) return null
+  const targets = combatTargets(session)
+  if (targets.length === 0) {
+    endCombat(session, "No threat holds you.")
+    return null
+  }
+
+  const d20 = rollFleeD20(session, targets)
+  const modifier = fleeModifier(session)
+  const total = d20 + modifier
+  const dc = fleeDc(session)
+  const critical = d20 === 20
+  const success = critical || (d20 !== 1 && total >= dc)
+  const roll: CombatRoll = {
+    d20,
+    modifier,
+    total,
+    dc,
+    hit: success,
+    critical,
+    stat: "dexterity",
+    skill: "Flee",
+    target: "escape",
+  }
+
+  session.combat.lastRoll = roll
+  if (success) {
+    const escape = escapeStep(session, targets)
+    if (escape) session.player = escape
+    for (const target of targets) ensureEnemyAi(target, 0, session.floor).alerted = true
+    endCombat(session, escape ? "You break away from the fight." : "You slip initiative, but the room is tight.")
+    session.turn += 1
+    revealAroundPlayer(session)
+    trimLog(session)
+  } else {
+    session.combat.message = `Flee fails: d20 ${d20}${formatSigned(modifier)} vs DC ${dc}.`
+    session.log.unshift(session.combat.message)
+    finishCombatRound(session, true)
+  }
+
+  return roll
 }
 
 export function performCombatAction(session: GameSession) {
@@ -618,19 +678,19 @@ function advanceTurn(session: GameSession) {
 }
 
 function moveEnemies(session: GameSession) {
-  for (const actor of [...session.dungeon.actors]) {
+  for (const [index, actor] of [...session.dungeon.actors].entries()) {
+    const ai = ensureEnemyAi(actor, index, session.floor)
     const distance = manhattan(actor.position, session.player)
     if (distance === 1) {
       startCombat(session, [actor])
       return
     }
 
-    if (actor.id === "final-guardian") continue
-    if (distance > 8) continue
+    if (canSensePlayer(session, actor, ai)) ai.alerted = true
+    else if (ai.alerted && distance > ai.leashRadius) ai.alerted = false
 
-    const step = stepToward(actor.position, session.player)
-    const occupied = actorAt(session.dungeon.actors, step)
-    if (tileAt(session.dungeon, step) === "floor" && !occupied) {
+    const step = ai.alerted ? chaseStep(session, actor) : patrolStep(session, actor, index)
+    if (step) {
       actor.position = step
       if (manhattan(actor.position, session.player) === 1) {
         startCombat(session, [actor])
@@ -656,16 +716,15 @@ function finishCombatRound(session: GameSession, enemiesAct: boolean) {
 
 function combatEnemyTurn(session: GameSession) {
   for (const actor of combatTargets(session)) {
+    ensureEnemyAi(actor, 0, session.floor).alerted = true
     if (manhattan(actor.position, session.player) === 1) {
       session.hp -= actor.damage
       session.log.unshift(`${label(actor.kind)} hits for ${actor.damage}.`)
       continue
     }
 
-    if (actor.id === "final-guardian") continue
-    const step = stepToward(actor.position, session.player)
-    const occupied = actorAt(session.dungeon.actors, step)
-    if (tileAt(session.dungeon, step) === "floor" && !occupied) actor.position = step
+    const step = chaseStep(session, actor)
+    if (step) actor.position = step
   }
 }
 
@@ -676,15 +735,100 @@ function stepToward(from: Point, to: Point): Point {
   return { x: from.x, y: from.y + dy }
 }
 
+function chaseStep(session: GameSession, actor: Actor): Point | null {
+  const preferred = stepToward(actor.position, session.player)
+  const candidates = cardinalNeighbors(actor.position).sort((left, right) => {
+    const preferredLeft = samePoint(left, preferred) ? -1 : 0
+    const preferredRight = samePoint(right, preferred) ? -1 : 0
+    return manhattan(left, session.player) + preferredLeft - (manhattan(right, session.player) + preferredRight)
+  })
+  return candidates.find((candidate) => canActorStepTo(session, actor, candidate)) ?? null
+}
+
+function patrolStep(session: GameSession, actor: Actor, index: number): Point | null {
+  const ai = ensureEnemyAi(actor, index, session.floor)
+  if (ai.pattern === "sentinel") return null
+
+  if (ai.pattern === "wander" || ai.pattern === "stalker") {
+    if (ai.pattern === "wander" && (session.turn + index) % 2 !== 0) return null
+    const directions = cardinalDirections()
+    for (let offset = 0; offset < directions.length; offset++) {
+      const direction = directions[(session.turn + index + offset) % directions.length]
+      const candidate = { x: actor.position.x + direction.x, y: actor.position.y + direction.y }
+      if (manhattan(candidate, ai.origin) <= Math.max(2, Math.floor(ai.leashRadius / 2)) && canActorStepTo(session, actor, candidate)) return candidate
+    }
+    return null
+  }
+
+  const horizontal = ai.pattern === "patrol-horizontal"
+  const forward = { x: actor.position.x + (horizontal ? ai.direction : 0), y: actor.position.y + (horizontal ? 0 : ai.direction) }
+  if (manhattan(forward, ai.origin) <= Math.floor(ai.leashRadius / 2) && canActorStepTo(session, actor, forward)) return forward
+  ai.direction = ai.direction === 1 ? -1 : 1
+  const backward = { x: actor.position.x + (horizontal ? ai.direction : 0), y: actor.position.y + (horizontal ? 0 : ai.direction) }
+  if (canActorStepTo(session, actor, backward)) return backward
+  return null
+}
+
+function canSensePlayer(session: GameSession, actor: Actor, ai: EnemyAi) {
+  return manhattan(actor.position, session.player) <= ai.aggroRadius && hasLineOfSight(session, actor.position)
+}
+
+function canActorStepTo(session: GameSession, actor: Actor, point: Point) {
+  if (tileAt(session.dungeon, point) !== "floor") return false
+  if (samePoint(point, session.player)) return false
+  const occupied = session.dungeon.actors.some((candidate) => candidate.id !== actor.id && samePoint(candidate.position, point))
+  return !occupied
+}
+
+function escapeStep(session: GameSession, targets: Actor[]): Point | null {
+  return cardinalNeighbors(session.player)
+    .filter((candidate) => tileAt(session.dungeon, candidate) === "floor")
+    .filter((candidate) => !actorAt(session.dungeon.actors, candidate))
+    .sort((left, right) => distanceFromThreats(right, targets) - distanceFromThreats(left, targets))[0] ?? null
+}
+
+function distanceFromThreats(point: Point, targets: Actor[]) {
+  return targets.reduce((nearest, target) => Math.min(nearest, manhattan(point, target.position)), Number.POSITIVE_INFINITY)
+}
+
+function cardinalNeighbors(point: Point) {
+  return cardinalDirections().map((direction) => ({ x: point.x + direction.x, y: point.y + direction.y }))
+}
+
+function cardinalDirections() {
+  return [
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+    { x: -1, y: 0 },
+    { x: 0, y: -1 },
+  ]
+}
+
+function samePoint(left: Point, right: Point) {
+  return left.x === right.x && left.y === right.y
+}
+
 function manhattan(a: Point, b: Point) {
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y)
 }
 
 function nearbyHostiles(session: GameSession) {
   return session.dungeon.actors.filter((actor) => {
+    const ai = ensureEnemyAi(actor, 0, session.floor)
     const key = pointKey(actor.position)
-    return session.visible.has(key) && manhattan(actor.position, session.player) <= 6
+    return session.visible.has(key) && manhattan(actor.position, session.player) <= Math.max(6, ai.aggroRadius)
   })
+}
+
+export function enemyBehaviorText(actor: Actor) {
+  const ai = actor.ai
+  if (!ai) return "Watching"
+  if (ai.alerted) return `Chasing R${ai.aggroRadius}`
+  if (ai.pattern === "patrol-horizontal") return `Patrol east/west R${ai.aggroRadius}`
+  if (ai.pattern === "patrol-vertical") return `Patrol north/south R${ai.aggroRadius}`
+  if (ai.pattern === "stalker") return `Stalker R${ai.aggroRadius}`
+  if (ai.pattern === "wander") return `Wander R${ai.aggroRadius}`
+  return `Guard R${ai.aggroRadius}`
 }
 
 function enemyDefenseBonus(kind: Actor["kind"] | undefined) {
@@ -697,6 +841,12 @@ function rollD20(session: GameSession, skill: CombatSkill, target: Actor) {
   const skillSalt = combatSkills.findIndex((candidate) => candidate.id === skill.id) + 1
   const targetSalt = target.id.split("").reduce((total, char) => total + char.charCodeAt(0), 0)
   const value = session.seed * 1103515245 + session.floor * 9973 + session.turn * 7919 + session.kills * 313 + skillSalt * 101 + targetSalt
+  return (Math.abs(value) % 20) + 1
+}
+
+function rollFleeD20(session: GameSession, targets: Actor[]) {
+  const targetSalt = targets.reduce((total, target) => total + target.id.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0), 0)
+  const value = session.seed * 134775813 + session.floor * 9127 + session.turn * 4567 + session.player.x * 313 + session.player.y * 733 + targetSalt
   return (Math.abs(value) % 20) + 1
 }
 
@@ -722,6 +872,17 @@ function label(kind: Actor["kind"]) {
   if (kind === "slime") return "Slime"
   if (kind === "ghoul") return "Ghoul"
   return "Necromancer"
+}
+
+function ensureEnemyAi(actor: Actor, index: number, floor: number) {
+  const fallback = enemyAi(actor.kind, actor.position, index, floor)
+  actor.ai ??= fallback
+  actor.ai.origin ??= { ...actor.position }
+  actor.ai.aggroRadius = Math.max(1, actor.ai.aggroRadius || fallback.aggroRadius)
+  actor.ai.leashRadius = Math.max(actor.ai.aggroRadius, actor.ai.leashRadius || actor.ai.aggroRadius + 3)
+  actor.ai.direction = actor.ai.direction === -1 ? -1 : 1
+  actor.ai.alerted = Boolean(actor.ai.alerted)
+  return actor.ai
 }
 
 function hasFinalGuardian(session: GameSession) {

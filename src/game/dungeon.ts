@@ -12,6 +12,7 @@ export type Actor = {
   position: Point
   hp: number
   damage: number
+  ai?: EnemyAi
 }
 
 export type Dungeon = {
@@ -22,6 +23,17 @@ export type Dungeon = {
   tiles: TileId[][]
   actors: Actor[]
   playerStart: Point
+}
+
+export type EnemyPattern = "sentinel" | "wander" | "patrol-horizontal" | "patrol-vertical" | "stalker"
+
+export type EnemyAi = {
+  pattern: EnemyPattern
+  origin: Point
+  aggroRadius: number
+  leashRadius: number
+  direction: 1 | -1
+  alerted: boolean
 }
 
 type Room = {
@@ -147,10 +159,43 @@ function spawnActors(tiles: TileId[][], rooms: Room[], rng: Rng, floor: number):
     }
     if (tiles[position.y][position.x] !== "floor") continue
     const kind = rng.pick(enemyKinds)
-    actors.push({ id: `enemy-${actors.length}`, kind, position, ...enemyStats(kind, floor) })
+    actors.push({ id: `enemy-${actors.length}`, kind, position, ...enemyStats(kind, floor), ai: enemyAi(kind, position, actors.length, floor) })
   }
 
   return actors
+}
+
+export function enemyAi(kind: ActorId, origin: Point, index = 0, floor = 1): EnemyAi {
+  if (kind === "necromancer") {
+    return {
+      pattern: "sentinel",
+      origin: { ...origin },
+      aggroRadius: 7 + Math.floor(floor / 3),
+      leashRadius: 11,
+      direction: 1,
+      alerted: false,
+    }
+  }
+
+  if (kind === "ghoul") {
+    return {
+      pattern: index % 2 === 0 ? "patrol-horizontal" : "patrol-vertical",
+      origin: { ...origin },
+      aggroRadius: 6,
+      leashRadius: 9,
+      direction: index % 2 === 0 ? 1 : -1,
+      alerted: false,
+    }
+  }
+
+  return {
+    pattern: index % 3 === 0 ? "stalker" : "wander",
+    origin: { ...origin },
+    aggroRadius: 4,
+    leashRadius: 7,
+    direction: index % 2 === 0 ? 1 : -1,
+    alerted: false,
+  }
 }
 
 function enemyStats(kind: ActorId, floor: number) {
@@ -166,6 +211,11 @@ function finalGuardian(position: Point, floor: number): Actor {
     position,
     hp: 12 + floor,
     damage: 4,
+    ai: {
+      ...enemyAi("necromancer", position, 0, floor),
+      aggroRadius: 9,
+      leashRadius: 14,
+    },
   }
 }
 

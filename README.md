@@ -19,6 +19,8 @@ Terminal roguelike RPG built with OpenTUI.
 - Multiple animated d20 dice skins
 - Turn-based d20 combat
 - Enemy targeting and skill selection
+- Stat-based flee rolls
+- Enemy patrol, chase, aggro radius, and leash behavior
 - RPG stats: vigor, mind, endurance, strength, dexterity, intelligence, faith, luck
 - Stat-based combat modifiers
 - Talent-check event popups
