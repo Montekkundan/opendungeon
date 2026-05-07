@@ -1,4 +1,4 @@
-import { Text, createCliRenderer, type KeyEvent } from "@opentui/core"
+import { TextRenderable, createCliRenderer, type KeyEvent } from "@opentui/core"
 import { createSession, rest, tryMove, usePotion } from "./game/session.js"
 import {
   currentClass,
@@ -27,7 +27,8 @@ const renderer = await createCliRenderer({
   backgroundColor: "#05070a",
 })
 
-const screen = Text({
+const screen = new TextRenderable(renderer, {
+  id: "screen",
   content: draw(model, renderer.terminalWidth, renderer.terminalHeight),
   position: "absolute",
   left: 0,
@@ -40,6 +41,7 @@ const screen = Text({
 
 renderer.root.add(screen)
 renderer.on("resize", refresh)
+renderer.start()
 
 renderer.keyInput.on("keypress", (key: KeyEvent) => {
   if (key.ctrl && key.name === "c") {
@@ -65,7 +67,7 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
 })
 
 function handleDialogKey(key: KeyEvent) {
-  if (key.name === "escape" || key.name === "return") model.dialog = null
+  if (key.name === "escape" || key.name === "return" || key.name === "enter" || key.name === "linefeed") model.dialog = null
   if (model.dialog === "pause" && key.name === "s") model.dialog = "settings"
 }
 
@@ -77,7 +79,7 @@ function handleMenuKey(key: KeyEvent) {
     model.menuIndex = 0
   }
   if (key.name === "?" || (key.shift && key.name === "/")) model.dialog = "help"
-  if (key.name === "return" || key.name === "enter" || key.name === "space") confirmMenu()
+  if (key.name === "return" || key.name === "enter" || key.name === "linefeed" || key.name === "space") confirmMenu()
 }
 
 function handleGameKey(key: KeyEvent) {
@@ -161,4 +163,5 @@ function startRun() {
 
 function refresh() {
   screen.content = draw(model, renderer.terminalWidth, renderer.terminalHeight)
+  renderer.requestRender()
 }
