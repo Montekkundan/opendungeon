@@ -67,11 +67,11 @@ const server = Bun.serve<LobbySocketData>({
   },
 })
 
-console.log(`Dungeon Dev Crawl lobby`)
+console.log(`opendungeon lobby`)
 console.log(`Mode: ${options.mode}`)
 console.log(`Seed: ${options.seed}`)
 console.log(`URL:  http://localhost:${server.port}`)
-console.log(`Run:  DUNGEON_MODE=${options.mode} DUNGEON_SEED=${options.seed} DUNGEON_LOBBY_URL=http://localhost:${server.port} bun run dev`)
+console.log(`Run:  OPENDUNGEON_MODE=${options.mode} OPENDUNGEON_SEED=${options.seed} OPENDUNGEON_LOBBY_URL=http://localhost:${server.port} bun run dev`)
 
 type ServerWebSocket = Bun.ServerWebSocket<LobbySocketData>
 
@@ -160,13 +160,13 @@ function json(body: unknown, status = 200) {
 }
 
 function renderLobbyPage(host: string): string {
-  const command = `DUNGEON_MODE=${options.mode} DUNGEON_SEED=${options.seed} DUNGEON_LOBBY_URL=http://${host} bun run dev`
+  const command = `OPENDUNGEON_MODE=${options.mode} OPENDUNGEON_SEED=${options.seed} OPENDUNGEON_LOBBY_URL=http://${host} bun run dev`
   return `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Dungeon Dev Crawl Lobby</title>
+    <title>opendungeon Lobby</title>
     <style>
       body { margin: 0; background: #05070a; color: #d8dee9; font: 16px ui-monospace, SFMono-Regular, Menlo, monospace; }
       main { max-width: 880px; margin: 0 auto; padding: 32px; }
@@ -179,7 +179,7 @@ function renderLobbyPage(host: string): string {
   </head>
   <body>
     <main>
-      <h1>Dungeon Dev Crawl Lobby</h1>
+      <h1>opendungeon Lobby</h1>
       <p>Mode <strong>${options.mode}</strong> · Seed <strong>${options.seed}</strong></p>
       <pre>${command}</pre>
       <p class="muted">Share this URL and the command with friends on the same network.</p>

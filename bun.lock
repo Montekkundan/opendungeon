@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "dungeon",
+      "name": "opendungeon",
       "dependencies": {
         "@opentui/core": "^0.2.4",
         "@opentui/three": "^0.2.4",

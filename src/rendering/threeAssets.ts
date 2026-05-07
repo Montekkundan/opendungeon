@@ -54,5 +54,5 @@ export async function createDawngeonSpriteDefinitions(resourceManager: SpriteRes
 }
 
 export function shouldUseThreeRenderer() {
-  return process.env.DUNGEON_RENDERER === "three"
+  return (process.env.OPENDUNGEON_RENDERER ?? process.env.DUNGEON_RENDERER) === "three"
 }

@@ -11,6 +11,7 @@ import {
   type HeroClass,
   type MultiplayerMode,
 } from "./game/session.js"
+import { listSaves, loadSave, saveSession, type SaveSummary } from "./game/saveStore.js"
 import {
   currentClass,
   currentMode,
@@ -30,7 +31,10 @@ const model: AppModel = {
   seed: seedFromEnv(),
   session: createSession(seedFromEnv(), modeFromEnv(), classFromEnv()),
   message: "",
-  debugView: process.env.DUNGEON_DEBUG_VIEW === "1",
+  saves: listSaves(),
+  saveIndex: 0,
+  saveStatus: "",
+  debugView: env("OPENDUNGEON_DEBUG_VIEW", "DUNGEON_DEBUG_VIEW") === "1",
   rendererBackend: shouldUseThreeRenderer() ? "three" : "terminal",
   diceRollAnimation: null,
 }
@@ -67,6 +71,12 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
     return
   }
 
+  if (isSaveKey(key)) {
+    saveCurrentRun()
+    refresh()
+    return
+  }
+
   if (model.dialog) {
     handleDialogKey(key)
     refresh()
@@ -92,6 +102,26 @@ function handleDialogKey(key: KeyEvent) {
 }
 
 function handleMenuKey(key: KeyEvent) {
+  if (model.screen === "saves") {
+    if (key.name === "up" || key.name === "w") moveSelection(model, -1)
+    if (key.name === "down" || key.name === "s") moveSelection(model, 1)
+    if (key.name === "r") refreshSaveList()
+    if (key.name === "escape") {
+      model.screen = "start"
+      model.menuIndex = 0
+    }
+    if (key.name === "return" || key.name === "enter" || key.name === "linefeed" || key.name === "space") loadSelectedSave()
+    return
+  }
+
+  if (model.screen === "cloud") {
+    if (key.name === "escape" || key.name === "return" || key.name === "enter" || key.name === "linefeed" || key.name === "space") {
+      model.screen = "start"
+      model.menuIndex = 0
+    }
+    return
+  }
+
   if (key.name === "up" || key.name === "w") moveSelection(model, -1)
   if (key.name === "down" || key.name === "s") moveSelection(model, 1)
   if (model.screen === "start" && key.name === "n") model.seed = randomSeed()
@@ -187,7 +217,8 @@ function handleCombatKey(key: KeyEvent) {
 function confirmMenu() {
   if (model.screen === "start") {
     const item = currentStartItem(model)
-    if (item === "Begin descent") startRun()
+    if (item === "New descent") startRun()
+    if (item === "Load save") openSaveBrowser()
     if (item === "Character") {
       model.screen = "character"
       model.menuIndex = model.classIndex
@@ -195,6 +226,10 @@ function confirmMenu() {
     if (item === "Multiplayer") {
       model.screen = "mode"
       model.menuIndex = model.modeIndex
+    }
+    if (item === "Cloud saves") {
+      model.screen = "cloud"
+      model.menuIndex = 0
     }
     if (item === "Settings") model.dialog = "settings"
     if (item === "Quit") destroyApp()
@@ -220,6 +255,56 @@ function startRun() {
   submittedSession = null
   model.screen = "game"
   model.dialog = null
+  model.saveStatus = "New run started. Press Ctrl+S or F5 to save locally."
+}
+
+function openSaveBrowser() {
+  refreshSaveList()
+  model.screen = "saves"
+  model.menuIndex = 0
+}
+
+function refreshSaveList() {
+  model.saves = listSaves()
+  model.saveIndex = clamp(model.saveIndex, 0, Math.max(0, model.saves.length - 1))
+  model.saveStatus = model.saves.length ? `${model.saves.length} local save${model.saves.length === 1 ? "" : "s"} found.` : "No local saves found yet."
+}
+
+function loadSelectedSave() {
+  const summary = model.saves[model.saveIndex]
+  if (!summary) {
+    model.saveStatus = "No local save selected."
+    return
+  }
+
+  try {
+    const session = loadSave(summary.id)
+    session.log.unshift(`Loaded local save: ${summary.name}.`)
+    while (session.log.length > 8) session.log.pop()
+    model.session = session
+    model.seed = session.seed
+    model.classIndex = classIndexFor(session.hero.classId)
+    model.modeIndex = modeIndexFor(session.mode)
+    model.screen = "game"
+    model.dialog = null
+    model.diceRollAnimation = null
+    model.saveStatus = `Loaded ${summary.name}.`
+    submittedSession = null
+  } catch (error) {
+    const status = error instanceof Error ? error.message : "Save failed to load."
+    refreshSaveList()
+    model.saveStatus = status
+  }
+}
+
+function saveCurrentRun() {
+  if (model.screen !== "game") return
+  const summary = saveSession(model.session)
+  model.saves = listSaves()
+  model.saveIndex = indexForSave(model.saves, summary)
+  model.saveStatus = `Saved locally: ${summary.name}.`
+  model.session.log.unshift(`Saved locally: ${summary.name}.`)
+  while (model.session.log.length > 8) model.session.log.pop()
 }
 
 function refresh() {
@@ -259,11 +344,11 @@ function destroyApp() {
 }
 
 function maybeSubmitLobbyResult() {
-  const lobbyUrl = process.env.DUNGEON_LOBBY_URL
+  const lobbyUrl = env("OPENDUNGEON_LOBBY_URL", "DUNGEON_LOBBY_URL")
   if (!lobbyUrl || model.session.status === "running" || submittedSession === model.session) return
   submittedSession = model.session
   const result = {
-    name: process.env.DUNGEON_PLAYER_NAME || model.session.hero.name,
+    name: env("OPENDUNGEON_PLAYER_NAME", "DUNGEON_PLAYER_NAME") || model.session.hero.name,
     status: model.session.status,
     floor: model.session.floor,
     turns: model.session.turn,
@@ -289,7 +374,7 @@ function maybeSubmitLobbyResult() {
 }
 
 function seedFromEnv() {
-  const value = Number(process.env.DUNGEON_SEED)
+  const value = Number(env("OPENDUNGEON_SEED", "DUNGEON_SEED"))
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 2423368
 }
 
@@ -298,12 +383,12 @@ function randomSeed() {
 }
 
 function modeFromEnv(): MultiplayerMode {
-  const value = process.env.DUNGEON_MODE
+  const value = env("OPENDUNGEON_MODE", "DUNGEON_MODE")
   return value === "coop" || value === "race" || value === "solo" ? value : "solo"
 }
 
 function classFromEnv(): HeroClass {
-  const value = process.env.DUNGEON_CLASS
+  const value = env("OPENDUNGEON_CLASS", "DUNGEON_CLASS")
   return value === "warden" || value === "arcanist" || value === "ranger" ? value : "ranger"
 }
 
@@ -323,4 +408,33 @@ function classIndexFromEnv() {
 
 function runScore(session: GameSession) {
   return Math.max(0, session.floor * 100 + session.gold * 2 + session.kills * 25 + session.level * 50 - session.turn)
+}
+
+function isSaveKey(key: KeyEvent) {
+  return model.screen === "game" && ((key.ctrl && key.name === "s") || key.name === "f5")
+}
+
+function indexForSave(saves: SaveSummary[], summary: SaveSummary) {
+  const index = saves.findIndex((save) => save.id === summary.id)
+  return index >= 0 ? index : 0
+}
+
+function classIndexFor(classId: HeroClass) {
+  if (classId === "warden") return 0
+  if (classId === "arcanist") return 1
+  return 2
+}
+
+function modeIndexFor(mode: MultiplayerMode) {
+  if (mode === "coop") return 1
+  if (mode === "race") return 2
+  return 0
+}
+
+function env(primary: string, fallback: string) {
+  return process.env[primary] ?? process.env[fallback]
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value))
 }

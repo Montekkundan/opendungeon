@@ -10,6 +10,7 @@ import {
   type HeroClass,
   type MultiplayerMode,
 } from "../game/session.js"
+import { saveDirectory, type SaveSummary } from "../game/saveStore.js"
 import { Canvas } from "./canvas.js"
 
 type TileRenderStyle = {
@@ -18,7 +19,7 @@ type TileRenderStyle = {
   pattern: string[]
 }
 
-export type ScreenId = "start" | "character" | "mode" | "game"
+export type ScreenId = "start" | "character" | "mode" | "saves" | "cloud" | "game"
 export type DialogId = "settings" | "inventory" | "help" | "log" | "pause" | null
 
 export type DiceRollAnimation = {
@@ -36,12 +37,15 @@ export type AppModel = {
   seed: number
   session: GameSession
   message: string
+  saves: SaveSummary[]
+  saveIndex: number
+  saveStatus: string
   debugView: boolean
   rendererBackend: "terminal" | "three"
   diceRollAnimation?: DiceRollAnimation | null
 }
 
-const startItems = ["Begin descent", "Character", "Multiplayer", "Settings", "Quit"]
+const startItems = ["New descent", "Load save", "Character", "Multiplayer", "Cloud saves", "Settings", "Quit"]
 const classOptions: Array<{ id: HeroClass; name: string; text: string }> = [
   { id: "warden", name: "Warden", text: "High HP, low focus. Holds corridors." },
   { id: "arcanist", name: "Arcanist", text: "Low HP, high focus. Deletes threats." },
@@ -87,6 +91,8 @@ export function draw(model: AppModel, width: number, height: number) {
   if (model.screen === "start") drawStart(canvas, model)
   if (model.screen === "character") drawCharacter(canvas, model)
   if (model.screen === "mode") drawMode(canvas, model)
+  if (model.screen === "saves") drawSaves(canvas, model)
+  if (model.screen === "cloud") drawCloud(canvas, model)
   if (model.screen === "game") drawGame(canvas, model)
   if (model.dialog) drawDialog(canvas, model)
 
@@ -106,8 +112,13 @@ export function currentMode(model: AppModel) {
 }
 
 export function moveSelection(model: AppModel, delta: number) {
-  const count = model.screen === "character" ? classOptions.length : model.screen === "mode" ? modeOptions.length : startItems.length
   if (model.screen === "game") return
+  if (model.screen === "saves") {
+    model.saveIndex = wrap(model.saveIndex + delta, Math.max(1, model.saves.length))
+    return
+  }
+
+  const count = model.screen === "character" ? classOptions.length : model.screen === "mode" ? modeOptions.length : startItems.length
   model.menuIndex = wrap(model.menuIndex + delta, count)
   if (model.screen === "character") model.classIndex = model.menuIndex
   if (model.screen === "mode") model.modeIndex = model.menuIndex
@@ -115,18 +126,19 @@ export function moveSelection(model: AppModel, delta: number) {
 
 function drawStart(canvas: Canvas, model: AppModel) {
   drawDungeonBackdrop(canvas, model.seed)
-  const width = Math.min(92, canvas.width - 8)
-  const height = Math.min(24, canvas.height - 6)
+  const width = Math.min(100, canvas.width - 8)
+  const height = Math.min(28, canvas.height - 6)
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.max(2, Math.floor((canvas.height - height) / 2))
-  drawPanel(canvas, x, y, width, height, "Dungeon Dev Crawl", UI.gold)
-  drawPixelBlock(canvas, x + 5, y + 4, pixelSprite(classSprite(currentClass(model).id), 12, 6), 1)
-  drawMiniIcon(canvas, x + 5, y + 12, "relic", 8, 3)
-  drawMiniIcon(canvas, x + 16, y + 12, "coin", 8, 3)
-  canvas.write(x + 22, y + 4, "DUNGEON DEV CRAWL", UI.gold, UI.panel)
-  canvas.write(x + 22, y + 6, trim("A fantasy roguelike where cursed relics sometimes look like deploy tools.", width - 28), UI.ink, UI.panel)
-  canvas.write(x + 22, y + 8, `Hero ${currentClass(model).name}   Mode ${currentMode(model).name}   Seed ${model.seed}`, UI.brass, UI.panel)
-  canvas.write(x + 22, y + 10, `Art ${activeAssetPack.name} by ${activeAssetPack.author} (${activeAssetPack.license})`, UI.soft, UI.panel)
+  drawPanel(canvas, x, y, width, height, "opendungeon", UI.gold)
+  drawPixelBlock(canvas, x + 5, y + 5, pixelSprite(classSprite(currentClass(model).id), 12, 6), 1)
+  drawMiniIcon(canvas, x + 5, y + 14, "relic", 8, 3)
+  drawMiniIcon(canvas, x + 16, y + 14, "coin", 8, 3)
+  drawBrand(canvas, x + 22, y + 3, width - 28, UI.panel)
+  canvas.write(x + 22, y + 8, trim("A dark fantasy roguelike for terminal crawls, cursed loot, and d20 trouble.", width - 28), UI.ink, UI.panel)
+  canvas.write(x + 22, y + 10, `Hero ${currentClass(model).name}   Mode ${currentMode(model).name}   Seed ${model.seed}`, UI.brass, UI.panel)
+  canvas.write(x + 22, y + 12, `Local saves ${model.saves.length}   Art ${activeAssetPack.name} by ${activeAssetPack.author}`, UI.soft, UI.panel)
+  if (model.saveStatus && width >= 92) canvas.write(x + 22, y + 14, trim(model.saveStatus, width - 28), UI.focus, UI.panel)
 
   const menuX = x + Math.max(22, Math.floor(width * 0.52))
   const menuSpacing = height < 22 ? 1 : 2
@@ -183,6 +195,103 @@ function drawMode(canvas: Canvas, model: AppModel) {
 
   canvas.write(x + 4, y + height - 4, `Host lobby: bun run host -- --mode ${currentMode(model).id} --seed ${model.seed}`, UI.soft, UI.panel)
   canvas.write(x + 4, y + height - 3, "Friends reuse the shared seed for co-op or race runs.", UI.muted, UI.panel)
+}
+
+function drawSaves(canvas: Canvas, model: AppModel) {
+  drawDungeonBackdrop(canvas, model.seed + 8)
+  const width = Math.min(108, canvas.width - 8)
+  const height = Math.min(30, canvas.height - 6)
+  const x = Math.floor((canvas.width - width) / 2)
+  const y = Math.max(2, Math.floor((canvas.height - height) / 2))
+  drawPanel(canvas, x, y, width, height, "Load Save", UI.gold)
+  drawBrand(canvas, x + 4, y + 3, Math.min(width - 8, 58), UI.panel)
+
+  const listX = x + 4
+  const listY = y + 9
+  const listW = Math.min(48, Math.max(32, Math.floor(width * 0.45)))
+  const rows = Math.max(1, Math.floor((height - 14) / 3))
+  const offset = scrollOffset(model.saveIndex, rows, model.saves.length)
+
+  canvas.write(listX, listY - 2, "LOCAL RUNS", UI.brass, UI.panel)
+  canvas.write(listX + 17, listY - 2, trim(saveDirectory(), listW - 17), UI.muted, UI.panel)
+
+  if (!model.saves.length) {
+    canvas.fill(listX, listY, listW, 6, " ", UI.panel2, UI.panel2)
+    canvas.border(listX, listY, listW, 6, UI.edgeDim)
+    drawMiniIcon(canvas, listX + 3, listY + 2, "scroll", 8, 2)
+    canvas.write(listX + 14, listY + 2, "No local saves yet.", UI.ink, UI.panel2)
+    canvas.write(listX + 14, listY + 3, "Start a run, then press Ctrl+S or F5.", UI.soft, UI.panel2)
+  } else {
+    model.saves.slice(offset, offset + rows).forEach((save, visibleIndex) => {
+      const index = offset + visibleIndex
+      const selected = index === model.saveIndex
+      const rowY = listY + visibleIndex * 3
+      canvas.fill(listX, rowY, listW, 2, " ", selected ? UI.panel3 : UI.panel2, selected ? UI.panel3 : UI.panel2)
+      canvas.border(listX, rowY, listW, 3, selected ? UI.gold : UI.edgeDim)
+      drawMiniIcon(canvas, listX + 2, rowY + 1, classSprite(save.classId as HeroClass), 5, 1, selected ? 1 : 0.65)
+      canvas.write(listX + 9, rowY + 1, trim(`${selected ? ">" : " "} ${save.heroName} F${save.floor}/${save.finalFloor}`, listW - 24), selected ? UI.gold : UI.ink, selected ? UI.panel3 : UI.panel2)
+      canvas.write(listX + listW - 13, rowY + 1, `LV ${save.level}`, UI.brass, selected ? UI.panel3 : UI.panel2)
+      canvas.write(listX + 9, rowY + 2, trim(formatSaveTime(save.savedAt), listW - 13), UI.muted, selected ? UI.panel3 : UI.panel2)
+      canvas.write(listX + listW - 11, rowY + 2, save.status, statusColor(save.status), selected ? UI.panel3 : UI.panel2)
+    })
+  }
+
+  const detailX = listX + listW + 4
+  const detailW = Math.max(28, width - (detailX - x) - 4)
+  const detailHeight = Math.max(9, height - 11)
+  const selected = model.saves[model.saveIndex]
+  drawPanel(canvas, detailX, listY - 3, detailW, detailHeight, "Save Detail", selected ? UI.gold : UI.edge)
+
+  if (selected) {
+    drawPixelBlock(canvas, detailX + 3, listY, pixelSprite(classSprite(selected.classId as HeroClass), 10, 5), 1)
+    canvas.write(detailX + 16, listY, trim(selected.heroName, detailW - 19), UI.ink, UI.panel)
+    canvas.write(detailX + 16, listY + 1, trim(selected.heroTitle, detailW - 19), UI.soft, UI.panel)
+    canvas.write(detailX + 16, listY + 3, `Floor ${selected.floor}/${selected.finalFloor}   Turn ${selected.turn}`, UI.gold, UI.panel)
+    canvas.write(detailX + 16, listY + 4, `Mode ${selected.mode}   Seed ${selected.seed}`, UI.brass, UI.panel)
+
+    if (detailHeight > 10) drawSettingRow(canvas, detailX + 3, listY + 7, detailW - 6, "Level", String(selected.level))
+    if (detailHeight > 12) drawSettingRow(canvas, detailX + 3, listY + 9, detailW - 6, "Gold", String(selected.gold))
+    if (detailHeight > 14) drawSettingRow(canvas, detailX + 3, listY + 11, detailW - 6, "Saved", formatSaveTime(selected.savedAt))
+    if (detailHeight > 16) drawSettingRow(canvas, detailX + 3, listY + 13, detailW - 6, "File", selected.path)
+  } else {
+    canvas.write(detailX + 4, listY, "Local saves are stored per computer.", UI.ink, UI.panel)
+    canvas.write(detailX + 4, listY + 2, "Cloud sync is planned as a separate adapter,", UI.soft, UI.panel)
+    canvas.write(detailX + 4, listY + 3, "so the local format stays useful offline.", UI.soft, UI.panel)
+  }
+
+  canvas.center(canvas.height - 3, "Enter load  ↑↓ choose save  r refresh  Esc title", UI.muted)
+}
+
+function drawCloud(canvas: Canvas, model: AppModel) {
+  drawDungeonBackdrop(canvas, model.seed + 12)
+  const width = Math.min(100, canvas.width - 8)
+  const height = Math.min(27, canvas.height - 6)
+  const x = Math.floor((canvas.width - width) / 2)
+  const y = Math.max(2, Math.floor((canvas.height - height) / 2))
+  drawPanel(canvas, x, y, width, height, "Cloud Saves", UI.gold)
+  drawBrand(canvas, x + 4, y + 3, Math.min(width - 8, 58), UI.panel)
+
+  const leftX = x + 4
+  const rowY = y + 10
+  canvas.write(leftX, rowY - 2, "SYNC PLAN", UI.brass, UI.panel)
+  const rows = [
+    ["Provider", "GitHub account login with device auth."],
+    ["Storage", "Private Gist or private repo branch containing save envelopes."],
+    ["Offline", "Local saves remain the source of truth when disconnected."],
+    ["Conflict", "Manual saves keep history; newest autosave wins only autosave."],
+    ["Security", "Encrypt save payloads before upload once accounts ship."],
+    ["Prototype", "OPENDUNGEON_GITHUB_TOKEN can power CLI-only sync later."],
+  ]
+
+  rows.slice(0, Math.max(2, Math.floor((height - 13) / 2))).forEach((row, index) => {
+    drawSettingRow(canvas, leftX, rowY + index * 2, width - 8, row[0], row[1])
+  })
+
+  const noteY = y + height - 6
+  canvas.write(leftX, noteY, "This screen is intentionally separate from local save/load.", UI.ink, UI.panel)
+  canvas.write(leftX, noteY + 1, "The next code step is a CloudSaveAdapter using the same JSON envelope.", UI.soft, UI.panel)
+  canvas.write(leftX, noteY + 2, `Local save path: ${trim(saveDirectory(), width - 25)}`, UI.muted, UI.panel)
+  canvas.center(canvas.height - 3, "Esc title", UI.muted)
 }
 
 function drawGame(canvas: Canvas, model: AppModel) {
@@ -520,6 +629,22 @@ function drawPanel(canvas: Canvas, x: number, y: number, width: number, height: 
   }
 }
 
+function drawBrand(canvas: Canvas, x: number, y: number, width: number, bg = UI.panel) {
+  const wideLogo = [
+    "  ___  ___  ___ _  _ ___  _   _ _  _  ___ ___ ___  _  _ ",
+    " / _ \\| _ \\| __| \\| |   \\| | | | \\| |/ __| __/ _ \\| \\| |",
+    "| (_) |  _/| _|| .` | |) | |_| | .` | (_ | _| (_) | .` |",
+    " \\___/|_|  |___|_|\\_|___/ \\___/|_|\\_|\\___|___\\___/|_|\\_|",
+  ]
+  if (width >= 62) {
+    wideLogo.forEach((line, index) => canvas.write(x, y + index, trim(line, width), index === 0 ? UI.brass : UI.gold, bg))
+    return
+  }
+
+  canvas.write(x, y, trim("O P E N D U N G E O N", width), UI.gold, bg)
+  if (width > 24) canvas.write(x, y + 1, trim("terminal dungeon crawler", width), UI.soft, bg)
+}
+
 function drawHudBar(
   canvas: Canvas,
   x: number,
@@ -661,7 +786,9 @@ function actorSpriteId(kind: string): PixelSpriteId {
 }
 
 function compactControls(session: GameSession) {
-  return session.combat.active ? "Tab target   1-3 skill   Enter roll   H potion   Esc pause" : "I inventory   L log   H potion   R rest   ? help   Esc pause"
+  return session.combat.active
+    ? "Tab target   1-3 skill   Enter roll   H potion   Ctrl+S save"
+    : "I inventory   L log   H potion   R rest   Ctrl+S save   Esc pause"
 }
 
 function writeRight(canvas: Canvas, y: number, text: string, color: string) {
@@ -672,7 +799,7 @@ function drawDialog(canvas: Canvas, model: AppModel) {
   if (!model.dialog) return
   const wide = model.dialog === "inventory" || model.dialog === "log" || model.dialog === "settings"
   const width = Math.min(wide ? 88 : 74, canvas.width - 10)
-  const height = model.dialog === "inventory" || model.dialog === "log" ? 18 : model.dialog === "help" ? 16 : 14
+  const height = model.dialog === "inventory" || model.dialog === "log" ? 18 : model.dialog === "settings" ? 18 : model.dialog === "help" ? 18 : 14
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.floor((canvas.height - height) / 2)
   drawDialogFrame(canvas, x, y, width, height, dialogTitle(model.dialog), dialogIcon(model.dialog))
@@ -680,8 +807,10 @@ function drawDialog(canvas: Canvas, model: AppModel) {
   if (model.dialog === "settings") {
     drawSettingRow(canvas, x + 4, y + 4, width - 8, "Seed", String(model.seed))
     drawSettingRow(canvas, x + 4, y + 6, width - 8, "Renderer", model.rendererBackend === "three" ? "@opentui/three asset backend" : "0x72 terminal sprites")
-    drawSettingRow(canvas, x + 4, y + 8, width - 8, "Debug", model.debugView ? "on via DUNGEON_DEBUG_VIEW=1" : "off")
-    drawSettingRow(canvas, x + 4, y + 10, width - 8, "Host", `bun run host -- --mode race --seed ${model.seed}`)
+    drawSettingRow(canvas, x + 4, y + 8, width - 8, "Debug", model.debugView ? "on via OPENDUNGEON_DEBUG_VIEW=1" : "off")
+    drawSettingRow(canvas, x + 4, y + 10, width - 8, "Save path", saveDirectory())
+    drawSettingRow(canvas, x + 4, y + 12, width - 8, "Cloud", "planned GitHub login + encrypted save sync")
+    drawSettingRow(canvas, x + 4, y + 14, width - 8, "Host", `bun run host -- --mode race --seed ${model.seed}`)
   }
 
   if (model.dialog === "inventory") {
@@ -715,6 +844,7 @@ function drawDialog(canvas: Canvas, model: AppModel) {
     const rows = [
       ["Move", "Arrows / WASD"],
       ["Confirm", "Enter / Space"],
+      ["Save", "Ctrl+S or F5 saves locally"],
       ["Pack", "I inventory, H potion, L log"],
       ["Combat", "Tab target, 1-3 skill, Enter rolls d20"],
       ["Run", "R rest, Esc pause, Q quit"],
@@ -778,6 +908,23 @@ function bar(label: string, value: number, max: number, width: number) {
 
 function runScore(session: GameSession) {
   return Math.max(0, session.floor * 100 + session.gold * 2 + session.kills * 25 + session.level * 50 - session.turn)
+}
+
+function scrollOffset(index: number, visibleRows: number, count: number) {
+  if (count <= visibleRows) return 0
+  return clamp(index - Math.floor(visibleRows / 2), 0, count - visibleRows)
+}
+
+function formatSaveTime(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
+}
+
+function statusColor(status: string) {
+  if (status === "victory") return UI.focus
+  if (status === "dead") return UI.hp
+  return UI.soft
 }
 
 function label(kind: string) {

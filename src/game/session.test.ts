@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test"
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { createSession, performCombatAction, selectSkill, tryMove, usePotion } from "./session.js"
 import { setTile } from "./dungeon.js"
+import { listSaves, loadSave, saveSession } from "./saveStore.js"
 import { draw } from "../ui/screens.js"
 import { d20RollSprite } from "../assets/d20Sprites.js"
 import { pixelSprite } from "../assets/pixelSprites.js"
@@ -107,6 +111,9 @@ describe("game session", () => {
         seed: 2423368,
         session,
         message: "",
+        saves: [],
+        saveIndex: 0,
+        saveStatus: "",
         debugView: false,
         rendererBackend: "terminal",
       },
@@ -114,7 +121,37 @@ describe("game session", () => {
       24,
     ).chunks
 
-    expect(start.map((chunk) => chunk.text).join("")).toContain("DUNGEON DEV CRAWL")
+    expect(start.map((chunk) => chunk.text).join("")).toContain("opendungeon")
+  })
+
+  test("persists local saves and rehydrates fog of war sets", () => {
+    const previousSaveDir = process.env.OPENDUNGEON_SAVE_DIR
+    const dir = mkdtempSync(join(tmpdir(), "opendungeon-save-test-"))
+    process.env.OPENDUNGEON_SAVE_DIR = dir
+
+    try {
+      const session = createSession(4321, "race", "warden")
+      session.gold = 42
+      session.visible.add("1,2")
+      session.seen.add("3,4")
+
+      const summary = saveSession(session, "Test save")
+      const saves = listSaves()
+      const loaded = loadSave(summary.id)
+
+      expect(summary.path.startsWith(dir)).toBe(true)
+      expect(saves).toHaveLength(1)
+      expect(loaded.gold).toBe(42)
+      expect(loaded.mode).toBe("race")
+      expect(loaded.hero.classId).toBe("warden")
+      expect(loaded.visible.has("1,2")).toBe(true)
+      expect(loaded.seen.has("3,4")).toBe(true)
+      expect(loaded.dungeon.width).toBe(session.dungeon.width)
+    } finally {
+      if (previousSaveDir === undefined) delete process.env.OPENDUNGEON_SAVE_DIR
+      else process.env.OPENDUNGEON_SAVE_DIR = previousSaveDir
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   test("loads pixel sprites from the downloaded asset sheet", () => {
