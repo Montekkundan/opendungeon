@@ -274,7 +274,7 @@ function trimLog(session: GameSession) {
 
 function revealAroundPlayer(session: GameSession) {
   const nextVisible = new Set<string>()
-  const radius = 7 + Math.floor(session.focus / 3)
+  const radius = 10 + Math.floor(session.focus / 2)
   for (let y = session.player.y - radius; y <= session.player.y + radius; y++) {
     for (let x = session.player.x - radius; x <= session.player.x + radius; x++) {
       if (x < 0 || y < 0 || x >= session.dungeon.width || y >= session.dungeon.height) continue

@@ -3,9 +3,9 @@ import { actorAt, pointKey, type GameSession, type HeroClass, type MultiplayerMo
 import { Canvas } from "./canvas.js"
 
 type TileRenderStyle = {
-  glyph: string
   fg: string
   bg?: string
+  pattern: string[]
 }
 
 export type ScreenId = "start" | "character" | "mode" | "game"
@@ -125,11 +125,12 @@ function drawGame(canvas: Canvas, model: AppModel) {
 }
 
 function drawMap(canvas: Canvas, session: GameSession, debugView: boolean) {
-  const tileWidth = 2
-  const hudHeight = 3
-  const logHeight = 5
+  const tileWidth = debugView ? 2 : 6
+  const tileHeight = debugView ? 1 : 3
+  const hudHeight = 4
+  const logHeight = 6
   const viewWidth = Math.floor(canvas.width / tileWidth)
-  const viewHeight = Math.max(6, canvas.height - hudHeight - logHeight)
+  const viewHeight = Math.max(4, Math.floor((canvas.height - hudHeight - logHeight) / tileHeight))
   const startX = Math.max(0, session.player.x - Math.floor(viewWidth / 2))
   const startY = Math.max(0, session.player.y - Math.floor(viewHeight / 2))
 
@@ -142,10 +143,12 @@ function drawMap(canvas: Canvas, session: GameSession, debugView: boolean) {
       const seen = session.seen.has(pointKey(point))
       const actor = visible ? actorAt(session.dungeon.actors, point) : undefined
       const style = tileStyle(session, x, y, debugView, visible, seen)
-      canvas.write(sx * tileWidth, hudHeight + sy, style.glyph, style.fg, style.bg)
+      const screenX = sx * tileWidth
+      const screenY = hudHeight + sy * tileHeight
+      drawTileBlock(canvas, screenX, screenY, tileWidth, tileHeight, style)
 
-      if (session.player.x === x && session.player.y === y) drawSprite(canvas, sx * tileWidth, hudHeight + sy, "hero", debugView)
-      else if (actor) drawSprite(canvas, sx * tileWidth, hudHeight + sy, actor.kind, debugView)
+      if (session.player.x === x && session.player.y === y) drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, "hero", debugView)
+      else if (actor) drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, actor.kind, debugView)
     }
   }
 }
@@ -153,38 +156,77 @@ function drawMap(canvas: Canvas, session: GameSession, debugView: boolean) {
 function tileStyle(session: GameSession, x: number, y: number, debugView: boolean, visible: boolean, seen: boolean): TileRenderStyle {
   const tile = session.dungeon.tiles[y]?.[x] ?? "void"
   if (debugView) return debugTileStyle(session, x, y)
-  if (!seen) return { glyph: "  ", fg: "#05070a", bg: "#05070a" }
-  if (tile === "floor") return { glyph: "  ", fg: "#24484a", bg: textureColor(x, y) }
-  if (tile === "wall") return { glyph: "  ", fg: "#3e444b", bg: stoneColor(x, y) }
-  if (tile === "stairs") return visible ? { glyph: "▣ ", fg: "#1b1115", bg: "#b4915a" } : { glyph: "  ", fg: "#302b25", bg: dimTextureColor(x, y) }
-  if (tile === "potion") return visible ? { glyph: "● ", fg: "#f4a6b8", bg: textureColor(x, y) } : { glyph: "  ", fg: "#302b25", bg: dimTextureColor(x, y) }
-  if (tile === "relic") return visible ? { glyph: "◆ ", fg: "#f4d06f", bg: textureColor(x, y) } : { glyph: "  ", fg: "#302b25", bg: dimTextureColor(x, y) }
-  if (tile === "chest") return visible ? { glyph: "▤ ", fg: "#2d1d17", bg: "#9a6c4e" } : { glyph: "  ", fg: "#302b25", bg: dimTextureColor(x, y) }
-  return { glyph: "  ", fg: "#05070a", bg: "#05070a" }
+  if (!seen) return { pattern: ["      ", "      ", "      "], fg: "#05070a", bg: "#05070a" }
+  if (tile === "floor") return floorStyle(x, y, visible)
+  if (tile === "wall") return wallStyle(x, y, visible)
+  if (tile === "stairs") return visible ? { pattern: [" /==\\ ", " |  | ", " \\==/ "], fg: "#2d1d17", bg: "#b4915a" } : floorStyle(x, y, false)
+  if (tile === "potion") return visible ? { pattern: ["      ", "  ●   ", "      "], fg: "#f4a6b8", bg: textureColor(x, y) } : floorStyle(x, y, false)
+  if (tile === "relic") return visible ? { pattern: ["      ", "  ◆   ", "      "], fg: "#f4d06f", bg: textureColor(x, y) } : floorStyle(x, y, false)
+  if (tile === "chest") return visible ? { pattern: ["      ", " [▤]  ", "      "], fg: "#f4d06f", bg: "#9a6c4e" } : floorStyle(x, y, false)
+  return { pattern: ["      ", "      ", "      "], fg: "#05070a", bg: "#05070a" }
 }
 
 function debugTileStyle(session: GameSession, x: number, y: number): TileRenderStyle {
   const tile = session.dungeon.tiles[y]?.[x] ?? "void"
-  if (tile === "floor") return { glyph: "··", fg: "#36595a" }
-  if (tile === "wall") return { glyph: "██", fg: "#3b3f46" }
-  if (tile === "stairs") return { glyph: ">>", fg: "#f4d06f" }
-  if (tile === "potion") return { glyph: "!!", fg: "#d56b8c" }
-  if (tile === "relic") return { glyph: "$$", fg: "#d6a85c" }
-  if (tile === "chest") return { glyph: "[]", fg: "#c38b6a" }
-  return { glyph: "  ", fg: "#05070a" }
+  if (tile === "floor") return { pattern: ["··"], fg: "#36595a" }
+  if (tile === "wall") return { pattern: ["██"], fg: "#3b3f46" }
+  if (tile === "stairs") return { pattern: [">>"], fg: "#f4d06f" }
+  if (tile === "potion") return { pattern: ["!!"], fg: "#d56b8c" }
+  if (tile === "relic") return { pattern: ["$$"], fg: "#d6a85c" }
+  if (tile === "chest") return { pattern: ["[]"], fg: "#c38b6a" }
+  return { pattern: ["  "], fg: "#05070a" }
 }
 
-function drawSprite(canvas: Canvas, x: number, y: number, sprite: "hero" | "player" | "slime" | "ghoul" | "necromancer", debugView: boolean) {
+function drawTileBlock(canvas: Canvas, x: number, y: number, width: number, height: number, style: TileRenderStyle) {
+  for (let row = 0; row < height; row++) {
+    const pattern = fitPattern(style.pattern[row] ?? style.pattern.at(-1) ?? "", width)
+    canvas.write(x, y + row, pattern, style.fg, style.bg)
+  }
+}
+
+function drawSprite(canvas: Canvas, x: number, y: number, width: number, height: number, sprite: "hero" | "player" | "slime" | "ghoul" | "necromancer", debugView: boolean) {
   if (debugView) {
     const debugGlyph = sprite === "hero" ? "@@" : activeAssetPack.actors[sprite].glyph.repeat(2)
     canvas.write(x, y, debugGlyph, sprite === "hero" ? "#f4d06f" : activeAssetPack.actors[sprite].fg)
     return
   }
 
-  if (sprite === "hero") canvas.write(x, y, "♜ ", "#f4d06f", "#24484a")
-  if (sprite === "slime") canvas.write(x, y, "◖◗", "#91d66f", "#24484a")
-  if (sprite === "ghoul") canvas.write(x, y, "◉ ", "#c5cbd3", "#24484a")
-  if (sprite === "necromancer") canvas.write(x, y, "☾ ", "#c892d7", "#24484a")
+  const lines = spriteLines(sprite)
+  const fgColor = spriteColor(sprite)
+  const offsetY = Math.max(0, Math.floor((height - lines.length) / 2))
+  for (let row = 0; row < Math.min(height, lines.length); row++) {
+    canvas.write(x, y + offsetY + row, fitPattern(lines[row], width), fgColor, "#24484a")
+  }
+}
+
+function floorStyle(x: number, y: number, visible: boolean): TileRenderStyle {
+  const bg = visible ? textureColor(x, y) : dimTextureColor(x, y)
+  const fg = visible ? "#5b7f7a" : "#253a3b"
+  const n = (x * 5 + y * 9) % 4
+  if (n === 0) return { pattern: ["      ", "  ░   ", "      "], fg, bg }
+  if (n === 1) return { pattern: ["   ░  ", "      ", "      "], fg, bg }
+  if (n === 2) return { pattern: ["      ", "      ", " ░    "], fg, bg }
+  return { pattern: ["      ", "      ", "     ░"], fg, bg }
+}
+
+function wallStyle(x: number, y: number, visible: boolean): TileRenderStyle {
+  const bg = visible ? stoneColor(x, y) : "#171a1f"
+  const fg = visible ? "#777f8b" : "#282e36"
+  return { pattern: ["▛▀▀▀▜", "▌▒▒▒▐", "▙▄▄▄▟"], fg, bg }
+}
+
+function spriteLines(sprite: "hero" | "player" | "slime" | "ghoul" | "necromancer") {
+  if (sprite === "hero") return ["  o   ", " /█\\  ", " / \\  "]
+  if (sprite === "slime") return ["      ", " ◖▰◗  ", "  ▔   "]
+  if (sprite === "ghoul") return ["  ◉   ", " /▓\\  ", " / \\  "]
+  return ["  ☾   ", " /▓\\  ", "  ║   "]
+}
+
+function spriteColor(sprite: "hero" | "player" | "slime" | "ghoul" | "necromancer") {
+  if (sprite === "hero") return "#f4d06f"
+  if (sprite === "slime") return "#91d66f"
+  if (sprite === "ghoul") return "#c5cbd3"
+  return "#c892d7"
 }
 
 function textureColor(x: number, y: number) {
@@ -319,6 +361,12 @@ function runScore(session: GameSession) {
 
 function trim(text: string, width: number) {
   return text.length <= width ? text : text.slice(0, Math.max(0, width - 1))
+}
+
+function fitPattern(text: string, width: number) {
+  if (text.length === width) return text
+  if (text.length > width) return text.slice(0, width)
+  return text + " ".repeat(width - text.length)
 }
 
 function wrap(value: number, count: number) {
