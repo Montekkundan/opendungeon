@@ -5,6 +5,7 @@ Terminal roguelike RPG built with OpenTUI.
 ## Features
 
 - Full-screen terminal UI
+- Full-screen map with overlay HUD panels
 - Start, character, settings, controls, saves, and cloud-login screens
 - Top-down procedurally generated dungeons
 - Single-player runs with co-op/race mode hooks
@@ -13,6 +14,7 @@ Terminal roguelike RPG built with OpenTUI.
 - Runtime Itch-source actor sprites
 - Procedural terminal terrain, item, and dice sprites
 - Adjustable camera FOV
+- Persistent and runtime UI hide/show controls
 - Animated crawler, enemy, item, terrain, and dice sprites
 - Multiple animated d20 dice skins
 - Turn-based d20 combat

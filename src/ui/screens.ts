@@ -53,6 +53,7 @@ export type AppModel = {
   settingsIndex: number
   settingsReturnScreen: ScreenId
   inputMode: InputMode
+  uiHidden: boolean
   diceRollAnimation?: DiceRollAnimation | null
 }
 
@@ -72,6 +73,7 @@ const settingsOptions = [
   { id: "controlScheme", name: "Control scheme", text: "Movement and menu navigation preference." },
   { id: "highContrast", name: "High contrast", text: "Brighter borders and selected states." },
   { id: "reduceMotion", name: "Reduce motion", text: "Quieter background and dice movement." },
+  { id: "showUi", name: "Show UI", text: "Default overlay visibility for future runs." },
   { id: "diceSkin", name: "Dice skin", text: "Faceted polyhedral dice color used in combat rolls." },
   { id: "backgroundFx", name: "Background FX", text: "How much title-screen dungeon rain appears." },
   { id: "tileScale", name: "Camera FOV", text: "Wide shows more rooms; close keeps sprite detail." },
@@ -426,7 +428,7 @@ function drawControls(canvas: Canvas, model: AppModel) {
     ["Inventory", "I opens pack. H drinks potion. L opens run log."],
     ["Run", "R rests outside combat. Esc pauses. Ctrl+S/F5 saves locally."],
     ["Accessibility", accessibilitySummary(model.settings)],
-    ["Visuals", `Camera ${model.settings.tileScale}. Dice ${diceSkinName(model.settings.diceSkin)}. FX ${model.settings.backgroundFx}.`],
+    ["Visuals", `Camera ${model.settings.tileScale}. UI ${onOff(model.settings.showUi)}. Dice ${diceSkinName(model.settings.diceSkin)}.`],
     ["Audio", `Music ${onOff(model.settings.music)}. SFX ${onOff(model.settings.sound)}.`],
   ]
 
@@ -450,21 +452,22 @@ function drawControls(canvas: Canvas, model: AppModel) {
 function drawGame(canvas: Canvas, model: AppModel) {
   const session = model.session
   drawMap(canvas, session, model.debugView, model.settings)
-  drawHud(canvas, session)
-  if (!model.debugView) drawQuickbar(canvas, session, model.diceRollAnimation, model.settings)
-  if (session.combat.active) drawCombatPanel(canvas, session, model.diceRollAnimation, model.settings)
+  if (!model.uiHidden) {
+    drawHud(canvas, session)
+    if (!model.debugView) drawQuickbar(canvas, session, model.diceRollAnimation, model.settings)
+    if (session.combat.active) drawCombatPanel(canvas, session, model.diceRollAnimation, model.settings)
+  }
   if (session.status !== "running") drawRunEnd(canvas, session)
   if (session.skillCheck) drawSkillCheckModal(canvas, session, model.diceRollAnimation, model.settings)
+  drawUiToggleHint(canvas, model.uiHidden)
 }
 
 function drawMap(canvas: Canvas, session: GameSession, debugView: boolean, settings: UserSettings) {
   const tileSize = mapTileSize(canvas, debugView, settings.tileScale)
   const tileWidth = tileSize.width
   const tileHeight = tileSize.height
-  const hudHeight = debugView ? 4 : gameHudHeight(canvas)
-  const bottomHudHeight = debugView ? 0 : gameQuickbarHeight(canvas)
-  const viewWidth = Math.floor(canvas.width / tileWidth)
-  const viewHeight = Math.max(4, Math.floor((canvas.height - hudHeight - bottomHudHeight) / tileHeight))
+  const viewWidth = Math.max(1, Math.ceil(canvas.width / tileWidth))
+  const viewHeight = Math.max(4, Math.ceil(canvas.height / tileHeight))
   const startX = session.player.x - Math.floor(viewWidth / 2)
   const startY = session.player.y - Math.floor(viewHeight / 2)
   const targets = combatTargets(session)
@@ -479,7 +482,7 @@ function drawMap(canvas: Canvas, session: GameSession, debugView: boolean, setti
       const seen = session.seen.has(pointKey(point))
       const actor = visible ? actorAt(session.dungeon.actors, point) : undefined
       const screenX = sx * tileWidth
-      const screenY = hudHeight + sy * tileHeight
+      const screenY = sy * tileHeight
 
       if (debugView) {
         const style = tileStyle(session, x, y, true, visible, seen)
@@ -883,6 +886,15 @@ function gameQuickbarHeight(canvas: Canvas) {
   return canvas.height >= 42 && canvas.width >= 120 ? 10 : 8
 }
 
+function drawUiToggleHint(canvas: Canvas, hidden: boolean) {
+  const text = hidden ? "U show UI" : "U hide UI"
+  const width = text.length + 4
+  const x = Math.max(0, canvas.width - width - 2)
+  const y = Math.max(0, canvas.height - 2)
+  canvas.fill(x, y, width, 1, " ", UI.panel2, UI.panel2)
+  canvas.write(x + 2, y, text, hidden ? UI.focus : UI.soft, UI.panel2)
+}
+
 function drawPanel(canvas: Canvas, x: number, y: number, width: number, height: number, title: string, accent = UI.edge) {
   canvas.fill(x + 2, y + 1, width, height, " ", UI.shadow, UI.shadow)
   canvas.fill(x, y, width, height, " ", UI.panel, UI.panel)
@@ -1129,8 +1141,8 @@ function actorSpriteId(kind: string): PixelSpriteId {
 
 function compactControls(session: GameSession) {
   return session.combat.active
-    ? "Tab target   1-3 skill   Enter roll   H potion   Ctrl+S save"
-    : "I inventory   L log   H potion   -/= camera   Ctrl+S save   Esc pause"
+    ? "Tab target   1-3 skill   Enter roll   U UI   H potion   Ctrl+S save"
+    : "I inventory   L log   H potion   U UI   -/= camera   Ctrl+S save"
 }
 
 function writeRight(canvas: Canvas, y: number, text: string, color: string) {
@@ -1141,7 +1153,7 @@ function drawDialog(canvas: Canvas, model: AppModel) {
   if (!model.dialog) return
   const wide = model.dialog === "inventory" || model.dialog === "log" || model.dialog === "settings"
   const width = Math.min(wide ? 88 : 74, canvas.width - 10)
-  const height = model.dialog === "inventory" || model.dialog === "log" ? 18 : model.dialog === "settings" ? 20 : model.dialog === "help" ? 18 : 14
+  const height = model.dialog === "inventory" || model.dialog === "log" ? 18 : model.dialog === "settings" ? 20 : model.dialog === "help" ? 21 : 14
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.floor((canvas.height - height) / 2)
   drawDialogFrame(canvas, x, y, width, height, dialogTitle(model.dialog), dialogIcon(model.dialog), model.settings.diceSkin)
@@ -1150,7 +1162,7 @@ function drawDialog(canvas: Canvas, model: AppModel) {
     drawSettingRow(canvas, x + 4, y + 4, width - 8, "Seed", String(model.seed))
     drawSettingRow(canvas, x + 4, y + 6, width - 8, "Renderer", model.rendererBackend === "three" ? "@opentui/three preview disabled" : "Itch cache + terminal sprites")
     drawSettingRow(canvas, x + 4, y + 8, width - 8, "Camera", `${model.settings.tileScale} FOV, ${activeAssetPack.tileSize}px source actors`)
-    drawSettingRow(canvas, x + 4, y + 10, width - 8, "Debug", model.debugView ? "on via OPENDUNGEON_DEBUG_VIEW=1" : "off")
+    drawSettingRow(canvas, x + 4, y + 10, width - 8, "UI", `${model.uiHidden ? "hidden now" : "visible now"}; profile default ${onOff(model.settings.showUi)}`)
     drawSettingRow(canvas, x + 4, y + 12, width - 8, "Save path", saveDirectory())
     drawSettingRow(canvas, x + 4, y + 14, width - 8, "Cloud", "planned GitHub login + encrypted save sync")
     drawSettingRow(canvas, x + 4, y + 16, width - 8, "Host", `bun run host -- --mode race --seed ${model.seed}`)
@@ -1191,6 +1203,7 @@ function drawDialog(canvas: Canvas, model: AppModel) {
       ["Pack", "I inventory, H potion, L log"],
       ["Combat", "Tab target, 1-3 skill, Enter rolls d20"],
       ["Camera", "- wider FOV, = closer view"],
+      ["Overlay", "U hides or shows the UI for this run"],
       ["Run", "R rest, Esc pause, Q quit"],
     ]
     rows.forEach((row, index) => {
@@ -1309,6 +1322,7 @@ function settingValue(settings: UserSettings, id: (typeof settingsOptions)[numbe
   if (id === "controlScheme") return settings.controlScheme
   if (id === "highContrast") return onOff(settings.highContrast)
   if (id === "reduceMotion") return onOff(settings.reduceMotion)
+  if (id === "showUi") return onOff(settings.showUi)
   if (id === "diceSkin") return diceSkinName(settings.diceSkin)
   if (id === "backgroundFx") return settings.backgroundFx
   if (id === "tileScale") return settings.tileScale

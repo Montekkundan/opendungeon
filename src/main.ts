@@ -48,6 +48,7 @@ const model: AppModel = {
   settingsIndex: 0,
   settingsReturnScreen: "start",
   inputMode: null,
+  uiHidden: !initialSettings.showUi,
   diceRollAnimation: null,
 }
 let submittedSession: GameSession | null = null
@@ -248,6 +249,10 @@ function handleGameKey(key: KeyEvent) {
     model.dialog = "help"
     return
   }
+  if (key.name === "u") {
+    toggleRunUi()
+    return
+  }
   if (key.name === "-" || key.sequence === "-") {
     adjustMapScale(-1)
     return
@@ -334,6 +339,7 @@ function startRun() {
   submittedSession = null
   model.screen = "game"
   model.dialog = null
+  model.uiHidden = !model.settings.showUi
   model.saveStatus = "New run started. Press Ctrl+S or F5 to save locally."
 }
 
@@ -368,6 +374,7 @@ function loadSelectedSave() {
     model.screen = "game"
     model.dialog = null
     model.diceRollAnimation = null
+    model.uiHidden = !model.settings.showUi
     model.saveStatus = `Loaded ${summary.name}.`
     submittedSession = null
   } catch (error) {
@@ -465,6 +472,10 @@ function changeCurrentSetting() {
   if (item.id === "controlScheme") model.settings.controlScheme = cycleValue(model.settings.controlScheme, ["hybrid", "arrows", "vim"])
   if (item.id === "highContrast") model.settings.highContrast = !model.settings.highContrast
   if (item.id === "reduceMotion") model.settings.reduceMotion = !model.settings.reduceMotion
+  if (item.id === "showUi") {
+    model.settings.showUi = !model.settings.showUi
+    model.uiHidden = !model.settings.showUi
+  }
   if (item.id === "diceSkin") model.settings.diceSkin = cycleValue(model.settings.diceSkin, diceSkinIds)
   if (item.id === "backgroundFx") model.settings.backgroundFx = cycleValue(model.settings.backgroundFx, ["low", "normal", "dense"])
   if (item.id === "tileScale") model.settings.tileScale = cycleValue(model.settings.tileScale, mapScaleOptions)
@@ -511,6 +522,12 @@ function handleInputKey(key: KeyEvent) {
 function saveUserSettings(status: string) {
   saveSettings(model.settings)
   model.saveStatus = status
+}
+
+function toggleRunUi() {
+  model.uiHidden = !model.uiHidden
+  model.session.log.unshift(model.uiHidden ? "UI hidden for this run. Press U to show it." : "UI shown for this run. Press U to hide it.")
+  while (model.session.log.length > 8) model.session.log.pop()
 }
 
 const mapScaleOptions: UserSettings["tileScale"][] = ["overview", "wide", "medium", "close"]

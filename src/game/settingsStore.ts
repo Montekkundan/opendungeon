@@ -14,6 +14,7 @@ export type UserSettings = {
   controlScheme: ControlScheme
   highContrast: boolean
   reduceMotion: boolean
+  showUi: boolean
   backgroundFx: BackgroundFx
   tileScale: TileScalePreference
   diceSkin: DiceSkinId
@@ -36,6 +37,7 @@ export const defaultSettings: UserSettings = {
   controlScheme: "hybrid",
   highContrast: false,
   reduceMotion: false,
+  showUi: true,
   backgroundFx: "normal",
   tileScale: "wide",
   diceSkin: defaultDiceSkin,
@@ -89,6 +91,7 @@ function normalizeSettings(settings: Partial<UserSettings>): UserSettings {
     controlScheme: asControlScheme(settings.controlScheme),
     highContrast: Boolean(settings.highContrast),
     reduceMotion: Boolean(settings.reduceMotion),
+    showUi: settings.showUi !== false,
     backgroundFx: asBackgroundFx(settings.backgroundFx),
     tileScale: asTileScale(settings.tileScale),
     diceSkin: asDiceSkin(settings.diceSkin),
