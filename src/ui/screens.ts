@@ -503,15 +503,18 @@ function mapTileSize(canvas: Canvas, debugView: boolean, preference: UserSetting
   if (debugView) return { width: 2, height: 1 }
 
   const forced = process.env.OPENDUNGEON_TILE_SCALE
-  if (forced === "compact") return { width: 8, height: 4 }
-  if (forced === "medium") return { width: 12, height: 6 }
-  if (forced === "large") return { width: 16, height: 8 }
-  if (preference === "medium") return { width: 12, height: 6 }
-  if (preference === "large") return { width: 16, height: 8 }
+  if (forced === "compact") return { width: 12, height: 6 }
+  if (forced === "medium") return { width: 16, height: 8 }
+  if (forced === "large") return { width: 22, height: 11 }
+  if (forced === "close") return { width: 28, height: 14 }
+  if (preference === "medium") return { width: 16, height: 8 }
+  if (preference === "large") return { width: 22, height: 11 }
+  if (preference === "close") return { width: 28, height: 14 }
 
-  if (canvas.width >= 132 && canvas.height >= 38) return { width: 16, height: 8 }
-  if (canvas.width >= 96 && canvas.height >= 30) return { width: 12, height: 6 }
-  return { width: 8, height: 4 }
+  if (canvas.width >= 180 && canvas.height >= 48) return { width: 28, height: 14 }
+  if (canvas.width >= 132 && canvas.height >= 38) return { width: 22, height: 11 }
+  if (canvas.width >= 96 && canvas.height >= 30) return { width: 16, height: 8 }
+  return { width: 12, height: 6 }
 }
 
 function drawAssetTile(

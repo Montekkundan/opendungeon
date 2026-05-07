@@ -11,6 +11,7 @@ Terminal roguelike RPG built with OpenTUI.
 - Local save/load system
 - Local profile and accessibility settings
 - Custom 64px owned sprite assets
+- High-resolution half-block terminal sprite renderer
 - Animated crawler, enemy, item, terrain, and dice sprites
 - Multiple animated d20 dice skins
 - Turn-based d20 combat

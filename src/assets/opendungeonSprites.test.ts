@@ -56,10 +56,10 @@ describe("opendungeon owned sprites", () => {
     const wall = pixelSprite("wall-a", 8, 4)
     const d20 = d20RollSprite(20, 11, 8, 4, defaultDiceSkin)
 
-    expect(hero.cells.flat().some((cell) => cell.ch === "█")).toBe(true)
-    expect(walk.cells.flat().some((cell) => cell.ch === "█")).toBe(true)
+    expect(hero.cells.flat().some((cell) => cell.ch !== " " || cell.bg)).toBe(true)
+    expect(walk.cells.flat().some((cell) => cell.ch !== " " || cell.bg)).toBe(true)
     expect(wall.cells.flat().every((cell) => cell.bg)).toBe(true)
-    expect(d20.cells.flat().some((cell) => cell.ch === "█")).toBe(true)
+    expect(d20.cells.flat().some((cell) => cell.ch !== " " || cell.bg)).toBe(true)
   })
 
   test("writes debuggable per-asset sprite files", () => {

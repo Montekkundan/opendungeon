@@ -57,6 +57,27 @@ function sampleCell(
   const endX = frameX + Math.floor(((col + 1) * sourceTileSize) / width)
   const startY = frameY + Math.floor((row * sourceTileSize) / height)
   const endY = frameY + Math.floor(((row + 1) * sourceTileSize) / height)
+  const midY = Math.max(startY + 1, Math.floor((startY + endY) / 2))
+
+  const top = sampleRegion(d20Sheet, startX, endX, startY, midY)
+  const bottom = sampleRegion(d20Sheet, startX, endX, midY, endY)
+
+  const topVisible = isRegionVisible(top)
+  const bottomVisible = isRegionVisible(bottom)
+
+  if (!topVisible && !bottomVisible) return { ch: " ", fg: "#000000" }
+  if (topVisible && bottomVisible) return { ch: "▀", fg: top.color ?? "#d8dee9", bg: bottom.color ?? top.color }
+  if (topVisible) return { ch: "▀", fg: top.color ?? "#d8dee9" }
+  return { ch: "▄", fg: bottom.color ?? "#d8dee9" }
+}
+
+type RegionSample = {
+  color?: string
+  area: number
+  visiblePixels: number
+}
+
+function sampleRegion(d20Sheet: PNG, startX: number, endX: number, startY: number, endY: number): RegionSample {
   const counts = new Map<string, number>()
   let visiblePixels = 0
 
@@ -71,11 +92,15 @@ function sampleCell(
     }
   }
 
-  const area = Math.max(1, (endX - startX) * (endY - startY))
-  if (visiblePixels < Math.max(1, Math.floor(area / 9))) return { ch: " ", fg: "#000000" }
+  return {
+    area: Math.max(1, (endX - startX) * Math.max(1, endY - startY)),
+    visiblePixels,
+    color: [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0],
+  }
+}
 
-  const color = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "#d8dee9"
-  return { ch: "█", fg: color }
+function isRegionVisible(sample: RegionSample) {
+  return sample.visiblePixels >= Math.max(1, Math.floor(sample.area / 11))
 }
 
 function rgbToHex(r: number, g: number, b: number) {

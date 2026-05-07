@@ -459,7 +459,7 @@ function changeCurrentSetting() {
   if (item.id === "reduceMotion") model.settings.reduceMotion = !model.settings.reduceMotion
   if (item.id === "diceSkin") model.settings.diceSkin = cycleValue(model.settings.diceSkin, diceSkinIds)
   if (item.id === "backgroundFx") model.settings.backgroundFx = cycleValue(model.settings.backgroundFx, ["low", "normal", "dense"])
-  if (item.id === "tileScale") model.settings.tileScale = cycleValue(model.settings.tileScale, ["auto", "medium", "large"])
+  if (item.id === "tileScale") model.settings.tileScale = cycleValue(model.settings.tileScale, ["auto", "medium", "large", "close"])
   if (item.id === "music") model.settings.music = !model.settings.music
   if (item.id === "sound") model.settings.sound = !model.settings.sound
   saveUserSettings("Settings saved locally.")

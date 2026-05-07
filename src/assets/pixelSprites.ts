@@ -74,6 +74,35 @@ function sampleCell(sheet: PNG, crop: SpriteCrop, col: number, row: number, widt
   const endX = cropX + Math.floor(((col + 1) * sourceTileSize) / width)
   const startY = cropY + Math.floor((row * sourceTileSize) / height)
   const endY = cropY + Math.floor(((row + 1) * sourceTileSize) / height)
+  const midY = Math.max(startY + 1, Math.floor((startY + endY) / 2))
+
+  const top = sampleRegion(sheet, startX, endX, startY, midY)
+  const bottom = sampleRegion(sheet, startX, endX, midY, endY)
+
+  if (!crop.transparent) {
+    const topColor = top.color ?? bottom.color ?? "#05070a"
+    const bottomColor = bottom.color ?? top.color
+    return topColor === bottomColor
+      ? { ch: " ", fg: topColor, bg: topColor }
+      : { ch: "▀", fg: topColor, bg: bottomColor }
+  }
+
+  const topVisible = isRegionVisible(top)
+  const bottomVisible = isRegionVisible(bottom)
+
+  if (!topVisible && !bottomVisible) return { ch: " ", fg: "#000000" }
+  if (topVisible && bottomVisible) return { ch: "▀", fg: top.color ?? "#05070a", bg: bottom.color ?? top.color }
+  if (topVisible) return { ch: "▀", fg: top.color ?? "#05070a" }
+  return { ch: "▄", fg: bottom.color ?? "#05070a" }
+}
+
+type RegionSample = {
+  color?: string
+  area: number
+  visiblePixels: number
+}
+
+function sampleRegion(sheet: PNG, startX: number, endX: number, startY: number, endY: number): RegionSample {
   const counts = new Map<string, number>()
   let visiblePixels = 0
 
@@ -88,11 +117,15 @@ function sampleCell(sheet: PNG, crop: SpriteCrop, col: number, row: number, widt
     }
   }
 
-  const area = Math.max(1, (endX - startX) * (endY - startY))
-  if (crop.transparent && visiblePixels < Math.max(1, Math.floor(area / 7))) return { ch: " ", fg: "#000000" }
+  return {
+    area: Math.max(1, (endX - startX) * Math.max(1, endY - startY)),
+    visiblePixels,
+    color: [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0],
+  }
+}
 
-  const color = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "#05070a"
-  return crop.transparent ? { ch: "█", fg: color } : { ch: " ", fg: color, bg: color }
+function isRegionVisible(sample: RegionSample) {
+  return sample.visiblePixels >= Math.max(1, Math.floor(sample.area / 10))
 }
 
 function rgbToHex(r: number, g: number, b: number) {
