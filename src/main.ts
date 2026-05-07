@@ -22,16 +22,18 @@ import {
 } from "./ui/screens.js"
 import { shouldUseThreeRenderer } from "./rendering/threeAssets.js"
 
+const initialSaves = listSaves()
+
 const model: AppModel = {
   screen: "start",
   dialog: null,
-  menuIndex: 0,
+  menuIndex: initialSaves.length ? 0 : 1,
   classIndex: classIndexFromEnv(),
   modeIndex: modeIndexFromEnv(),
   seed: seedFromEnv(),
   session: createSession(seedFromEnv(), modeFromEnv(), classFromEnv()),
   message: "",
-  saves: listSaves(),
+  saves: initialSaves,
   saveIndex: 0,
   saveStatus: "",
   debugView: env("OPENDUNGEON_DEBUG_VIEW", "DUNGEON_DEBUG_VIEW") === "1",
@@ -124,6 +126,7 @@ function handleMenuKey(key: KeyEvent) {
 
   if (key.name === "up" || key.name === "w") moveSelection(model, -1)
   if (key.name === "down" || key.name === "s") moveSelection(model, 1)
+  if (model.screen === "start" && key.name === "c") loadLatestSave()
   if (model.screen === "start" && key.name === "n") model.seed = randomSeed()
   if (key.name === "escape") {
     model.screen = "start"
@@ -217,6 +220,7 @@ function handleCombatKey(key: KeyEvent) {
 function confirmMenu() {
   if (model.screen === "start") {
     const item = currentStartItem(model)
+    if (item === "Continue last") loadLatestSave()
     if (item === "New descent") startRun()
     if (item === "Load save") openSaveBrowser()
     if (item === "Character") {
@@ -295,6 +299,18 @@ function loadSelectedSave() {
     refreshSaveList()
     model.saveStatus = status
   }
+}
+
+function loadLatestSave() {
+  refreshSaveList()
+  if (!model.saves.length) {
+    model.saveStatus = "No local saves yet. Start a descent and press Ctrl+S or F5."
+    model.menuIndex = 1
+    return
+  }
+
+  model.saveIndex = 0
+  loadSelectedSave()
 }
 
 function saveCurrentRun() {

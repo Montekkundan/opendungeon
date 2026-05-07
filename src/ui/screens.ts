@@ -46,7 +46,7 @@ export type AppModel = {
   diceRollAnimation?: DiceRollAnimation | null
 }
 
-const startItems = ["New descent", "Load save", "Character", "Multiplayer", "Cloud saves", "Settings", "Quit"]
+const startItems = ["Continue last", "New descent", "Load save", "Character", "Multiplayer", "Cloud saves", "Settings", "Quit"]
 const classOptions: Array<{ id: HeroClass; name: string; text: string }> = [
   { id: "warden", name: "Warden", text: "High HP, low focus. Holds corridors." },
   { id: "arcanist", name: "Arcanist", text: "Low HP, high focus. Deletes threats." },
@@ -152,7 +152,7 @@ function drawStart(canvas: Canvas, model: AppModel) {
     canvas.write(menuX, row, `${selected ? ">" : " "} ${item}`, selected ? UI.gold : UI.ink, selected ? UI.panel3 : UI.panel)
   })
 
-  canvas.center(canvas.height - 3, "Enter select  ↑↓ navigate  n new seed  ? help  q quit", UI.muted)
+  canvas.center(canvas.height - 3, "Enter select  c continue  ↑↓ navigate  n new seed  ? help  q quit", UI.muted)
 }
 
 function drawCharacter(canvas: Canvas, model: AppModel) {
