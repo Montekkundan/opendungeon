@@ -11,6 +11,7 @@ type RaceResult = {
   turns: number
   gold: number
   kills: number
+  score: number
   submittedAt: number
 }
 
@@ -113,6 +114,7 @@ function normalizeResult(body: unknown): RaceResult {
     turns: toInt(input.turns),
     gold: toInt(input.gold),
     kills: toInt(input.kills),
+    score: toInt(input.score),
     submittedAt: Date.now(),
   }
 }
@@ -138,6 +140,7 @@ function leaderboard() {
   return [...results].sort((a, b) => {
     if (a.status === "victory" && b.status !== "victory") return -1
     if (a.status !== "victory" && b.status === "victory") return 1
+    if (a.score !== b.score) return b.score - a.score
     if (a.floor !== b.floor) return b.floor - a.floor
     if (a.turns !== b.turns) return a.turns - b.turns
     return b.gold - a.gold
@@ -198,7 +201,7 @@ function renderLobbyPage(host: string): string {
           ? state.players.map((player) => "<li>" + player.name + "</li>").join("")
           : '<li class="muted">Waiting...</li>';
         document.querySelector("#leaderboard").innerHTML = state.leaderboard.length
-          ? state.leaderboard.map((result) => "<li>" + result.name + " · " + result.status + " · floor " + result.floor + " · " + result.turns + " turns · " + result.gold + " gold</li>").join("")
+          ? state.leaderboard.map((result) => "<li>" + result.name + " · " + result.status + " · score " + result.score + " · floor " + result.floor + " · " + result.turns + " turns</li>").join("")
           : '<li class="muted">No results yet.</li>';
       };
     </script>

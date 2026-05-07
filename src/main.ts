@@ -79,6 +79,7 @@ function handleDialogKey(key: KeyEvent) {
 function handleMenuKey(key: KeyEvent) {
   if (key.name === "up" || key.name === "w") moveSelection(model, -1)
   if (key.name === "down" || key.name === "s") moveSelection(model, 1)
+  if (model.screen === "start" && key.name === "n") model.seed = randomSeed()
   if (key.name === "escape") {
     model.screen = "start"
     model.menuIndex = 0
@@ -192,6 +193,7 @@ function maybeSubmitLobbyResult() {
     turns: model.session.turn,
     gold: model.session.gold,
     kills: model.session.kills,
+    score: runScore(model.session),
   }
 
   void fetch(new URL("/finish", lobbyUrl), {
@@ -213,6 +215,10 @@ function maybeSubmitLobbyResult() {
 function seedFromEnv() {
   const value = Number(process.env.DUNGEON_SEED)
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 2423368
+}
+
+function randomSeed() {
+  return Math.floor(Math.random() * 9_000_000) + 1_000_000
 }
 
 function modeFromEnv(): MultiplayerMode {
@@ -237,4 +243,8 @@ function classIndexFromEnv() {
   if (heroClass === "warden") return 0
   if (heroClass === "arcanist") return 1
   return 2
+}
+
+function runScore(session: GameSession) {
+  return Math.max(0, session.floor * 100 + session.gold * 2 + session.kills * 25 + session.level * 50 - session.turn)
 }

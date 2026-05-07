@@ -73,15 +73,16 @@ function drawStart(canvas: Canvas, model: AppModel) {
   canvas.center(3, "DUNGEON DEV CRAWL", "#d6a85c")
   canvas.center(5, "A fantasy roguelike where cursed relics sometimes look like deploy tools.", "#8f9ba8")
   canvas.center(7, `Asset pack: ${activeAssetPack.name} by ${activeAssetPack.author} (${activeAssetPack.license})`, "#66717d")
+  canvas.center(9, `${currentClass(model).name} · ${currentMode(model).name} · Seed ${model.seed}`, "#8f9ba8")
 
   const menuX = Math.max(4, Math.floor(canvas.width / 2) - 16)
-  const menuY = Math.max(10, Math.floor(canvas.height / 2) - 4)
+  const menuY = Math.max(11, Math.floor(canvas.height / 2) - 4)
   startItems.forEach((item, index) => {
     const selected = model.menuIndex === index
     canvas.write(menuX, menuY + index * 2, `${selected ? ">" : " "} ${item}`, selected ? "#f4d06f" : "#d8dee9")
   })
 
-  canvas.center(canvas.height - 4, "Enter select  ↑↓ navigate  ? help  q quit", "#66717d")
+  canvas.center(canvas.height - 4, "Enter select  ↑↓ navigate  n new seed  ? help  q quit", "#66717d")
 }
 
 function drawCharacter(canvas: Canvas, model: AppModel) {
@@ -293,7 +294,8 @@ function drawRunEnd(canvas: Canvas, session: GameSession) {
 
   canvas.center(y + 2, title, session.status === "victory" ? "#f4d06f" : "#d56b8c")
   canvas.center(y + 4, body, "#d8dee9")
-  canvas.center(y + 6, `Floor ${session.floor}/${session.finalFloor}  Kills ${session.kills}  Gold ${session.gold}  Level ${session.level}`, "#8f9ba8")
+  canvas.center(y + 6, `Score ${runScore(session)}  Floor ${session.floor}/${session.finalFloor}  Turns ${session.turn}`, "#f4d06f")
+  canvas.center(y + 7, `Kills ${session.kills}  Gold ${session.gold}  Level ${session.level}`, "#8f9ba8")
   canvas.center(y + 9, "Enter rerun this seed    Esc title    q quit", "#66717d")
 }
 
@@ -309,6 +311,10 @@ function drawDungeonBackdrop(canvas: Canvas, seed: number) {
 function bar(label: string, value: number, max: number, width: number) {
   const filled = Math.max(0, Math.min(width, Math.round((value / max) * width)))
   return `${label} ${"█".repeat(filled)}${"░".repeat(width - filled)} ${value}/${max}`
+}
+
+function runScore(session: GameSession) {
+  return Math.max(0, session.floor * 100 + session.gold * 2 + session.kills * 25 + session.level * 50 - session.turn)
 }
 
 function trim(text: string, width: number) {
