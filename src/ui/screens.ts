@@ -94,13 +94,13 @@ const settingsOptions = [
 type SettingOption = (typeof settingsOptions)[number]
 
 const UI = {
-  bg: "#05070a",
+  bg: "#071014",
   ink: "#d8dee9",
   muted: "#66717d",
   soft: "#8f9ba8",
-  panel: "#080c11",
-  panel2: "#0e141c",
-  panel3: "#131b25",
+  panel: "#101820",
+  panel2: "#16212b",
+  panel3: "#1e2d38",
   edge: "#59616d",
   edgeDim: "#343b45",
   gold: "#f4d06f",
@@ -109,7 +109,7 @@ const UI = {
   hpBack: "#2b141f",
   focus: "#7dffb2",
   focusBack: "#123223",
-  shadow: "#010203",
+  shadow: "#05090c",
 }
 
 type QuickbarItem = {
@@ -130,7 +130,7 @@ export function paint(model: AppModel, width: number, height: number, buffer: Op
 }
 
 function renderCanvas(model: AppModel, width: number, height: number) {
-  const canvas = new Canvas(width, height, "#111820")
+  const canvas = new Canvas(width, height, "#111820", UI.bg)
   if (model.screen === "start") drawStart(canvas, model)
   if (model.screen === "character") drawCharacter(canvas, model)
   if (model.screen === "mode") drawMode(canvas, model)
@@ -235,20 +235,26 @@ function drawStart(canvas: Canvas, model: AppModel) {
 function drawCharacter(canvas: Canvas, model: AppModel) {
   drawDungeonBackdrop(canvas, model.seed + 2, model.settings)
   const width = Math.min(90, canvas.width - 8)
-  const height = Math.min(22, canvas.height - 6)
+  const height = Math.min(28, canvas.height - 6)
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.max(2, Math.floor((canvas.height - height) / 2))
   drawPanel(canvas, x, y, width, height, "Choose Your Crawler", UI.gold)
 
+  const rowStep = Math.max(5, Math.floor((height - 7) / classOptions.length))
+  const cardH = clamp(rowStep, 4, 6)
+  const spriteW = cardH >= 6 ? 15 : 12
+  const spriteH = cardH >= 6 ? 5 : 4
+  const textX = x + spriteW + 12
   classOptions.forEach((option, index) => {
     const selected = model.classIndex === index
-    const row = y + 4 + index * 5
+    const row = y + 4 + index * rowStep
     const sprite = classSprite(option.id)
-    drawSelectCard(canvas, x + 3, row - 1, width - 6, 4, selected)
-    drawPixelBlock(canvas, x + 6, row, pixelSprite(sprite, 8, 3), selected ? 1 : 0.5)
-    canvas.write(x + 17, row, `${selected ? ">" : " "} ${option.name}`, selected ? UI.gold : UI.ink, selected ? UI.panel3 : UI.panel2)
-    canvas.write(x + 21, row + 1, option.text, selected ? UI.ink : UI.soft, selected ? UI.panel3 : UI.panel2)
-    if (selected && row + 2 < y + height - 2) canvas.write(x + 21, row + 2, trim(statLine(statsForClass(option.id)), width - 30), UI.muted, UI.panel3)
+    const bg = selected ? UI.panel3 : UI.panel2
+    drawSelectCard(canvas, x + 3, row - 1, width - 6, cardH, selected)
+    drawPixelBlock(canvas, x + 6, row, animatedPixelSprite(sprite, "idle", model.seed + index, spriteW, spriteH), selected ? 1 : 0.68)
+    canvas.write(textX, row, `${selected ? ">" : " "} ${option.name}`, selected ? UI.gold : UI.ink, bg)
+    canvas.write(textX + 2, row + 1, trim(option.text, width - (textX - x) - 7), selected ? UI.ink : UI.soft, bg)
+    if (selected && row + 3 < y + height - 2) canvas.write(textX + 2, row + 3, trim(statLine(statsForClass(option.id)), width - (textX - x) - 7), UI.muted, bg)
   })
 
   drawFooter(canvas, [
@@ -329,11 +335,11 @@ function drawSaves(canvas: Canvas, model: AppModel) {
   drawPanel(canvas, detailX, listY - 3, detailW, detailHeight, "Save Detail", selected ? UI.gold : UI.edge)
 
   if (selected) {
-    drawPixelBlock(canvas, detailX + 3, listY, pixelSprite(classSprite(selected.classId as HeroClass), 10, 5), 1)
-    canvas.write(detailX + 16, listY, trim(selected.heroName, detailW - 19), UI.ink, UI.panel)
-    canvas.write(detailX + 16, listY + 1, trim(selected.heroTitle, detailW - 19), UI.soft, UI.panel)
-    canvas.write(detailX + 16, listY + 3, `Floor ${selected.floor}/${selected.finalFloor}   Turn ${selected.turn}`, UI.gold, UI.panel)
-    canvas.write(detailX + 16, listY + 4, `Mode ${selected.mode}   Seed ${selected.seed}`, UI.brass, UI.panel)
+    drawPixelBlock(canvas, detailX + 3, listY, animatedPixelSprite(classSprite(selected.classId as HeroClass), "idle", selected.turn, 13, 6), 1)
+    canvas.write(detailX + 19, listY, trim(selected.heroName, detailW - 22), UI.ink, UI.panel)
+    canvas.write(detailX + 19, listY + 1, trim(selected.heroTitle, detailW - 22), UI.soft, UI.panel)
+    canvas.write(detailX + 19, listY + 3, `Floor ${selected.floor}/${selected.finalFloor}   Turn ${selected.turn}`, UI.gold, UI.panel)
+    canvas.write(detailX + 19, listY + 4, `Mode ${selected.mode}   Seed ${selected.seed}`, UI.brass, UI.panel)
 
     if (detailHeight > 10) drawSettingRow(canvas, detailX + 3, listY + 7, detailW - 6, "Level", String(selected.level))
     if (detailHeight > 12) drawSettingRow(canvas, detailX + 3, listY + 9, detailW - 6, "Gold", String(selected.gold))
@@ -699,7 +705,6 @@ function stoneColor(x: number, y: number) {
 
 function drawHud(canvas: Canvas, session: GameSession) {
   const height = gameHudHeight(canvas)
-  canvas.fill(0, 0, canvas.width, height, " ", UI.bg, UI.bg)
 
   if (canvas.width < 96 || height < 6) {
     const hero = trim(`${session.hero.name} · ${session.hero.title}`, Math.max(16, canvas.width - 34))
@@ -718,11 +723,11 @@ function drawHud(canvas: Canvas, session: GameSession) {
   const rightX = canvas.width - rightW - 1
 
   drawPanel(canvas, 1, 0, leftW, height, "Crawler", UI.brass)
-  drawPixelBlock(canvas, 3, 2, pixelSprite(classSprite(session.hero.classId), 8, 4), 1)
-  canvas.write(13, 2, trim(session.hero.name, leftW - 16), UI.ink, UI.panel)
-  canvas.write(13, 3, trim(session.hero.title, leftW - 16), UI.soft, UI.panel)
-  canvas.write(13, 5, `LV ${session.level}   XP ${session.xp}/${session.level * 10}`, UI.gold, UI.panel)
-  if (height > 6) canvas.write(13, 6, trim(statLine(session.stats), leftW - 16), UI.muted, UI.panel)
+  drawPixelBlock(canvas, 3, 1, animatedPixelSprite(classSprite(session.hero.classId), "idle", session.turn, 12, 5), 1)
+  canvas.write(17, 2, trim(session.hero.name, leftW - 20), UI.ink, UI.panel)
+  canvas.write(17, 3, trim(session.hero.title, leftW - 20), UI.soft, UI.panel)
+  canvas.write(17, 5, `LV ${session.level}   XP ${session.xp}/${session.level * 10}`, UI.gold, UI.panel)
+  if (height > 6) canvas.write(17, 6, trim(statLine(session.stats), leftW - 20), UI.muted, UI.panel)
 
   drawPanel(canvas, centerX, 0, centerW, height, "Vitals", UI.edge)
   drawHudBar(canvas, centerX + 3, 2, Math.max(16, Math.floor(centerW * 0.46)), "HP", session.hp, session.maxHp, UI.hp, UI.hpBack)
@@ -1236,7 +1241,7 @@ function drawDialogFrame(
   width: number,
   height: number,
   title: string,
-  icon: PixelSpriteId | "d20",
+  icon: PixelSpriteId | "d20" | null,
   skin: DiceSkinId = defaultDiceSkin,
 ) {
   canvas.fill(x + 2, y + 1, width, height, " ", UI.shadow, UI.shadow)
@@ -1245,7 +1250,7 @@ function drawDialogFrame(
   canvas.fill(x + 1, y + 1, width - 2, 2, " ", UI.panel2, UI.panel2)
   canvas.write(x + 4, y + 1, title.toUpperCase(), UI.gold, UI.panel2)
   if (icon === "d20") drawD20Sprite(canvas, x + width - 12, y + 1, 20, d20FrameCount() - 1, 9, 3, skin)
-  else drawMiniIcon(canvas, x + width - 12, y + 1, icon, 7, 2)
+  else if (icon) drawMiniIcon(canvas, x + width - 12, y + 1, icon, 7, 2)
 }
 
 function dialogTitle(dialog: NonNullable<DialogId>) {
@@ -1261,7 +1266,7 @@ function dialogIcon(dialog: NonNullable<DialogId>): PixelSpriteId | "d20" {
   if (dialog === "inventory") return "scroll"
   if (dialog === "help") return "sword"
   if (dialog === "log") return "coin"
-  return "d20"
+  return "scroll"
 }
 
 function drawSettingRow(canvas: Canvas, x: number, y: number, width: number, labelText: string, value: string) {
@@ -1340,10 +1345,10 @@ function drawDialog(canvas: Canvas, model: AppModel) {
   if (!model.dialog) return
   const wide = model.dialog === "inventory" || model.dialog === "log" || model.dialog === "settings"
   const width = Math.min(wide ? 88 : 74, canvas.width - 10)
-  const height = model.dialog === "inventory" || model.dialog === "log" ? 18 : model.dialog === "settings" ? 20 : model.dialog === "help" ? 21 : 14
+  const height = model.dialog === "inventory" || model.dialog === "log" ? 18 : model.dialog === "settings" ? 20 : model.dialog === "help" ? 21 : model.dialog === "pause" ? 18 : 14
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.floor((canvas.height - height) / 2)
-  drawDialogFrame(canvas, x, y, width, height, dialogTitle(model.dialog), dialogIcon(model.dialog), model.settings.diceSkin)
+  drawDialogFrame(canvas, x, y, width, height, dialogTitle(model.dialog), model.dialog === "pause" ? null : dialogIcon(model.dialog), model.settings.diceSkin)
 
   if (model.dialog === "settings") {
     drawSettingRow(canvas, x + 4, y + 4, width - 8, "Seed", String(model.seed))
@@ -1401,20 +1406,25 @@ function drawDialog(canvas: Canvas, model: AppModel) {
   }
 
   if (model.dialog === "pause") {
-    drawPixelBlock(canvas, x + 5, y + 5, pixelSprite(classSprite(model.session.hero.classId), 10, 5), 0.75)
-    canvas.write(x + 19, y + 4, "The dungeon holds your place.", UI.ink, UI.panel)
-    drawKeycap(canvas, x + 19, y + 6, "Esc")
-    canvas.write(x + 30, y + 6, "Resume", UI.ink, UI.panel)
-    drawKeycap(canvas, x + 19, y + 8, "S")
-    canvas.write(x + 30, y + 8, "Settings", UI.ink, UI.panel)
-    drawKeycap(canvas, x + 19, y + 10, "Q")
-    canvas.write(x + 30, y + 10, "Quit to terminal", UI.hp, UI.panel)
-    canvas.write(x + 4, y + height - 4, "Race mode keeps the same seed so friends can replay the same generated crawl.", UI.soft, UI.panel)
+    drawPixelBlock(canvas, x + 5, y + 5, animatedPixelSprite(classSprite(model.session.hero.classId), "idle", model.session.turn, 14, 6), 0.9)
+    canvas.write(x + 24, y + 4, "The dungeon holds your place.", UI.ink, UI.panel)
+    drawKeycap(canvas, x + 24, y + 6, "Esc")
+    canvas.write(x + 35, y + 6, "Resume", UI.ink, UI.panel)
+    drawKeycap(canvas, x + 24, y + 8, "S")
+    canvas.write(x + 35, y + 8, "Settings", UI.ink, UI.panel)
+    drawKeycap(canvas, x + 24, y + 10, "T")
+    canvas.write(x + 35, y + 10, "Quit to title", UI.gold, UI.panel)
+    drawKeycap(canvas, x + 24, y + 12, "Q")
+    canvas.write(x + 35, y + 12, "Exit game", UI.hp, UI.panel)
+    writeWrapped(canvas, x + 4, y + height - 5, width - 8, ["Race mode keeps the same seed so friends can replay this generated crawl."], 2, UI.soft, UI.panel)
   }
 
-  canvas.fill(x + Math.floor(width / 2) - 6, y + height - 2, 12, 1, " ", UI.panel3, UI.panel3)
-  canvas.write(x + Math.floor(width / 2) - 4, y + height - 2, "Esc", UI.gold, UI.panel3)
-  canvas.write(x + Math.floor(width / 2), y + height - 2, "close", UI.ink, UI.panel3)
+  const footer = model.dialog === "pause" ? "resume" : "close"
+  const footerText = `Esc ${footer}`
+  const footerW = footerText.length + 4
+  canvas.fill(x + Math.floor((width - footerW) / 2), y + height - 2, footerW, 1, " ", UI.panel3, UI.panel3)
+  canvas.write(x + Math.floor((width - footerW) / 2) + 2, y + height - 2, "Esc", UI.gold, UI.panel3)
+  canvas.write(x + Math.floor((width - footerW) / 2) + 6, y + height - 2, footer, UI.ink, UI.panel3)
 }
 
 function drawRunEnd(canvas: Canvas, session: GameSession) {

@@ -66,7 +66,7 @@ const renderer = await createCliRenderer({
   maxFps: 30,
   consoleMode: model.debugView ? "console-overlay" : "disabled",
   openConsoleOnError: model.debugView,
-  backgroundColor: "#05070a",
+  backgroundColor: "#071014",
 })
 renderer.setTerminalTitle("opendungeon")
 
@@ -126,12 +126,23 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
 })
 
 function handleDialogKey(key: KeyEvent) {
-  if (key.name === "escape" || key.name === "return" || key.name === "enter" || key.name === "linefeed") model.dialog = null
   if (model.dialog === "pause" && key.name === "s") {
     model.dialog = null
     openSettings("game")
+    return
   }
-  if (model.dialog === "pause" && key.name === "q") destroyApp()
+  if (model.dialog === "pause" && key.name === "t") {
+    model.dialog = null
+    model.screen = "start"
+    model.menuIndex = 0
+    model.diceRollAnimation = null
+    return
+  }
+  if (model.dialog === "pause" && key.name === "q") {
+    destroyApp()
+    return
+  }
+  if (key.name === "escape" || key.name === "return" || key.name === "enter" || key.name === "linefeed") model.dialog = null
 }
 
 function handleSkillCheckKey(key: KeyEvent) {

@@ -56,8 +56,7 @@ export function animatedPixelSprite(
   const cached = spriteCache.get(key)
   if (cached) return cached
 
-  const sprite =
-    isAnimatedSprite(id) ? sourceActorSprite(id, animation, frame, width, height) ?? proceduralActorSprite(id, width, height) : staticSprite(id, width, height)
+  const sprite = isAnimatedSprite(id) ? sourceActorSprite(id, animation, frame, width, height) ?? emptySprite(width, height) : staticSprite(id, width, height)
 
   spriteCache.set(key, sprite)
   return sprite
@@ -240,6 +239,14 @@ function solidSprite(width: number, height: number, color: string): PixelSprite 
   }
 }
 
+function emptySprite(width: number, height: number): PixelSprite {
+  return {
+    width,
+    height,
+    cells: Array.from({ length: height }, () => Array.from({ length: width }, () => ({ ch: " ", fg: "#000000" }))),
+  }
+}
+
 function floorPalette(id: StaticSpriteId) {
   if (id === "floor-b") return ["#293c40", "#31494a", "#213234", "#3b5654"]
   if (id === "floor-c") return ["#2f333c", "#41404a", "#242933", "#504a56"]
@@ -333,23 +340,6 @@ function drawStaticIcon(pixels: Array<string | undefined>, width: number, height
     fillPolygon(pixels, width, height, [[cx, height * 0.18], [width * 0.74, cy], [cx, height * 0.82], [width * 0.26, cy]], "#d56b8c")
     drawLine(pixels, width, height, cx, height * 0.2, cx, height * 0.8, "#f4a6b8")
   }
-}
-
-function proceduralActorSprite(id: AnimatedSpriteId, width: number, height: number): PixelSprite {
-  const virtualWidth = Math.max(1, width)
-  const virtualHeight = Math.max(1, height * 2)
-  const pixels = makeVirtual(virtualWidth, virtualHeight)
-  const cx = Math.floor(virtualWidth / 2)
-  const head = id.includes("hero") ? "#c7d4db" : id === "slime" ? "#9bd66f" : "#8cad63"
-  const body = id.includes("arcanist") || id.includes("necromancer") ? "#7c3f87" : id.includes("warden") ? "#83909d" : "#934f3f"
-
-  fillEllipse(pixels, virtualWidth, virtualHeight, cx, virtualHeight * 0.26, virtualWidth * 0.16, virtualHeight * 0.12, head)
-  fillRect(pixels, virtualWidth, virtualHeight, cx - virtualWidth * 0.12, virtualHeight * 0.38, virtualWidth * 0.24, virtualHeight * 0.32, body)
-  drawLine(pixels, virtualWidth, virtualHeight, cx - virtualWidth * 0.24, virtualHeight * 0.45, cx - virtualWidth * 0.36, virtualHeight * 0.62, "#17171f")
-  drawLine(pixels, virtualWidth, virtualHeight, cx + virtualWidth * 0.2, virtualHeight * 0.45, cx + virtualWidth * 0.34, virtualHeight * 0.22, "#d8dee9")
-  fillRect(pixels, virtualWidth, virtualHeight, cx - virtualWidth * 0.12, virtualHeight * 0.7, virtualWidth * 0.08, virtualHeight * 0.18, "#1d1d22")
-  fillRect(pixels, virtualWidth, virtualHeight, cx + virtualWidth * 0.05, virtualHeight * 0.7, virtualWidth * 0.08, virtualHeight * 0.18, "#1d1d22")
-  return spriteFromVirtual(pixels, virtualWidth, height)
 }
 
 function makeVirtual(width: number, height: number) {
