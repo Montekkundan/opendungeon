@@ -1,12 +1,49 @@
 {
-  "name": "opendungeon",
+  "name": "@montekkundan/opendungeon",
   "version": "0.1.0",
-  "private": true,
+  "description": "Terminal roguelike RPG built with OpenTUI.",
+  "license": "MIT",
+  "homepage": "https://github.com/Montekkundan/opendungeon#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Montekkundan/opendungeon.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Montekkundan/opendungeon/issues"
+  },
+  "keywords": [
+    "opentui",
+    "terminal",
+    "roguelike",
+    "rpg",
+    "dungeon",
+    "cli",
+    "bun"
+  ],
   "type": "module",
+  "bin": {
+    "opendungeon": "./bin/opendungeon",
+    "opendungeon-host": "./bin/opendungeon-host"
+  },
+  "files": [
+    "assets",
+    "bin",
+    "src/**/*.ts",
+    "!src/**/*.test.ts",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "bun run src/main.ts",
     "host": "bun run src/net/host.ts",
     "start": "bun run src/main.ts",
+    "build:binary": "bun build --compile --outfile=dist/opendungeon src/main.ts",
+    "package:release": "bun run scripts/package-release.ts",
+    "package:check": "bun run check && bun test && bun pm pack --dry-run",
     "check": "tsc --noEmit",
     "test": "bun test"
   },

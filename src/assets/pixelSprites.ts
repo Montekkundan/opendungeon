@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs"
-import { resolve } from "node:path"
+import { dirname, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 import { PNG } from "pngjs"
 import {
   animationFrameCount,
@@ -40,6 +41,7 @@ type Bounds = {
 
 const spriteCache = new Map<string, PixelSprite>()
 const sheetCache = new Map<string, PNG>()
+const moduleDir = dirname(fileURLToPath(import.meta.url))
 
 export function pixelSprite(id: PixelSpriteId, width = 8, height = 4): PixelSprite {
   return animatedPixelSprite(id, "idle", 0, width, height)
@@ -76,10 +78,7 @@ function actorSource(id: AnimatedSpriteId, animation: SpriteAnimationId): Source
 }
 
 function zerieSource(actor: "Soldier" | "Orc", animation: SpriteAnimationId): SourceSheet {
-  const base = resolve(
-    process.cwd(),
-    `.asset-cache/itch/extracted/zerie/Tiny RPG Character Asset Pack v1.03 -Free Soldier&Orc/Characters(100x100)/${actor}/${actor}`,
-  )
+  const base = assetPath("itch", "zerie", "tiny-rpg-free", "characters", actor.toLowerCase())
   const attack = actor === "Soldier" ? "Attack03" : "Attack02"
   const file =
     animation === "walk"
@@ -97,7 +96,7 @@ function zerieSource(actor: "Soldier" | "Orc", animation: SpriteAnimationId): So
 }
 
 function samuraiSource(animation: SpriteAnimationId): SourceSheet {
-  const base = resolve(process.cwd(), ".asset-cache/itch/extracted/samurai/FREE_Samurai 2D Pixel Art v1.2/Sprites")
+  const base = assetPath("itch", "samurai-free", "sprites")
   const file =
     animation === "walk"
       ? "RUN.png"
@@ -110,7 +109,7 @@ function samuraiSource(animation: SpriteAnimationId): SourceSheet {
 }
 
 function mushroomSource(animation: SpriteAnimationId): SourceSheet {
-  const base = resolve(process.cwd(), ".asset-cache/itch/extracted/forest/Forest_Monsters_FREE/Mushroom/Mushroom without VFX")
+  const base = assetPath("itch", "forest-monsters-free", "mushroom-without-vfx")
   const file =
     animation === "walk"
       ? "Mushroom-Run.png"
@@ -168,6 +167,26 @@ function loadSheet(path: string) {
   const png = PNG.sync.read(readFileSync(path))
   sheetCache.set(path, png)
   return png
+}
+
+function assetPath(...parts: string[]) {
+  return resolve(assetRoot(), ...parts)
+}
+
+function assetRoot() {
+  const configured = process.env.OPENDUNGEON_ASSET_DIR
+  const candidates = [
+    configured,
+    resolve(process.cwd(), "assets"),
+    resolve(moduleDir, "../../assets"),
+    resolve(moduleDir, "../assets"),
+    resolve(dirname(process.execPath), "assets"),
+    resolve(dirname(process.execPath), "../assets"),
+    resolve(dirname(process.execPath), "../share/opendungeon/assets"),
+    resolve(dirname(process.execPath), "../lib/opendungeon/assets"),
+  ].filter(Boolean) as string[]
+
+  return candidates.find((candidate) => existsSync(resolve(candidate, "itch"))) ?? candidates[0] ?? resolve(process.cwd(), "assets")
 }
 
 function contentBounds(sheet: PNG, frameX: number, frameY: number, width: number, height: number): Bounds {

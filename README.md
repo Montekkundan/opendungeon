@@ -35,3 +35,49 @@ Terminal roguelike RPG built with OpenTUI.
 ```bash
 bun run dev
 ```
+
+## Install
+
+Source checkout:
+
+```bash
+bun install
+bun run dev
+```
+
+npm package:
+
+```bash
+npm i -g @montekkundan/opendungeon
+opendungeon
+```
+
+Bun global package:
+
+```bash
+bun add -g @montekkundan/opendungeon
+opendungeon
+```
+
+GitHub Release installer:
+
+```bash
+curl -fsSL https://opendungeon.sh/install | bash
+opendungeon
+```
+
+Homebrew and AUR packaging templates are under `packaging/`. Generated release formulas are written by:
+
+```bash
+bun run package:release
+```
+
+## Release
+
+```bash
+bun run package:check
+git tag v0.1.0
+git push origin main --tags
+```
+
+Publishing a GitHub release builds standalone macOS/Linux archives, `SHA256SUMS`, a Homebrew formula, and an AUR `PKGBUILD`. npm publishing runs from the release workflow when `NPM_TOKEN` is configured.

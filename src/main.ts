@@ -17,6 +17,7 @@ import {
 import { deleteSave, listSaves, loadSave, saveSession, type SaveSummary } from "./game/saveStore.js"
 import { loadSettings, saveSettings, type UserSettings } from "./game/settingsStore.js"
 import { diceSkinIds } from "./assets/diceSkins.js"
+import { version } from "./version.js"
 import {
   currentClass,
   currentMode,
@@ -28,6 +29,30 @@ import {
   type AppModel,
 } from "./ui/screens.js"
 import { shouldUseThreeRenderer } from "./rendering/threeAssets.js"
+
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log(`opendungeon ${version}
+
+Terminal roguelike RPG built with OpenTUI.
+
+Usage:
+  opendungeon              Start the game
+  opendungeon --help       Show this help
+  opendungeon --version    Show the version
+
+Environment:
+  OPENDUNGEON_SAVE_DIR     Override local save directory
+  OPENDUNGEON_PROFILE_DIR  Override local profile/settings directory
+  OPENDUNGEON_ASSET_DIR    Override bundled asset directory
+  OPENDUNGEON_TILE_SCALE   overview | wide | medium | close
+`)
+  process.exit(0)
+}
+
+if (process.argv.includes("--version") || process.argv.includes("-v")) {
+  console.log(`opendungeon ${version}`)
+  process.exit(0)
+}
 
 const initialSaves = listSaves()
 const initialSettings = loadSettings()
