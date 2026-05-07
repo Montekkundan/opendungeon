@@ -200,6 +200,7 @@ describe("game session", () => {
         debugView: false,
         rendererBackend: "terminal",
         settings: defaultSettings,
+        settingsTabIndex: 0,
         settingsIndex: 0,
         settingsReturnScreen: "start",
         inputMode: null,
@@ -230,6 +231,7 @@ describe("game session", () => {
         debugView: false,
         rendererBackend: "terminal",
         settings: defaultSettings,
+        settingsTabIndex: 0,
         settingsIndex: 0,
         settingsReturnScreen: "start",
         inputMode: null,
@@ -240,6 +242,36 @@ describe("game session", () => {
     ).chunks
 
     expect(game.map((chunk) => chunk.text).join("")).toContain("Talent Check")
+
+    const settings = draw(
+      {
+        screen: "settings",
+        dialog: null,
+        menuIndex: 0,
+        classIndex: 2,
+        modeIndex: 0,
+        seed: 2423368,
+        session,
+        message: "",
+        saves: [],
+        saveIndex: 0,
+        saveStatus: "",
+        debugView: false,
+        rendererBackend: "terminal",
+        settings: defaultSettings,
+        settingsTabIndex: 2,
+        settingsIndex: 0,
+        settingsReturnScreen: "start",
+        inputMode: null,
+        uiHidden: false,
+      },
+      120,
+      40,
+    ).chunks
+
+    const settingsText = settings.map((chunk) => chunk.text).join("")
+    expect(settingsText).toContain("Visuals")
+    expect(settingsText).toContain("Camera FOV")
   })
 
   test("persists local saves and rehydrates fog of war sets", () => {

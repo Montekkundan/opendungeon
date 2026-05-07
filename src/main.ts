@@ -23,6 +23,7 @@ import {
   currentStartItem,
   currentSettingItem,
   moveSelection,
+  moveSettingsTab,
   paint,
   type AppModel,
 } from "./ui/screens.js"
@@ -46,6 +47,7 @@ const model: AppModel = {
   debugView: env("OPENDUNGEON_DEBUG_VIEW", "DUNGEON_DEBUG_VIEW") === "1",
   rendererBackend: shouldUseThreeRenderer() ? "three" : "terminal",
   settings: initialSettings,
+  settingsTabIndex: 0,
   settingsIndex: 0,
   settingsReturnScreen: "start",
   inputMode: null,
@@ -183,6 +185,14 @@ function handleMenuKey(key: KeyEvent) {
   }
 
   if (model.screen === "settings") {
+    if (isLeftKey(key) || key.name === "[") {
+      moveSettingsTab(model, -1)
+      return
+    }
+    if (isRightKey(key) || key.name === "]") {
+      moveSettingsTab(model, 1)
+      return
+    }
     if (isUpKey(key)) moveSelection(model, -1)
     if (isDownKey(key)) moveSelection(model, 1)
     if (key.name === "u") startInput("username")
@@ -460,6 +470,7 @@ function confirmCloud() {
 function openSettings(returnScreen: AppModel["settingsReturnScreen"]) {
   model.screen = "settings"
   model.settingsReturnScreen = returnScreen
+  model.settingsIndex = 0
   model.menuIndex = model.settingsIndex
 }
 

@@ -7,6 +7,7 @@ Terminal roguelike RPG built with OpenTUI.
 - Full-screen terminal UI
 - Full-screen map with overlay HUD panels
 - Start, character, settings, controls, saves, and cloud-login screens
+- OpenTUI ASCII title, tabbed settings, sliders, switches, inputs, and scrollbars
 - Top-down procedurally generated dungeons
 - Single-player runs with co-op/race mode hooks
 - Local save/load system

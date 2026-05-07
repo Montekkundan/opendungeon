@@ -1,7 +1,7 @@
 import { fonts, measureText, type ASCIIFontName, type OptimizedBuffer } from "@opentui/core"
 import { activeAssetPack } from "../assets/packs.js"
 import { d20FrameCount, d20RollSprite } from "../assets/d20Sprites.js"
-import { defaultDiceSkin, diceSkinName, type DiceSkinId } from "../assets/diceSkins.js"
+import { defaultDiceSkin, diceSkinIds, diceSkinName, type DiceSkinId } from "../assets/diceSkins.js"
 import { animatedPixelSprite, pixelSprite, type PixelSprite, type PixelSpriteId, type SpriteAnimationId } from "../assets/pixelSprites.js"
 import {
   actorAt,
@@ -53,6 +53,7 @@ export type AppModel = {
   debugView: boolean
   rendererBackend: "terminal" | "three"
   settings: UserSettings
+  settingsTabIndex: number
   settingsIndex: number
   settingsReturnScreen: ScreenId
   inputMode: InputMode
@@ -71,18 +72,26 @@ const modeOptions: Array<{ id: MultiplayerMode; name: string; text: string }> = 
   { id: "coop", name: "Co-op", text: "Shared dungeon host. Network hook later." },
   { id: "race", name: "Race", text: "Same seed, separate runs. Fastest descent wins." },
 ]
-const settingsOptions = [
-  { id: "username", name: "Player name", text: "Saved locally and later used by cloud sync." },
-  { id: "controlScheme", name: "Control scheme", text: "Movement and menu navigation preference." },
-  { id: "highContrast", name: "High contrast", text: "Brighter borders and selected states." },
-  { id: "reduceMotion", name: "Reduce motion", text: "Quieter background and dice movement." },
-  { id: "showUi", name: "Show UI", text: "Default overlay visibility for future runs." },
-  { id: "diceSkin", name: "Dice skin", text: "Faceted polyhedral dice color used in combat rolls." },
-  { id: "backgroundFx", name: "Background FX", text: "How much title-screen dungeon rain appears." },
-  { id: "tileScale", name: "Camera FOV", text: "Wide shows more rooms; close keeps sprite detail." },
-  { id: "music", name: "Music", text: "Stored for the future audio layer." },
-  { id: "sound", name: "SFX", text: "Stored for combat and loot feedback later." },
+const settingTabs = [
+  { id: "profile", name: "Profile", description: "Identity, cloud, and overlays" },
+  { id: "access", name: "Access", description: "Controls and readability" },
+  { id: "visuals", name: "Visuals", description: "Camera, dice, and screen motion" },
+  { id: "audio", name: "Audio", description: "Stored audio preferences" },
 ] as const
+
+const settingsOptions = [
+  { id: "username", tab: "profile", name: "Player name", text: "Saved locally and later used by cloud sync.", control: "input" },
+  { id: "showUi", tab: "profile", name: "Show UI", text: "Default overlay visibility for future runs.", control: "switch" },
+  { id: "controlScheme", tab: "access", name: "Control scheme", text: "Movement and menu navigation preference.", control: "tabs" },
+  { id: "highContrast", tab: "access", name: "High contrast", text: "Brighter borders and selected states.", control: "switch" },
+  { id: "reduceMotion", tab: "access", name: "Reduce motion", text: "Quieter background and dice movement.", control: "switch" },
+  { id: "tileScale", tab: "visuals", name: "Camera FOV", text: "Wide shows more rooms; close keeps sprite detail.", control: "slider" },
+  { id: "diceSkin", tab: "visuals", name: "Dice skin", text: "Faceted polyhedral dice color used in combat rolls.", control: "tabs" },
+  { id: "backgroundFx", tab: "visuals", name: "Background FX", text: "How much title-screen dungeon rain appears.", control: "slider" },
+  { id: "music", tab: "audio", name: "Music", text: "Stored for the future audio layer.", control: "switch" },
+  { id: "sound", tab: "audio", name: "SFX", text: "Stored for combat and loot feedback later.", control: "switch" },
+] as const
+type SettingOption = (typeof settingsOptions)[number]
 
 const UI = {
   bg: "#05070a",
@@ -148,7 +157,13 @@ export function currentMode(model: AppModel) {
 }
 
 export function currentSettingItem(model: AppModel) {
-  return settingsOptions[model.settingsIndex]
+  return currentSettingsOptions(model)[model.settingsIndex] ?? currentSettingsOptions(model)[0] ?? settingsOptions[0]
+}
+
+export function moveSettingsTab(model: AppModel, delta: number) {
+  model.settingsTabIndex = wrap(model.settingsTabIndex + delta, settingTabs.length)
+  model.settingsIndex = 0
+  model.menuIndex = 0
 }
 
 export function moveSelection(model: AppModel, delta: number) {
@@ -166,12 +181,17 @@ export function moveSelection(model: AppModel, delta: number) {
         : model.screen === "cloud"
           ? 3
         : model.screen === "settings"
-          ? settingsOptions.length
+          ? currentSettingsOptions(model).length
           : startItems.length
   model.menuIndex = wrap(model.menuIndex + delta, count)
   if (model.screen === "character") model.classIndex = model.menuIndex
   if (model.screen === "mode") model.modeIndex = model.menuIndex
   if (model.screen === "settings") model.settingsIndex = model.menuIndex
+}
+
+function currentSettingsOptions(model: AppModel): SettingOption[] {
+  const tab = settingTabs[model.settingsTabIndex]?.id ?? settingTabs[0].id
+  return settingsOptions.filter((option) => option.tab === tab)
 }
 
 function drawStart(canvas: Canvas, model: AppModel) {
@@ -376,40 +396,42 @@ function drawSettings(canvas: Canvas, model: AppModel) {
   drawPanel(canvas, x, y, width, height, "Settings", model.settings.highContrast ? UI.focus : UI.gold)
 
   const listX = x + 4
-  const listY = y + 4
+  const tabY = y + 3
+  const tabWidth = width - 8
+  drawTabSelect(canvas, listX, tabY, tabWidth, settingTabs, model.settingsTabIndex)
+  const activeTab = settingTabs[model.settingsTabIndex] ?? settingTabs[0]
+  const options = currentSettingsOptions(model)
+  const listY = y + 8
   const listW = Math.min(50, Math.floor(width * 0.52))
   const rowGap = 3
-  const visibleRows = Math.max(3, Math.min(settingsOptions.length, Math.floor((height - 7) / rowGap)))
-  const offset = scrollOffset(model.settingsIndex, visibleRows, settingsOptions.length)
-  settingsOptions.slice(offset, offset + visibleRows).forEach((option, visibleIndex) => {
+  const visibleRows = Math.max(3, Math.min(options.length, Math.floor((height - 12) / rowGap)))
+  const offset = scrollOffset(model.settingsIndex, visibleRows, options.length)
+  drawScrollbar(canvas, listX + listW + 1, listY, visibleRows * rowGap - 1, offset, visibleRows, options.length)
+  options.slice(offset, offset + visibleRows).forEach((option, visibleIndex) => {
     const index = offset + visibleIndex
     const selected = model.settingsIndex === index
     const rowY = listY + visibleIndex * rowGap
-    drawSelectCard(canvas, listX, rowY, listW, 2, selected)
-    canvas.write(listX + 2, rowY, `${selected ? ">" : " "} ${option.name}`, selected ? UI.gold : UI.ink, selected ? UI.panel3 : UI.panel2)
-    canvas.write(listX + listW - 18, rowY, trim(settingValue(model.settings, option.id), 16), selected ? UI.focus : UI.soft, selected ? UI.panel3 : UI.panel2)
-    canvas.write(listX + 4, rowY + 1, trim(option.text, listW - 6), selected ? UI.ink : UI.muted, selected ? UI.panel3 : UI.panel2)
+    drawSettingsOption(canvas, listX, rowY, listW, option, model, selected)
   })
   if (offset > 0) canvas.write(listX + listW - 3, listY - 1, "↑", UI.muted, UI.panel)
-  if (offset + visibleRows < settingsOptions.length) canvas.write(listX + listW - 3, listY + visibleRows * rowGap, "↓", UI.muted, UI.panel)
+  if (offset + visibleRows < options.length) canvas.write(listX + listW - 3, listY + visibleRows * rowGap, "↓", UI.muted, UI.panel)
 
   const detailX = listX + listW + 4
   const detailW = width - (detailX - x) - 4
-  const detailH = Math.min(19, height - 8)
-  drawPanel(canvas, detailX, listY, detailW, detailH, "Profile & Dice", UI.edge)
+  const detailH = Math.min(17, height - 12)
+  drawPanel(canvas, detailX, listY, detailW, detailH, activeTab.name, UI.edge)
   drawMiniIcon(canvas, detailX + 3, listY + 3, "focus-gem", 8, 3)
   if (detailW > 28 && detailH > 7) drawD20Sprite(canvas, detailX + detailW - 15, listY + 3, 20, d20FrameCount() - 1, 10, 4, model.settings.diceSkin)
   const editing = model.inputMode?.field === "username"
   const name = editing ? `${model.inputMode?.draft ?? ""}_` : `@${model.settings.username}`
-  if (detailH > 8) drawSettingRow(canvas, detailX + 3, listY + 7, detailW - 6, "Player", name)
-  if (detailH > 10) drawSettingRow(canvas, detailX + 3, listY + 9, detailW - 6, "Dice", diceSkinName(model.settings.diceSkin))
-  if (detailH > 12) drawSettingRow(canvas, detailX + 3, listY + 11, detailW - 6, "Profile", profilePath())
-  if (detailH > 14) drawSettingRow(canvas, detailX + 3, listY + 13, detailW - 6, "Saves", saveDirectory())
-  if (detailH > 16) drawSettingRow(canvas, detailX + 3, listY + 15, detailW - 6, "Cloud", model.settings.cloudProvider === "github" ? "GitHub selected" : "local-only")
-  if (detailH > 18) canvas.write(detailX + 3, listY + 17, "Settings are saved immediately on this computer.", UI.soft, UI.panel)
+  if (detailH > 8) drawInputField(canvas, detailX + 3, listY + 7, detailW - 6, "Player", name, editing)
+  if (detailH > 11) drawSettingRow(canvas, detailX + 3, listY + 10, detailW - 6, "Profile", profilePath())
+  if (detailH > 13) drawSettingRow(canvas, detailX + 3, listY + 12, detailW - 6, "Saves", saveDirectory())
+  if (detailH > 15) canvas.write(detailX + 3, listY + 14, "Settings save immediately to the local profile.", UI.soft, UI.panel)
 
   drawFooter(canvas, [
     ["Enter", "change"],
+    ["←→", "tabs"],
     ["u", "edit name"],
     ["c", "controls"],
     ["Esc", model.settingsReturnScreen === "game" ? "game" : "title"],
@@ -986,6 +1008,101 @@ function drawPlainSelectRow(canvas: Canvas, x: number, y: number, width: number,
   if (meta && width > 42) canvas.write(x + Math.max(28, width - meta.length - 2), y, trim(meta, Math.max(8, width - 32)), selected ? UI.focus : UI.muted, bg)
 }
 
+function drawTabSelect(canvas: Canvas, x: number, y: number, width: number, tabs: ReadonlyArray<{ name: string; description: string }>, selectedIndex: number) {
+  const tabWidth = Math.max(6, Math.floor(width / tabs.length))
+  canvas.fill(x, y, width, 3, " ", UI.panel, UI.panel)
+  tabs.forEach((tab, index) => {
+    const tabX = x + index * tabWidth
+    const tabW = index === tabs.length - 1 ? width - index * tabWidth : tabWidth
+    const selected = index === selectedIndex
+    const bg = selected ? UI.panel3 : UI.panel
+    canvas.fill(tabX, y, tabW, 1, " ", bg, bg)
+    canvas.write(tabX + 1, y, trim(tab.name, tabW - 2), selected ? UI.gold : UI.ink, bg)
+    if (selected) canvas.fill(tabX, y + 1, tabW, 1, "─", UI.gold, bg)
+  })
+  const selected = tabs[selectedIndex]
+  if (selected) canvas.write(x + 1, y + 2, trim(selected.description, width - 2), UI.soft, UI.panel)
+}
+
+function drawScrollbar(canvas: Canvas, x: number, y: number, height: number, offset: number, visible: number, total: number) {
+  if (total <= visible || height < 3) return
+  canvas.fill(x, y, 1, height, "│", UI.edgeDim, UI.panel)
+  const thumbHeight = Math.max(1, Math.round((visible / total) * height))
+  const maxOffset = Math.max(1, total - visible)
+  const thumbY = y + Math.round((offset / maxOffset) * Math.max(0, height - thumbHeight))
+  canvas.fill(x, thumbY, 1, thumbHeight, "█", UI.gold, UI.panel)
+}
+
+function drawSettingsOption(canvas: Canvas, x: number, y: number, width: number, option: SettingOption, model: AppModel, selected: boolean) {
+  const bg = selected ? UI.panel3 : UI.panel2
+  drawSelectCard(canvas, x, y, width, 2, selected)
+  canvas.write(x + 2, y, `${selected ? ">" : " "} ${option.name}`, selected ? UI.gold : UI.ink, bg)
+  const controlX = x + Math.max(18, Math.floor(width * 0.42))
+  const controlW = width - (controlX - x) - 3
+  drawSettingControl(canvas, controlX, y, controlW, option, model, selected, bg)
+  canvas.write(x + 4, y + 1, trim(option.text, width - 6), selected ? UI.ink : UI.muted, bg)
+}
+
+function drawSettingControl(canvas: Canvas, x: number, y: number, width: number, option: SettingOption, model: AppModel, selected: boolean, bg: string) {
+  if (option.control === "switch") {
+    drawSwitch(canvas, x, y, width, settingValue(model.settings, option.id) === "on", selected, bg)
+    return
+  }
+
+  if (option.control === "slider") {
+    const values = settingSliderValues(option.id)
+    const value = settingValue(model.settings, option.id)
+    drawSlider(canvas, x, y, width, values.indexOf(value), values.length, value, selected, bg)
+    return
+  }
+
+  if (option.control === "tabs") {
+    const value = settingValue(model.settings, option.id)
+    drawSegmentedValue(canvas, x, y, width, settingSegments(option.id, value), value, selected, bg)
+    return
+  }
+
+  canvas.write(x, y, trim(settingValue(model.settings, option.id), width), selected ? UI.focus : UI.soft, bg)
+}
+
+function drawSwitch(canvas: Canvas, x: number, y: number, width: number, enabled: boolean, selected: boolean, bg: string) {
+  const labelText = enabled ? "ON" : "OFF"
+  const left = enabled ? "●" : "○"
+  const text = `[${left} ${labelText}]`
+  canvas.write(x + Math.max(0, width - text.length), y, text, enabled ? UI.focus : selected ? UI.gold : UI.soft, bg)
+}
+
+function drawSlider(canvas: Canvas, x: number, y: number, width: number, index: number, count: number, labelText: string, selected: boolean, bg: string) {
+  const label = trim(labelText, 10)
+  const trackW = Math.max(8, width - label.length - 3)
+  const clamped = clamp(index, 0, Math.max(0, count - 1))
+  const thumb = count <= 1 ? 0 : Math.round((clamped / (count - 1)) * (trackW - 1))
+  canvas.write(x, y, "─".repeat(trackW), selected ? UI.gold : UI.edge, bg)
+  canvas.write(x + thumb, y, "◆", selected ? UI.focus : UI.gold, bg)
+  canvas.write(x + trackW + 2, y, label, selected ? UI.focus : UI.soft, bg)
+}
+
+function drawSegmentedValue(canvas: Canvas, x: number, y: number, width: number, options: readonly string[], value: string, selected: boolean, bg: string) {
+  let cursor = x
+  for (const option of options) {
+    const active = option === value
+    const text = trim(option, Math.max(3, Math.min(10, width - (cursor - x) - 2)))
+    const segment = active ? `[${text}]` : ` ${text} `
+    if (cursor + segment.length > x + width) break
+    canvas.write(cursor, y, segment, active ? UI.focus : selected ? UI.ink : UI.soft, active ? UI.panel : bg)
+    cursor += segment.length + 1
+  }
+}
+
+function drawInputField(canvas: Canvas, x: number, y: number, width: number, labelText: string, value: string, focused: boolean) {
+  canvas.write(x, y, trim(labelText, 12), UI.brass, UI.panel)
+  const inputX = x + 13
+  const inputW = Math.max(10, width - 13)
+  canvas.fill(inputX, y - 1, inputW, 3, " ", focused ? UI.panel3 : UI.panel2, focused ? UI.panel3 : UI.panel2)
+  canvas.border(inputX, y - 1, inputW, 3, focused ? UI.focus : UI.edgeDim)
+  canvas.write(inputX + 2, y, trim(value, inputW - 4), focused ? UI.focus : UI.ink, focused ? UI.panel3 : UI.panel2)
+}
+
 function drawSelectCard(canvas: Canvas, x: number, y: number, width: number, height: number, selected: boolean) {
   const bg = selected ? UI.panel3 : UI.panel2
   canvas.fill(x, y, width, height, " ", bg, bg)
@@ -1398,6 +1515,18 @@ function settingValue(settings: UserSettings, id: (typeof settingsOptions)[numbe
   if (id === "tileScale") return settings.tileScale
   if (id === "music") return onOff(settings.music)
   return onOff(settings.sound)
+}
+
+function settingSliderValues(id: SettingOption["id"]) {
+  if (id === "tileScale") return ["overview", "wide", "medium", "close"]
+  if (id === "backgroundFx") return ["low", "normal", "dense"]
+  return ["off", "on"]
+}
+
+function settingSegments(id: SettingOption["id"], value: string) {
+  if (id === "controlScheme") return ["hybrid", "arrows", "vim"]
+  if (id === "diceSkin") return [value, ...diceSkinIds.map((id) => diceSkinName(id)).filter((name) => name !== value)]
+  return ["off", "on"]
 }
 
 function controlMoveText(scheme: UserSettings["controlScheme"]) {
