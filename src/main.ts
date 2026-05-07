@@ -2,8 +2,10 @@ import { FrameBufferRenderable, createCliRenderer, type KeyEvent } from "@opentu
 import {
   createSession,
   cycleTarget,
+  dismissSkillCheck,
   performCombatAction,
   rest,
+  resolveSkillCheck,
   selectSkill,
   tryMove,
   usePotion,
@@ -95,6 +97,12 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
     return
   }
 
+  if (model.screen === "game" && model.session.skillCheck) {
+    handleSkillCheckKey(key)
+    refresh()
+    return
+  }
+
   if (model.dialog) {
     handleDialogKey(key)
     refresh()
@@ -120,6 +128,20 @@ function handleDialogKey(key: KeyEvent) {
     openSettings("game")
   }
   if (model.dialog === "pause" && key.name === "q") destroyApp()
+}
+
+function handleSkillCheckKey(key: KeyEvent) {
+  const check = model.session.skillCheck
+  if (!check) return
+  if (check.status === "pending") {
+    if (isConfirmKey(key)) {
+      const roll = resolveSkillCheck(model.session)
+      if (roll) startDiceRollAnimation(roll.d20)
+    }
+    return
+  }
+
+  if (isConfirmKey(key) || key.name === "escape") dismissSkillCheck(model.session)
 }
 
 function handleMenuKey(key: KeyEvent) {

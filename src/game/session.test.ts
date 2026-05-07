@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { createSession, performCombatAction, selectSkill, tryMove, usePotion } from "./session.js"
+import { combatModifier, createSession, performCombatAction, resolveSkillCheck, selectSkill, tryMove, usePotion } from "./session.js"
 import { setTile } from "./dungeon.js"
 import { listSaves, loadSave, saveSession } from "./saveStore.js"
 import { defaultSettings, loadSettings, profilePath, saveSettings } from "./settingsStore.js"
@@ -17,14 +17,17 @@ describe("game session", () => {
     expect(session.dungeon.tiles[session.player.y][session.player.x]).toBe("floor")
   })
 
-  test("collects loot into inventory", () => {
+  test("resolves loot checks into inventory consequences", () => {
     const session = createSession(1234)
     const target = { x: session.player.x + 1, y: session.player.y }
     setTile(session.dungeon, target, "potion")
 
     tryMove(session, 1, 0)
+    expect(session.skillCheck?.status).toBe("pending")
 
-    expect(session.inventory[0]).toBe("Deploy nerve potion")
+    resolveSkillCheck(session)
+
+    expect(session.inventory[0]).not.toBe("Rusty blade")
     expect(session.dungeon.tiles[target.y][target.x]).toBe("floor")
   })
 
@@ -76,6 +79,28 @@ describe("game session", () => {
 
     expect(session.combat.lastRoll?.d20).toBeGreaterThanOrEqual(1)
     expect(session.combat.lastRoll?.d20).toBeLessThanOrEqual(20)
+    expect(session.combat.lastRoll?.modifier).toBe(combatModifier(session, "strength"))
+    expect(session.turn).toBe(1)
+  })
+
+  test("loot tiles trigger stat checks with consequences", () => {
+    const session = createSession(1234, "solo", "ranger")
+    const target = { x: session.player.x + 1, y: session.player.y }
+    setTile(session.dungeon, target, "chest")
+
+    tryMove(session, 1, 0)
+
+    expect(session.skillCheck?.status).toBe("pending")
+    expect(session.skillCheck?.stat).toBe("dexterity")
+    expect(session.player).toEqual(target)
+
+    const roll = resolveSkillCheck(session)
+
+    expect(roll?.d20).toBeGreaterThanOrEqual(1)
+    expect(roll?.d20).toBeLessThanOrEqual(20)
+    expect(session.skillCheck?.status).toBe("resolved")
+    expect(session.skillCheck?.roll?.total).toBe((roll?.d20 ?? 0) + (roll?.modifier ?? 0))
+    expect(session.dungeon.tiles[target.y][target.x]).toBe("floor")
     expect(session.turn).toBe(1)
   })
 
@@ -125,6 +150,35 @@ describe("game session", () => {
     ).chunks
 
     expect(start.map((chunk) => chunk.text).join("")).toContain("opendungeon")
+
+    const target = { x: session.player.x + 1, y: session.player.y }
+    setTile(session.dungeon, target, "relic")
+    tryMove(session, 1, 0)
+    const game = draw(
+      {
+        screen: "game",
+        dialog: null,
+        menuIndex: 0,
+        classIndex: 2,
+        modeIndex: 0,
+        seed: 2423368,
+        session,
+        message: "",
+        saves: [],
+        saveIndex: 0,
+        saveStatus: "",
+        debugView: false,
+        rendererBackend: "terminal",
+        settings: defaultSettings,
+        settingsIndex: 0,
+        settingsReturnScreen: "start",
+        inputMode: null,
+      },
+      120,
+      40,
+    ).chunks
+
+    expect(game.map((chunk) => chunk.text).join("")).toContain("Talent Check")
   })
 
   test("persists local saves and rehydrates fog of war sets", () => {
@@ -147,6 +201,7 @@ describe("game session", () => {
       expect(loaded.gold).toBe(42)
       expect(loaded.mode).toBe("race")
       expect(loaded.hero.classId).toBe("warden")
+      expect(loaded.stats.strength).toBe(session.stats.strength)
       expect(loaded.visible.has("1,2")).toBe(true)
       expect(loaded.seen.has("3,4")).toBe(true)
       expect(loaded.dungeon.width).toBe(session.dungeon.width)

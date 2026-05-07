@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import type { GameSession } from "./session.js"
+import { normalizeSessionAfterLoad, type GameSession } from "./session.js"
 
 export type SaveSummary = {
   id: string
@@ -110,11 +110,11 @@ function serializeSession(session: GameSession): SerializedSession {
 }
 
 function deserializeSession(session: SerializedSession): GameSession {
-  return {
+  return normalizeSessionAfterLoad({
     ...session,
     visible: new Set(session.visible ?? []),
     seen: new Set(session.seen ?? []),
-  }
+  })
 }
 
 function readEnvelope(id: string): SaveEnvelope | null {

@@ -5,15 +5,18 @@ import { defaultDiceSkin, diceSkinName, type DiceSkinId } from "../assets/diceSk
 import { animatedPixelSprite, pixelSprite, type PixelSprite, type PixelSpriteId, type SpriteAnimationId } from "../assets/pixelSprites.js"
 import {
   actorAt,
+  combatModifier,
   combatSkills,
   combatTargets,
   pointKey,
+  skillCheckModifier,
   type GameSession,
   type HeroClass,
   type MultiplayerMode,
 } from "../game/session.js"
 import { saveDirectory, type SaveSummary } from "../game/saveStore.js"
 import { profilePath, type UserSettings } from "../game/settingsStore.js"
+import { formatModifier, statAbbreviations, statLabels, statLine, statsForClass } from "../game/stats.js"
 import { Canvas } from "./canvas.js"
 
 type TileRenderStyle = {
@@ -220,6 +223,7 @@ function drawCharacter(canvas: Canvas, model: AppModel) {
     drawPixelBlock(canvas, x + 6, row, pixelSprite(sprite, 8, 3), selected ? 1 : 0.5)
     canvas.write(x + 17, row, `${selected ? ">" : " "} ${option.name}`, selected ? UI.gold : UI.ink, selected ? UI.panel3 : UI.panel2)
     canvas.write(x + 21, row + 1, option.text, selected ? UI.ink : UI.soft, selected ? UI.panel3 : UI.panel2)
+    if (selected && row + 2 < y + height - 2) canvas.write(x + 21, row + 2, trim(statLine(statsForClass(option.id)), width - 30), UI.muted, UI.panel3)
   })
 
   drawFooter(canvas, [
@@ -450,6 +454,7 @@ function drawGame(canvas: Canvas, model: AppModel) {
   if (!model.debugView) drawQuickbar(canvas, session, model.diceRollAnimation, model.settings)
   if (session.combat.active) drawCombatPanel(canvas, session, model.diceRollAnimation, model.settings)
   if (session.status !== "running") drawRunEnd(canvas, session)
+  if (session.skillCheck) drawSkillCheckModal(canvas, session, model.diceRollAnimation, model.settings)
 }
 
 function drawMap(canvas: Canvas, session: GameSession, debugView: boolean, settings: UserSettings) {
@@ -686,12 +691,14 @@ function drawHud(canvas: Canvas, session: GameSession) {
   canvas.write(13, 2, trim(session.hero.name, leftW - 16), UI.ink, UI.panel)
   canvas.write(13, 3, trim(session.hero.title, leftW - 16), UI.soft, UI.panel)
   canvas.write(13, 5, `LV ${session.level}   XP ${session.xp}/${session.level * 10}`, UI.gold, UI.panel)
+  if (height > 6) canvas.write(13, 6, trim(statLine(session.stats), leftW - 16), UI.muted, UI.panel)
 
   drawPanel(canvas, centerX, 0, centerW, height, "Vitals", UI.edge)
   drawHudBar(canvas, centerX + 3, 2, Math.max(16, Math.floor(centerW * 0.46)), "HP", session.hp, session.maxHp, UI.hp, UI.hpBack)
   drawHudBar(canvas, centerX + Math.floor(centerW * 0.52), 2, Math.max(14, Math.floor(centerW * 0.39)), "FOCUS", session.focus, session.maxFocus, UI.focus, UI.focusBack)
   canvas.write(centerX + 3, 4, trim(compactControls(session), centerW - 6), UI.muted, UI.panel)
-  if (session.combat.active) canvas.write(centerX + 3, 5, "Initiative: target with Tab, choose a skill, roll the d20.", UI.gold, UI.panel)
+  if (session.skillCheck) canvas.write(centerX + 3, 5, "Talent check: Enter rolls the d20. Stats decide the consequence.", UI.gold, UI.panel)
+  else if (session.combat.active) canvas.write(centerX + 3, 5, "Initiative: target with Tab, choose a skill, roll the d20.", UI.gold, UI.panel)
   else canvas.write(centerX + 3, 5, trim(session.log[0] ?? "The dungeon waits.", centerW - 6), UI.soft, UI.panel)
 
   drawPanel(canvas, rightX, 0, rightW, height, "Run", UI.brass)
@@ -771,7 +778,8 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
   combatSkills.forEach((skill, index) => {
     const selected = index === session.combat.selectedSkill
     const unavailable = session.focus < skill.cost
-    const text = `${index + 1} ${skill.name} F${skill.cost}`
+    const modifier = combatModifier(session, skill.stat)
+    const text = `${index + 1} ${skill.name} ${statAbbreviations[skill.stat]} ${formatModifier(modifier)} F${skill.cost}`
     const row = y + 4 + index
     if (selected) canvas.fill(skillX, row, width - (skillX - x) - 2, 1, " ", UI.panel3, UI.panel3)
     canvas.write(skillX + 1, row, trim(text, width - (skillX - x) - 4), unavailable ? UI.muted : selected ? UI.focus : UI.ink, selected ? UI.panel3 : UI.panel)
@@ -786,10 +794,76 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
   canvas.border(diceX, diceY, 12, 4, roll?.hit ? UI.focus : UI.hp)
   drawD20Sprite(canvas, diceX + 1, diceY + 1, diceResult(session, animation), diceFrame(session, animation), 5, 2, settings.diceSkin, !settings.reduceMotion, animation)
   canvas.write(diceX + 7, diceY + 1, roll ? String(roll.d20).padStart(2, "0") : "d20", roll?.hit ? UI.focus : UI.gold)
-  canvas.write(diceX + 2, diceY + 2, roll ? `${roll.total}/${roll.dc}` : "roll", UI.ink)
+  canvas.write(diceX + 2, diceY + 2, roll ? `${roll.total}/${roll.dc}` : statAbbreviations[selectedSkill.stat], UI.ink)
 
   const footer = roll ? `${roll.skill} ${roll.hit ? "hit" : "miss"} ${roll.target}` : "Enter rolls selected skill"
   canvas.write(x + 2, y + height - 2, trim(footer, width - 4), UI.muted, UI.panel)
+}
+
+function drawSkillCheckModal(canvas: Canvas, session: GameSession, animation: DiceRollAnimation | null | undefined, settings: UserSettings) {
+  const check = session.skillCheck
+  if (!check) return
+
+  const width = Math.min(92, canvas.width - 8)
+  const height = Math.min(20, canvas.height - 6)
+  const x = Math.floor((canvas.width - width) / 2)
+  const y = Math.floor((canvas.height - height) / 2)
+  const roll = check.roll
+  const modifier = roll?.modifier ?? skillCheckModifier(session, check.stat)
+  const total = roll?.total
+  const result = roll?.d20 ?? animation?.result ?? 20
+  const frame = animation ? diceFrame(session, animation) : roll ? d20FrameCount() - 1 : 0
+  const resolved = check.status === "resolved" && roll
+
+  drawPanel(canvas, x, y, width, height, "Talent Check", resolved ? (roll.success ? UI.focus : UI.hp) : UI.gold)
+  drawCheckBar(canvas, x + 4, y + 3, Math.floor(width * 0.43), "DIFFICULTY", String(check.dc), check.dc, 30, UI.gold)
+  drawCheckBar(canvas, x + Math.floor(width * 0.51), y + 3, Math.floor(width * 0.43), "TALENT CHECK", total === undefined ? `d20 ${formatModifier(modifier)}` : String(total), total ?? Math.max(1, modifier + 10), 30, roll?.success ? UI.focus : UI.hp)
+
+  const dicePanelW = Math.floor(width * 0.48)
+  const dicePanelH = 7
+  const diceX = x + 4
+  const diceY = y + 7
+  canvas.fill(diceX, diceY, dicePanelW, dicePanelH, " ", UI.panel2, UI.panel2)
+  canvas.border(diceX, diceY, dicePanelW, dicePanelH, UI.edge)
+  drawD20Sprite(canvas, diceX + 4, diceY + 1, result, frame, 12, 5, settings.diceSkin, check.status === "pending" || Boolean(animation), animation)
+  canvas.write(diceX + 20, diceY + 2, `${statLabels[check.stat]} ${session.stats[check.stat]}`, UI.gold, UI.panel2)
+  canvas.write(diceX + 20, diceY + 3, `Modifier ${formatModifier(modifier)}`, UI.ink, UI.panel2)
+  canvas.write(diceX + 20, diceY + 4, roll ? `Roll ${roll.d20}` : "Press Enter to roll", roll ? UI.soft : UI.focus, UI.panel2)
+
+  const infoX = diceX + dicePanelW + 2
+  const infoW = width - (infoX - x) - 4
+  canvas.fill(infoX, diceY, infoW, 3, " ", UI.panel2, UI.panel2)
+  canvas.border(infoX, diceY, infoW, 3, UI.edge)
+  writeCentered(canvas, infoX, diceY + 1, infoW, trim(check.title, infoW - 4), UI.ink, UI.panel2)
+  canvas.fill(infoX, diceY + 4, infoW, 3, " ", UI.panel2, UI.panel2)
+  canvas.border(infoX, diceY + 4, infoW, 3, UI.edge)
+  drawPixelBlock(canvas, infoX + infoW - 10, diceY + 4, pixelSprite(classSprite(session.hero.classId), 8, 3), 0.85)
+  canvas.write(infoX + 2, diceY + 5, trim(check.actor, infoW - 14), UI.gold, UI.panel2)
+
+  canvas.write(x + 4, y + height - 5, trim(check.prompt, width - 8), UI.soft, UI.panel)
+  if (resolved) {
+    const color = roll.success ? UI.focus : UI.hp
+    canvas.fill(x + Math.floor(width / 2) - 12, y + height - 3, 24, 1, " ", UI.panel3, UI.panel3)
+    writeCentered(canvas, x, y + height - 3, width, roll.success ? "SUCCESS" : "FAILURE", color, UI.panel3)
+    canvas.center(y + height - 2, trim(roll.consequence, width - 8), UI.ink, UI.panel)
+  } else {
+    canvas.center(y + height - 3, "Enter roll d20", UI.focus, UI.panel)
+    canvas.center(y + height - 2, "Stats, luck, and level are added before the consequence lands.", UI.muted, UI.panel)
+  }
+}
+
+function drawCheckBar(canvas: Canvas, x: number, y: number, width: number, labelText: string, valueText: string, value: number, max: number, color: string) {
+  const barY = y + 1
+  canvas.write(x + 1, y, labelText, UI.ink, UI.panel)
+  canvas.fill(x, barY, width, 3, " ", UI.panel2, UI.panel2)
+  canvas.border(x, barY, width, 3, UI.edge)
+  const fillWidth = clamp(Math.round(((Math.max(0, value) / max) * (width - 2))), 1, width - 2)
+  canvas.fill(x + 1, barY + 1, fillWidth, 1, " ", color, color)
+  canvas.write(x + 2, barY + 1, trim(valueText, width - 4), UI.ink, color)
+}
+
+function writeCentered(canvas: Canvas, x: number, y: number, width: number, text: string, fg: string, bg?: string) {
+  canvas.write(x + Math.max(0, Math.floor((width - text.length) / 2)), y, text, fg, bg)
 }
 
 function gameHudHeight(canvas: Canvas) {

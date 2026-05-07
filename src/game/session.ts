@@ -1,4 +1,16 @@
 import { createDungeon, setTile, tileAt, type Actor, type Dungeon, type Point } from "./dungeon.js"
+import {
+  applyLevelGrowth,
+  derivedMaxFocus,
+  derivedMaxHp,
+  normalizeStats,
+  statAbbreviations,
+  statLabels,
+  statModifier,
+  statsForClass,
+  type HeroStats,
+  type StatId,
+} from "./stats.js"
 
 export type MultiplayerMode = "solo" | "coop" | "race"
 export type HeroClass = "warden" | "arcanist" | "ranger"
@@ -14,6 +26,7 @@ export type CombatSkillId = "strike" | "aimed-shot" | "arcane-burst"
 export type CombatSkill = {
   id: CombatSkillId
   name: string
+  stat: StatId
   cost: number
   dc: number
   damage: number
@@ -22,10 +35,12 @@ export type CombatSkill = {
 
 export type CombatRoll = {
   d20: number
+  modifier: number
   total: number
   dc: number
   hit: boolean
   critical: boolean
+  stat: StatId
   skill: string
   target: string
 }
@@ -39,9 +54,39 @@ export type CombatState = {
   message: string
 }
 
+export type SkillCheckSource = "potion" | "relic" | "chest"
+
+export type SkillCheckRoll = {
+  d20: number
+  modifier: number
+  total: number
+  dc: number
+  success: boolean
+  critical: boolean
+  fumble: boolean
+  stat: StatId
+  consequence: string
+}
+
+export type SkillCheckState = {
+  id: string
+  source: SkillCheckSource
+  title: string
+  actor: string
+  stat: StatId
+  dc: number
+  point: Point
+  prompt: string
+  successText: string
+  failureText: string
+  status: "pending" | "resolved"
+  roll?: SkillCheckRoll
+}
+
 export type GameSession = {
   mode: MultiplayerMode
   hero: Hero
+  stats: HeroStats
   seed: number
   floor: number
   player: Point
@@ -62,24 +107,20 @@ export type GameSession = {
   visible: Set<string>
   seen: Set<string>
   combat: CombatState
+  skillCheck: SkillCheckState | null
 }
 
-const lootEvents = {
-  potion: "Potion: +1 deploy nerve.",
-  relic: "Relic found: missing env var.",
-  chest: "Chest opened: rollback scroll.",
-} as const
-
-const heroStats: Record<HeroClass, { title: string; hp: number; focus: number }> = {
-  warden: { title: "Warden of Stone", hp: 16, focus: 5 },
-  arcanist: { title: "Arcanist of Ash", hp: 10, focus: 10 },
-  ranger: { title: "Ranger of Hollow Paths", hp: 12, focus: 7 },
+const heroTitles: Record<HeroClass, string> = {
+  warden: "Warden of Stone",
+  arcanist: "Arcanist of Ash",
+  ranger: "Ranger of Hollow Paths",
 }
 
 export const combatSkills: CombatSkill[] = [
   {
     id: "strike",
     name: "Strike",
+    stat: "strength",
     cost: 0,
     dc: 10,
     damage: 3,
@@ -88,6 +129,7 @@ export const combatSkills: CombatSkill[] = [
   {
     id: "aimed-shot",
     name: "Aimed Shot",
+    stat: "dexterity",
     cost: 1,
     dc: 13,
     damage: 5,
@@ -96,6 +138,7 @@ export const combatSkills: CombatSkill[] = [
   {
     id: "arcane-burst",
     name: "Arcane Burst",
+    stat: "intelligence",
     cost: 2,
     dc: 15,
     damage: 8,
@@ -105,21 +148,24 @@ export const combatSkills: CombatSkill[] = [
 
 export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", classId: HeroClass = "ranger"): GameSession {
   const dungeon = createDungeon(seed, 1)
-  const stats = heroStats[classId]
+  const stats = statsForClass(classId)
+  const maxHp = derivedMaxHp(stats)
+  const maxFocus = derivedMaxFocus(stats)
   const session: GameSession = {
     mode,
     hero: {
       name: "Mira",
       classId,
-      title: stats.title,
+      title: heroTitles[classId],
     },
+    stats,
     seed,
     floor: 1,
     player: { ...dungeon.playerStart },
-    hp: stats.hp,
-    maxHp: stats.hp,
-    focus: stats.focus,
-    maxFocus: stats.focus,
+    hp: maxHp,
+    maxHp,
+    focus: maxFocus,
+    maxFocus,
     dungeon,
     log: ["Dev jokes hide in loot."],
     inventory: ["Rusty blade", "Dew vial"],
@@ -139,6 +185,7 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
       selectedSkill: 0,
       message: "",
     },
+    skillCheck: null,
   }
   revealAroundPlayer(session)
   return session
@@ -146,6 +193,11 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
 
 export function tryMove(session: GameSession, dx: number, dy: number) {
   if (session.status !== "running") return
+  if (session.skillCheck) {
+    session.log.unshift("Resolve the talent check before moving.")
+    trimLog(session)
+    return
+  }
   if (session.combat.active) {
     session.log.unshift("Initiative is locked. Choose a target and roll.")
     trimLog(session)
@@ -179,12 +231,10 @@ export function tryMove(session: GameSession, dx: number, dy: number) {
     if (session.status === "running") advanceTurn(session)
     else trimLog(session)
     return
-  } else if (tile in lootEvents) {
-    const lootTile = tile as keyof typeof lootEvents
-    session.log.unshift(lootEvents[lootTile])
-    session.gold += lootTile === "relic" ? 12 : lootTile === "chest" ? 20 : 4
-    session.inventory.unshift(inventoryItem(lootTile))
-    setTile(session.dungeon, next, "floor")
+  } else if (isSkillCheckSource(tile)) {
+    startSkillCheck(session, tile, next)
+    revealAroundPlayer(session)
+    return
   } else {
     session.log.unshift("You move through the dark.")
   }
@@ -194,6 +244,11 @@ export function tryMove(session: GameSession, dx: number, dy: number) {
 
 export function rest(session: GameSession) {
   if (session.status !== "running") return
+  if (session.skillCheck) {
+    session.log.unshift("The check demands an answer first.")
+    trimLog(session)
+    return
+  }
   if (session.combat.active) {
     session.log.unshift("No resting while blades are out.")
     trimLog(session)
@@ -206,6 +261,11 @@ export function rest(session: GameSession) {
 
 export function usePotion(session: GameSession) {
   if (session.status !== "running") return
+  if (session.skillCheck) {
+    session.log.unshift("Hands are busy with the talent check.")
+    trimLog(session)
+    return
+  }
   const index = session.inventory.indexOf("Deploy nerve potion")
   if (index < 0) {
     session.log.unshift("No potion in the pack.")
@@ -218,6 +278,67 @@ export function usePotion(session: GameSession) {
   session.log.unshift("Potion used. The pulse settles.")
   if (session.combat.active) finishCombatRound(session, true)
   else trimLog(session)
+}
+
+export function resolveSkillCheck(session: GameSession): SkillCheckRoll | null {
+  const check = session.skillCheck
+  if (!check || check.status !== "pending" || session.status !== "running") return null
+
+  const d20 = rollSkillCheckD20(session, check)
+  const modifier = skillCheckModifier(session, check.stat)
+  const total = d20 + modifier
+  const critical = d20 === 20
+  const fumble = d20 === 1
+  const success = critical || (!fumble && total >= check.dc)
+  const consequence = success ? check.successText : check.failureText
+  const roll: SkillCheckRoll = {
+    d20,
+    modifier,
+    total,
+    dc: check.dc,
+    success,
+    critical,
+    fumble,
+    stat: check.stat,
+    consequence,
+  }
+
+  check.status = "resolved"
+  check.roll = roll
+  applySkillCheckConsequence(session, check, roll)
+  advanceTurn(session)
+  return roll
+}
+
+export function dismissSkillCheck(session: GameSession) {
+  if (session.skillCheck?.status === "resolved") session.skillCheck = null
+}
+
+export function combatModifier(session: GameSession, stat: StatId) {
+  return session.level + statModifier(session.stats[stat])
+}
+
+export function skillCheckModifier(session: GameSession, stat: StatId) {
+  const primary = statModifier(session.stats[stat])
+  const luck = stat === "luck" ? 0 : Math.max(0, Math.floor(statModifier(session.stats.luck) / 2))
+  return Math.floor(session.level / 2) + primary + luck
+}
+
+export function normalizeSessionAfterLoad(session: GameSession): GameSession {
+  session.stats = normalizeStats(session.hero.classId, session.stats)
+  session.maxHp = Math.max(derivedMaxHp(session.stats), session.maxHp || 0)
+  session.maxFocus = Math.max(derivedMaxFocus(session.stats), session.maxFocus || 0)
+  session.hp = clamp(session.hp, 0, session.maxHp)
+  session.focus = clamp(session.focus, 0, session.maxFocus)
+  session.skillCheck ??= null
+  session.combat ??= {
+    active: false,
+    actorIds: [],
+    selectedTarget: 0,
+    selectedSkill: 0,
+    message: "",
+  }
+  return session
 }
 
 export function actorAt(actors: Actor[], point: Point): Actor | undefined {
@@ -249,7 +370,8 @@ export function selectSkill(session: GameSession, index: number) {
   if (!session.combat.active) return
   session.combat.selectedSkill = clamp(index, 0, combatSkills.length - 1)
   const skill = combatSkills[session.combat.selectedSkill]
-  session.combat.message = `${skill.name}: d20 + ${proficiency(session)} vs DC ${skill.dc + enemyDefenseBonus(combatTargets(session)[session.combat.selectedTarget]?.kind)}.`
+  const modifier = combatModifier(session, skill.stat)
+  session.combat.message = `${skill.name}: d20 ${formatSigned(modifier)} ${statAbbreviations[skill.stat]} vs DC ${skill.dc + enemyDefenseBonus(combatTargets(session)[session.combat.selectedTarget]?.kind)}.`
 }
 
 export function performCombatAction(session: GameSession) {
@@ -268,18 +390,22 @@ export function performCombatAction(session: GameSession) {
 
   session.focus -= skill.cost
   const d20 = rollD20(session, skill, target)
-  const total = d20 + proficiency(session)
+  const modifier = combatModifier(session, skill.stat)
+  const total = d20 + modifier
   const dc = skill.dc + enemyDefenseBonus(target.kind)
   const critical = d20 === 20
   const hit = critical || (d20 !== 1 && total >= dc)
-  const damage = critical ? skill.damage + session.level + 3 : skill.damage + Math.floor(session.level / 2)
+  const damageBonus = Math.max(0, statModifier(session.stats[skill.stat]))
+  const damage = critical ? skill.damage + session.level + damageBonus + 3 : skill.damage + Math.floor(session.level / 2) + Math.floor(damageBonus / 2)
 
   session.combat.lastRoll = {
     d20,
+    modifier,
     total,
     dc,
     hit,
     critical,
+    stat: skill.stat,
     skill: skill.name,
     target: label(target.kind),
   }
@@ -287,11 +413,11 @@ export function performCombatAction(session: GameSession) {
   if (hit) {
     target.hp -= damage
     session.combat.message = `${skill.name} hits ${label(target.kind)} for ${damage}.`
-    session.log.unshift(`d20 ${d20}+${proficiency(session)} vs DC ${dc}: hit.`)
+    session.log.unshift(`d20 ${d20}${formatSigned(modifier)} vs DC ${dc}: hit.`)
     if (target.hp <= 0) defeatActor(session, target)
   } else {
     session.combat.message = `${skill.name} misses ${label(target.kind)}.`
-    session.log.unshift(`d20 ${d20}+${proficiency(session)} vs DC ${dc}: miss.`)
+    session.log.unshift(`d20 ${d20}${formatSigned(modifier)} vs DC ${dc}: miss.`)
   }
 
   if (combatTargets(session).length > 0) finishCombatRound(session, true)
@@ -348,10 +474,99 @@ function defeatMessage(kind: Actor["kind"]) {
   return "Necromancer silenced. Dead branch pruned."
 }
 
-function inventoryItem(tile: keyof typeof lootEvents) {
-  if (tile === "potion") return "Deploy nerve potion"
-  if (tile === "relic") return "Missing env var"
-  return "Rollback scroll"
+function startSkillCheck(session: GameSession, source: SkillCheckSource, point: Point) {
+  const event = skillCheckEvent(source, session.floor)
+  session.skillCheck = {
+    ...event,
+    id: `${source}-${session.floor}-${point.x}-${point.y}-${session.turn}`,
+    source,
+    point: { ...point },
+    status: "pending",
+  }
+  session.log.unshift(`${event.actor}: ${event.title}. Roll ${statLabels[event.stat]}.`)
+  trimLog(session)
+}
+
+function skillCheckEvent(source: SkillCheckSource, floor: number): Omit<SkillCheckState, "id" | "source" | "point" | "status" | "roll"> {
+  if (source === "chest") {
+    return {
+      title: "Sealed Cache",
+      actor: "Quartermaster Shade",
+      stat: "dexterity",
+      dc: 12 + Math.floor(floor / 2),
+      prompt: "Pick the cache without tripping the hooked wire.",
+      successText: "The latch gives. You claim gold and a rollback scroll.",
+      failureText: "The wire snaps. The cache burns your hand and loses its best goods.",
+    }
+  }
+
+  if (source === "relic") {
+    return {
+      title: "Whispering Relic",
+      actor: "Hollow Oracle",
+      stat: "intelligence",
+      dc: 13 + floor,
+      prompt: "Decode the inscription before the relic rewrites the room.",
+      successText: "You bind the relic, gaining focus and an old secret.",
+      failureText: "The relic bites back. Focus drains into the stone.",
+    }
+  }
+
+  return {
+    title: "Shaking Vial",
+    actor: "Wounded Courier",
+    stat: "luck",
+    dc: 10 + Math.floor(floor / 2),
+    prompt: "Steady the courier's hand before the medicine cracks.",
+    successText: "The courier breathes again and gives you the vial.",
+    failureText: "The vial breaks. You salvage a dose, but the glass cuts deep.",
+  }
+}
+
+function applySkillCheckConsequence(session: GameSession, check: SkillCheckState, roll: SkillCheckRoll) {
+  setTile(session.dungeon, check.point, "floor")
+  if (roll.success) applySkillCheckSuccess(session, check)
+  else applySkillCheckFailure(session, check)
+  session.log.unshift(`${check.title}: ${roll.success ? "success" : "failure"} (${roll.total}/${roll.dc}).`)
+  trimLog(session)
+}
+
+function applySkillCheckSuccess(session: GameSession, check: SkillCheckState) {
+  if (check.source === "chest") {
+    session.gold += 28 + session.floor * 3
+    session.inventory.unshift("Rollback scroll")
+    session.xp += 2
+  } else if (check.source === "relic") {
+    session.gold += 14 + session.floor * 2
+    session.inventory.unshift("Bound relic")
+    session.focus = Math.min(session.maxFocus, session.focus + 3)
+    session.xp += 3
+  } else {
+    session.gold += 5
+    session.inventory.unshift("Deploy nerve potion")
+    session.hp = Math.min(session.maxHp, session.hp + 2)
+    session.xp += 1
+  }
+  maybeLevelUp(session)
+}
+
+function applySkillCheckFailure(session: GameSession, check: SkillCheckState) {
+  if (check.source === "chest") {
+    session.hp -= 3
+    session.gold += 4
+    session.inventory.unshift("Bent lockpick")
+  } else if (check.source === "relic") {
+    session.focus = Math.max(0, session.focus - 3)
+    session.hp -= 1
+    session.inventory.unshift("Cursed shard")
+  } else {
+    session.hp -= 2
+    session.inventory.unshift("Cracked dew vial")
+  }
+}
+
+function isSkillCheckSource(tile: string): tile is SkillCheckSource {
+  return tile === "potion" || tile === "relic" || tile === "chest"
 }
 
 function xpFor(kind: Actor["kind"]) {
@@ -365,8 +580,9 @@ function maybeLevelUp(session: GameSession) {
   if (session.xp < needed) return
   session.xp -= needed
   session.level += 1
-  session.maxHp += 2
-  session.maxFocus += 1
+  applyLevelGrowth(session.hero.classId, session.stats, session.level)
+  session.maxHp = derivedMaxHp(session.stats)
+  session.maxFocus = derivedMaxFocus(session.stats)
   session.hp = Math.min(session.maxHp, session.hp + 4)
   session.focus = session.maxFocus
   session.log.unshift(`Level ${session.level}. The oath hardens.`)
@@ -471,11 +687,6 @@ function nearbyHostiles(session: GameSession) {
   })
 }
 
-function proficiency(session: GameSession) {
-  const classBonus = session.hero.classId === "ranger" ? 2 : session.hero.classId === "arcanist" ? 1 : 0
-  return session.level + classBonus
-}
-
 function enemyDefenseBonus(kind: Actor["kind"] | undefined) {
   if (kind === "necromancer") return 4
   if (kind === "ghoul") return 2
@@ -487,6 +698,24 @@ function rollD20(session: GameSession, skill: CombatSkill, target: Actor) {
   const targetSalt = target.id.split("").reduce((total, char) => total + char.charCodeAt(0), 0)
   const value = session.seed * 1103515245 + session.floor * 9973 + session.turn * 7919 + session.kills * 313 + skillSalt * 101 + targetSalt
   return (Math.abs(value) % 20) + 1
+}
+
+function rollSkillCheckD20(session: GameSession, check: SkillCheckState) {
+  const sourceSalt = check.source.split("").reduce((total, char) => total + char.charCodeAt(0), 0)
+  const statSalt = check.stat.split("").reduce((total, char) => total + char.charCodeAt(0), 0)
+  const value =
+    session.seed * 1664525 +
+    session.floor * 22695477 +
+    session.turn * 1109 +
+    check.point.x * 421 +
+    check.point.y * 173 +
+    sourceSalt * 47 +
+    statSalt
+  return (Math.abs(value) % 20) + 1
+}
+
+function formatSigned(value: number) {
+  return value >= 0 ? `+${value}` : String(value)
 }
 
 function label(kind: Actor["kind"]) {
