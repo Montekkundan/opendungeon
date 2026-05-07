@@ -1,3 +1,4 @@
+import { fonts, measureText, type ASCIIFontName } from "@opentui/core"
 import { activeAssetPack } from "../assets/packs.js"
 import { d20FrameCount, d20RollSprite } from "../assets/d20Sprites.js"
 import { animatedPixelSprite, pixelSprite, type PixelSprite, type PixelSpriteId, type SpriteAnimationId } from "../assets/pixelSprites.js"
@@ -134,11 +135,12 @@ function drawStart(canvas: Canvas, model: AppModel) {
   drawPixelBlock(canvas, x + 5, y + 5, pixelSprite(classSprite(currentClass(model).id), 12, 6), 1)
   drawMiniIcon(canvas, x + 5, y + 14, "relic", 8, 3)
   drawMiniIcon(canvas, x + 16, y + 14, "coin", 8, 3)
-  drawBrand(canvas, x + 22, y + 3, width - 28, UI.panel)
-  canvas.write(x + 22, y + 8, trim("A dark fantasy roguelike for terminal crawls, cursed loot, and d20 trouble.", width - 28), UI.ink, UI.panel)
-  canvas.write(x + 22, y + 10, `Hero ${currentClass(model).name}   Mode ${currentMode(model).name}   Seed ${model.seed}`, UI.brass, UI.panel)
-  canvas.write(x + 22, y + 12, `Local saves ${model.saves.length}   Art ${activeAssetPack.name} by ${activeAssetPack.author}`, UI.soft, UI.panel)
-  if (model.saveStatus && width >= 92) canvas.write(x + 22, y + 14, trim(model.saveStatus, width - 28), UI.focus, UI.panel)
+  const brandHeight = drawBrand(canvas, x + 22, y + 3, width - 28, UI.panel)
+  const copyY = y + 4 + brandHeight
+  canvas.write(x + 22, copyY, trim("Dark fantasy terminal crawl. Cursed loot. d20 trouble.", width - 28), UI.ink, UI.panel)
+  canvas.write(x + 22, copyY + 2, `Hero ${currentClass(model).name}   Mode ${currentMode(model).name}   Seed ${model.seed}`, UI.brass, UI.panel)
+  canvas.write(x + 22, copyY + 4, `Local saves ${model.saves.length}   Art ${activeAssetPack.name} by ${activeAssetPack.author}`, UI.soft, UI.panel)
+  if (model.saveStatus && width >= 92) canvas.write(x + 22, copyY + 6, trim(model.saveStatus, width - 28), UI.focus, UI.panel)
 
   const menuX = x + Math.max(22, Math.floor(width * 0.52))
   const menuSpacing = height < 22 ? 1 : 2
@@ -660,19 +662,37 @@ function drawPanel(canvas: Canvas, x: number, y: number, width: number, height: 
 }
 
 function drawBrand(canvas: Canvas, x: number, y: number, width: number, bg = UI.panel) {
-  const wideLogo = [
-    "  ___  ___  ___ _  _ ___  _   _ _  _  ___ ___ ___  _  _ ",
-    " / _ \\| _ \\| __| \\| |   \\| | | | \\| |/ __| __/ _ \\| \\| |",
-    "| (_) |  _/| _|| .` | |) | |_| | .` | (_ | _| (_) | .` |",
-    " \\___/|_|  |___|_|\\_|___/ \\___/|_|\\_|\\___|___\\___/|_|\\_|",
-  ]
-  if (width >= 62) {
-    wideLogo.forEach((line, index) => canvas.write(x, y + index, trim(line, width), index === 0 ? UI.brass : UI.gold, bg))
-    return
-  }
+  const font = brandFont(width)
+  const measured = measureText({ text: "OPENDUNGEON", font })
+  drawAsciiFont(canvas, x, y, width, "OPENDUNGEON", font, [UI.brass, UI.gold], bg)
+  if (width > 24) canvas.write(x, y + measured.height, trim("terminal dungeon crawler", width), UI.soft, bg)
+  return measured.height + (width > 24 ? 1 : 0)
+}
 
-  canvas.write(x, y, trim("O P E N D U N G E O N", width), UI.gold, bg)
-  if (width > 24) canvas.write(x, y + 1, trim("terminal dungeon crawler", width), UI.soft, bg)
+function brandFont(width: number): ASCIIFontName {
+  if (width >= 70) return "pallet"
+  if (width >= 56) return "grid"
+  return "tiny"
+}
+
+function drawAsciiFont(canvas: Canvas, x: number, y: number, width: number, text: string, font: ASCIIFontName, colors: string[], bg: string) {
+  const fontDef = fonts[font]
+  const rows = Array.from({ length: fontDef.lines }, () => "")
+  const chars = text.toUpperCase().split("")
+
+  chars.forEach((char, charIndex) => {
+    const glyph = fontDef.chars[char as keyof typeof fontDef.chars] ?? fontDef.chars[" "]
+    for (let row = 0; row < fontDef.lines; row++) {
+      rows[row] += cleanFontLine(glyph[row] ?? "")
+      if (charIndex < chars.length - 1) rows[row] += cleanFontLine(fontDef.letterspace[row] ?? " ")
+    }
+  })
+
+  rows.forEach((row, index) => canvas.write(x, y + index, trim(row, width), colors[index % colors.length], bg))
+}
+
+function cleanFontLine(line: string) {
+  return line.replace(/<\/?c\d+>/g, "")
 }
 
 function drawHudBar(
