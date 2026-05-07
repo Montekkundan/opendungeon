@@ -45,6 +45,34 @@ const modeOptions: Array<{ id: MultiplayerMode; name: string; text: string }> = 
   { id: "race", name: "Race", text: "Same seed, separate runs. Fastest descent wins." },
 ]
 
+const UI = {
+  bg: "#05070a",
+  ink: "#d8dee9",
+  muted: "#66717d",
+  soft: "#8f9ba8",
+  panel: "#080c11",
+  panel2: "#0e141c",
+  panel3: "#131b25",
+  edge: "#59616d",
+  edgeDim: "#343b45",
+  gold: "#f4d06f",
+  brass: "#d6a85c",
+  hp: "#d56b8c",
+  hpBack: "#2b141f",
+  focus: "#7dffb2",
+  focusBack: "#123223",
+  shadow: "#010203",
+}
+
+type QuickbarItem = {
+  key: string
+  label: string
+  sprite?: PixelSpriteId
+  custom?: "d20"
+  count?: string
+  active?: boolean
+}
+
 export function draw(model: AppModel, width: number, height: number) {
   const canvas = new Canvas(width, height, "#111820")
 
@@ -79,53 +107,74 @@ export function moveSelection(model: AppModel, delta: number) {
 
 function drawStart(canvas: Canvas, model: AppModel) {
   drawDungeonBackdrop(canvas, model.seed)
-  canvas.center(3, "DUNGEON DEV CRAWL", "#d6a85c")
-  canvas.center(5, "A fantasy roguelike where cursed relics sometimes look like deploy tools.", "#8f9ba8")
-  canvas.center(7, `Asset pack: ${activeAssetPack.name} by ${activeAssetPack.author} (${activeAssetPack.license})`, "#66717d")
-  canvas.center(9, `${currentClass(model).name} · ${currentMode(model).name} · Seed ${model.seed}`, "#8f9ba8")
+  const width = Math.min(92, canvas.width - 8)
+  const height = Math.min(24, canvas.height - 6)
+  const x = Math.floor((canvas.width - width) / 2)
+  const y = Math.max(2, Math.floor((canvas.height - height) / 2))
+  drawPanel(canvas, x, y, width, height, "Dungeon Dev Crawl", UI.gold)
+  drawPixelBlock(canvas, x + 5, y + 4, pixelSprite(classSprite(currentClass(model).id), 12, 6), 1)
+  drawMiniIcon(canvas, x + 5, y + 12, "relic", 8, 3)
+  drawMiniIcon(canvas, x + 16, y + 12, "coin", 8, 3)
+  canvas.write(x + 22, y + 4, "DUNGEON DEV CRAWL", UI.gold, UI.panel)
+  canvas.write(x + 22, y + 6, trim("A fantasy roguelike where cursed relics sometimes look like deploy tools.", width - 28), UI.ink, UI.panel)
+  canvas.write(x + 22, y + 8, `Hero ${currentClass(model).name}   Mode ${currentMode(model).name}   Seed ${model.seed}`, UI.brass, UI.panel)
+  canvas.write(x + 22, y + 10, `Art ${activeAssetPack.name} by ${activeAssetPack.author} (${activeAssetPack.license})`, UI.soft, UI.panel)
 
-  const menuX = Math.max(4, Math.floor(canvas.width / 2) - 16)
-  const menuY = Math.max(11, Math.floor(canvas.height / 2) - 4)
+  const menuX = x + Math.max(22, Math.floor(width * 0.52))
+  const menuSpacing = height < 22 ? 1 : 2
+  const menuY = Math.min(y + height - 3 - (startItems.length - 1) * menuSpacing, y + Math.max(12, Math.floor(height * 0.55)))
   startItems.forEach((item, index) => {
     const selected = model.menuIndex === index
-    canvas.write(menuX, menuY + index * 2, `${selected ? ">" : " "} ${item}`, selected ? "#f4d06f" : "#d8dee9")
+    const row = menuY + index * menuSpacing
+    if (selected) canvas.fill(menuX - 2, row, Math.min(26, width - (menuX - x) - 4), 1, " ", UI.panel3, UI.panel3)
+    canvas.write(menuX, row, `${selected ? ">" : " "} ${item}`, selected ? UI.gold : UI.ink, selected ? UI.panel3 : UI.panel)
   })
 
-  canvas.center(canvas.height - 4, "Enter select  ↑↓ navigate  n new seed  ? help  q quit", "#66717d")
+  canvas.center(canvas.height - 3, "Enter select  ↑↓ navigate  n new seed  ? help  q quit", UI.muted)
 }
 
 function drawCharacter(canvas: Canvas, model: AppModel) {
   drawDungeonBackdrop(canvas, model.seed + 2)
-  canvas.center(3, "CHOOSE YOUR CRAWLER", "#d6a85c")
-  const x = Math.max(4, Math.floor(canvas.width / 2) - 28)
-  const y = Math.max(8, Math.floor(canvas.height / 2) - 5)
+  const width = Math.min(90, canvas.width - 8)
+  const height = Math.min(22, canvas.height - 6)
+  const x = Math.floor((canvas.width - width) / 2)
+  const y = Math.max(2, Math.floor((canvas.height - height) / 2))
+  drawPanel(canvas, x, y, width, height, "Choose Your Crawler", UI.gold)
 
   classOptions.forEach((option, index) => {
     const selected = model.classIndex === index
-    const row = y + index * 4
+    const row = y + 4 + index * 5
     const sprite: PixelSpriteId = option.id === "arcanist" ? "necromancer" : option.id === "warden" ? "ghoul" : "hero"
-    drawPixelBlock(canvas, x, row, pixelSprite(sprite, 8, 3), selected ? 1 : 0.45)
-    canvas.write(x + 10, row, `${selected ? ">" : " "} ${option.name}`, selected ? "#f4d06f" : "#d8dee9")
-    canvas.write(x + 14, row + 1, option.text, selected ? "#b5bec6" : "#66717d")
+    canvas.fill(x + 3, row - 1, width - 6, 4, " ", selected ? UI.panel3 : UI.panel2, selected ? UI.panel3 : UI.panel2)
+    canvas.border(x + 3, row - 1, width - 6, 4, selected ? UI.gold : UI.edgeDim)
+    drawPixelBlock(canvas, x + 6, row, pixelSprite(sprite, 8, 3), selected ? 1 : 0.5)
+    canvas.write(x + 17, row, `${selected ? ">" : " "} ${option.name}`, selected ? UI.gold : UI.ink, selected ? UI.panel3 : UI.panel2)
+    canvas.write(x + 21, row + 1, option.text, selected ? UI.ink : UI.soft, selected ? UI.panel3 : UI.panel2)
   })
 
-  canvas.center(canvas.height - 4, "Enter confirm  Esc start", "#66717d")
+  canvas.center(canvas.height - 3, "Enter confirm  Esc title", UI.muted)
 }
 
 function drawMode(canvas: Canvas, model: AppModel) {
   drawDungeonBackdrop(canvas, model.seed + 4)
-  canvas.center(3, "RUN MODE", "#d6a85c")
-  const x = Math.max(4, Math.floor(canvas.width / 2) - 31)
-  const y = Math.max(8, Math.floor(canvas.height / 2) - 5)
+  const width = Math.min(86, canvas.width - 8)
+  const height = Math.min(22, canvas.height - 6)
+  const x = Math.floor((canvas.width - width) / 2)
+  const y = Math.max(2, Math.floor((canvas.height - height) / 2))
+  drawPanel(canvas, x, y, width, height, "Run Mode", UI.gold)
+  drawD20Icon(canvas, x + 6, y + 5, UI.gold)
 
   modeOptions.forEach((option, index) => {
     const selected = model.modeIndex === index
-    canvas.write(x, y + index * 4, `${selected ? ">" : " "} ${option.name}`, selected ? "#f4d06f" : "#d8dee9")
-    canvas.write(x + 4, y + index * 4 + 1, option.text, selected ? "#b5bec6" : "#66717d")
+    const row = y + 4 + index * 4
+    const rowX = x + 18
+    if (selected) canvas.fill(rowX - 2, row, width - 24, 2, " ", UI.panel3, UI.panel3)
+    canvas.write(rowX, row, `${selected ? ">" : " "} ${option.name}`, selected ? UI.gold : UI.ink, selected ? UI.panel3 : UI.panel)
+    canvas.write(rowX + 4, row + 1, option.text, selected ? UI.ink : UI.soft, selected ? UI.panel3 : UI.panel)
   })
 
-  canvas.center(canvas.height - 5, `Host lobby: bun run host -- --mode ${currentMode(model).id} --seed ${model.seed}`, "#66717d")
-  canvas.center(canvas.height - 3, "Friends run with the shared DUNGEON_MODE and DUNGEON_SEED shown by the lobby.", "#66717d")
+  canvas.write(x + 4, y + height - 4, `Host lobby: bun run host -- --mode ${currentMode(model).id} --seed ${model.seed}`, UI.soft, UI.panel)
+  canvas.write(x + 4, y + height - 3, "Friends reuse the shared seed for co-op or race runs.", UI.muted, UI.panel)
 }
 
 function drawGame(canvas: Canvas, model: AppModel) {
@@ -140,10 +189,10 @@ function drawGame(canvas: Canvas, model: AppModel) {
 function drawMap(canvas: Canvas, session: GameSession, debugView: boolean) {
   const tileWidth = debugView ? 2 : 8
   const tileHeight = debugView ? 1 : 4
-  const hudHeight = 4
-  const logHeight = 0
+  const hudHeight = debugView ? 4 : gameHudHeight(canvas)
+  const bottomHudHeight = debugView ? 0 : gameQuickbarHeight(canvas)
   const viewWidth = Math.floor(canvas.width / tileWidth)
-  const viewHeight = Math.max(4, Math.floor((canvas.height - hudHeight - logHeight) / tileHeight))
+  const viewHeight = Math.max(4, Math.floor((canvas.height - hudHeight - bottomHudHeight) / tileHeight))
   const startX = session.player.x - Math.floor(viewWidth / 2)
   const startY = session.player.y - Math.floor(viewHeight / 2)
   const targets = combatTargets(session)
@@ -315,99 +364,264 @@ function stoneColor(x: number, y: number) {
 }
 
 function drawHud(canvas: Canvas, session: GameSession) {
-  canvas.fill(0, 0, canvas.width, 4, " ", "#05070a", "#05070a")
-  const hero = trim(`${session.hero.name} · ${session.hero.title}`, Math.max(16, canvas.width - 34))
-  canvas.write(1, 0, hero, "#d8dee9")
-  writeRight(canvas, 0, `Floor ${session.floor}/${session.finalFloor}  Seed ${session.seed}`, "#d6a85c")
+  const height = gameHudHeight(canvas)
+  canvas.fill(0, 0, canvas.width, height, " ", UI.bg, UI.bg)
 
-  const hpBar = bar("HP", session.hp, session.maxHp, canvas.width < 90 ? 10 : 18)
-  const focusBar = bar("FOCUS", session.focus, session.maxFocus, canvas.width < 90 ? 8 : 14)
-  canvas.write(1, 1, hpBar, "#d56b8c")
-  canvas.write(Math.min(canvas.width - 1, hpBar.length + 4), 1, focusBar, "#7dffb2")
+  if (canvas.width < 96 || height < 6) {
+    const hero = trim(`${session.hero.name} · ${session.hero.title}`, Math.max(16, canvas.width - 34))
+    canvas.write(1, 0, hero, UI.ink)
+    writeRight(canvas, 0, `F${session.floor}/${session.finalFloor}  Seed ${session.seed}`, UI.brass)
+    drawHudBar(canvas, 1, 1, Math.max(12, Math.floor(canvas.width * 0.32)), "HP", session.hp, session.maxHp, UI.hp, UI.hpBack)
+    drawHudBar(canvas, Math.floor(canvas.width * 0.43), 1, Math.max(10, Math.floor(canvas.width * 0.25)), "FOCUS", session.focus, session.maxFocus, UI.focus, UI.focusBack)
+    canvas.write(1, 3, compactControls(session), UI.muted)
+    return
+  }
 
-  const progress = `LV ${session.level}  XP ${session.xp}/${session.level * 10}  Gold ${session.gold}`
-  if (canvas.width >= 96) canvas.write(55, 2, progress, "#d6a85c")
-  else writeRight(canvas, 2, progress, "#d6a85c")
+  const leftW = Math.min(54, Math.max(38, Math.floor(canvas.width * 0.28)))
+  const rightW = Math.min(48, Math.max(34, Math.floor(canvas.width * 0.22)))
+  const centerX = leftW + 2
+  const centerW = Math.max(38, canvas.width - leftW - rightW - 4)
+  const rightX = canvas.width - rightW - 1
 
-  if (canvas.width >= 96) canvas.write(canvas.width - 38, 1, `Mode ${session.mode}  Art ${activeAssetPack.name}`, "#8f9ba8")
-  const status = session.status === "running" ? `Turn ${session.turn}` : session.status.toUpperCase()
-  if (canvas.width >= 96) canvas.write(canvas.width - 38, 2, status, session.status === "dead" ? "#d56b8c" : "#66717d")
-  const controls = session.combat.active
-    ? "tab target   1-3 skill   enter/space roll   h potion   l log   esc pause"
-    : "i inventory   l log   h potion   r rest   ? help   esc pause"
-  canvas.write(1, 2, trim(controls, canvas.width < 96 ? canvas.width - progress.length - 4 : 72), "#66717d")
+  drawPanel(canvas, 1, 0, leftW, height, "Crawler", UI.brass)
+  drawPixelBlock(canvas, 3, 2, pixelSprite(classSprite(session.hero.classId), 8, 4), 1)
+  canvas.write(13, 2, trim(session.hero.name, leftW - 16), UI.ink, UI.panel)
+  canvas.write(13, 3, trim(session.hero.title, leftW - 16), UI.soft, UI.panel)
+  canvas.write(13, 5, `LV ${session.level}   XP ${session.xp}/${session.level * 10}`, UI.gold, UI.panel)
+
+  drawPanel(canvas, centerX, 0, centerW, height, "Vitals", UI.edge)
+  drawHudBar(canvas, centerX + 3, 2, Math.max(16, Math.floor(centerW * 0.46)), "HP", session.hp, session.maxHp, UI.hp, UI.hpBack)
+  drawHudBar(canvas, centerX + Math.floor(centerW * 0.52), 2, Math.max(14, Math.floor(centerW * 0.39)), "FOCUS", session.focus, session.maxFocus, UI.focus, UI.focusBack)
+  canvas.write(centerX + 3, 4, trim(compactControls(session), centerW - 6), UI.muted, UI.panel)
+  if (session.combat.active) canvas.write(centerX + 3, 5, "Initiative: target with Tab, choose a skill, roll the d20.", UI.gold, UI.panel)
+  else canvas.write(centerX + 3, 5, trim(session.log[0] ?? "The dungeon waits.", centerW - 6), UI.soft, UI.panel)
+
+  drawPanel(canvas, rightX, 0, rightW, height, "Run", UI.brass)
+  canvas.write(rightX + 3, 2, `Floor ${session.floor}/${session.finalFloor}`, UI.gold, UI.panel)
+  canvas.write(rightX + 18, 2, `Seed ${session.seed}`, UI.brass, UI.panel)
+  canvas.write(rightX + 3, 3, `Mode ${session.mode}`, UI.soft, UI.panel)
+  canvas.write(rightX + 18, 3, `Art ${activeAssetPack.name}`, UI.soft, UI.panel)
+  canvas.write(rightX + 3, 5, `Turn ${session.turn}`, session.status === "dead" ? UI.hp : UI.muted, UI.panel)
+  drawMiniIcon(canvas, rightX + rightW - 12, 4, "coin", 6, 2)
+  canvas.write(rightX + rightW - 6, 5, String(session.gold), UI.gold, UI.panel)
 }
 
 function drawQuickbar(canvas: Canvas, session: GameSession) {
-  if (canvas.height < 30 || canvas.width < 90) return
+  const height = gameQuickbarHeight(canvas)
+  if (!height) return
   const slotCount = 6
-  const slotWidth = 11
-  const width = slotCount * slotWidth + 2
-  const height = 6
+  const slotWidth = 13
+  const width = slotCount * slotWidth + 4
   const x = Math.max(2, Math.floor((canvas.width - width) / 2))
-  const y = canvas.height - height - 1
-  const items: Array<{ label: string; sprite: PixelSpriteId; count?: string }> = [
-    { label: "Strike", sprite: "sword" },
-    { label: "Potion", sprite: "potion", count: String(session.inventory.filter((item) => item === "Deploy nerve potion").length) },
-    { label: "Loot", sprite: "chest", count: String(session.gold) },
-    { label: "Relic", sprite: "relic" },
-    { label: "Roll", sprite: "dice" },
-    { label: "Pack", sprite: "chest", count: String(session.inventory.length) },
+  const y = canvas.height - height
+  const items: QuickbarItem[] = [
+    { key: "1", label: "Strike", sprite: "sword", active: session.combat.active && session.combat.selectedSkill === 0 },
+    {
+      key: "H",
+      label: "Potion",
+      sprite: "potion",
+      count: String(countInventory(session, "Deploy nerve potion")),
+      active: session.combat.active && session.hp < session.maxHp,
+    },
+    { key: "G", label: "Gold", sprite: "coin", count: String(session.gold) },
+    { key: "R", label: "Relic", sprite: "relic", count: String(countInventory(session, "Missing env var")) },
+    { key: "D", label: "Roll", custom: "d20", active: session.combat.active },
+    { key: "I", label: "Pack", sprite: "scroll", count: String(session.inventory.length) },
   ]
 
-  canvas.fill(x, y, width, height, " ", "#05070a", "#05070a")
-  canvas.border(x, y, width, height, "#343b45")
+  drawPanel(canvas, x, y, width, height - 1, session.combat.active ? "Action Bar" : "Pack", session.combat.active ? UI.gold : UI.edge)
   items.forEach((item, index) => {
-    const slotX = x + 1 + index * slotWidth
-    canvas.border(slotX, y + 1, slotWidth - 1, height - 2, index === 0 && session.combat.active ? "#f4d06f" : "#59616d")
-    drawPixelBlock(canvas, slotX + 1, y + 2, pixelSprite(item.sprite, 5, 2), 1)
-    canvas.write(slotX + 1, y + height - 2, trim(item.label, slotWidth - 4), "#8f9ba8")
-    if (item.count) canvas.write(slotX + slotWidth - item.count.length - 2, y + 1, item.count, "#f4d06f")
+    const slotX = x + 2 + index * slotWidth
+    const edge = item.active ? UI.gold : UI.edge
+    canvas.fill(slotX + 1, y + 2, slotWidth - 3, height - 4, " ", UI.panel2, UI.panel2)
+    canvas.border(slotX, y + 1, slotWidth - 1, height - 2, edge)
+    canvas.write(slotX + 1, y + 1, item.key, item.active ? UI.gold : UI.muted, UI.panel2)
+    if (item.custom === "d20") drawD20Icon(canvas, slotX + 3, y + 2, item.active ? UI.gold : UI.soft)
+    else if (item.sprite) drawMiniIcon(canvas, slotX + 3, y + 2, item.sprite, 7, 3)
+    canvas.write(slotX + 1, y + height - 3, trim(item.label, slotWidth - 3), item.active ? UI.gold : UI.soft, UI.panel2)
+    if (item.count !== undefined && item.count !== "0") {
+      const count = trim(item.count, 3)
+      canvas.write(slotX + slotWidth - count.length - 2, y + 1, count, UI.gold, UI.panel2)
+    }
   })
 }
 
 function drawCombatPanel(canvas: Canvas, session: GameSession) {
-  const width = Math.min(52, Math.max(34, Math.floor(canvas.width * 0.34)))
-  const height = Math.min(17, Math.max(13, canvas.height - 8))
+  const width = Math.min(58, Math.max(38, Math.floor(canvas.width * 0.35)))
+  const height = Math.min(18, Math.max(14, canvas.height - gameHudHeight(canvas) - gameQuickbarHeight(canvas) - 2))
   const x = Math.max(1, canvas.width - width - 2)
-  const y = Math.max(5, canvas.height - height - 2)
+  const y = Math.max(gameHudHeight(canvas) + 1, canvas.height - gameQuickbarHeight(canvas) - height - 1)
   const targets = combatTargets(session)
   const selectedSkill = combatSkills[session.combat.selectedSkill]
   const roll = session.combat.lastRoll
 
-  canvas.fill(x, y, width, height, " ", "#05070a", "#05070a")
-  canvas.border(x, y, width, height, "#d6a85c")
-  canvas.write(x + 2, y + 1, "COMBAT", "#f4d06f")
-  canvas.write(x + width - 10, y + 1, "d20", "#d56b8c")
+  drawPanel(canvas, x, y, width, height, "Turn Combat", UI.gold)
+  drawD20Icon(canvas, x + width - 10, y + 1, roll?.hit ? UI.focus : UI.hp)
 
-  canvas.write(x + 2, y + 3, "Targets", "#d6a85c")
+  canvas.write(x + 2, y + 3, "Targets", UI.brass, UI.panel)
   targets.slice(0, 4).forEach((target, index) => {
     const selected = index === session.combat.selectedTarget
     const text = `${selected ? ">" : " "} ${label(target.kind)} HP ${target.hp}`
-    canvas.write(x + 2, y + 4 + index, trim(text, width - 20), selected ? "#f4d06f" : "#d8dee9")
+    const row = y + 4 + index
+    if (selected) canvas.fill(x + 2, row, Math.floor(width / 2) - 4, 1, " ", UI.panel3, UI.panel3)
+    drawMiniIcon(canvas, x + 3, row, actorSpriteId(target.kind), 4, 1)
+    canvas.write(x + 8, row, trim(text, Math.floor(width / 2) - 9), selected ? UI.gold : UI.ink, selected ? UI.panel3 : UI.panel)
   })
 
   const skillX = x + Math.floor(width / 2)
-  canvas.write(skillX, y + 3, "Skills", "#d6a85c")
+  canvas.write(skillX, y + 3, "Skills", UI.brass, UI.panel)
   combatSkills.forEach((skill, index) => {
     const selected = index === session.combat.selectedSkill
     const unavailable = session.focus < skill.cost
     const text = `${index + 1} ${skill.name} F${skill.cost}`
-    canvas.write(skillX, y + 4 + index, trim(text, width - (skillX - x) - 2), unavailable ? "#66717d" : selected ? "#7dffb2" : "#d8dee9")
+    const row = y + 4 + index
+    if (selected) canvas.fill(skillX, row, width - (skillX - x) - 2, 1, " ", UI.panel3, UI.panel3)
+    canvas.write(skillX + 1, row, trim(text, width - (skillX - x) - 4), unavailable ? UI.muted : selected ? UI.focus : UI.ink, selected ? UI.panel3 : UI.panel)
   })
 
-  canvas.write(x + 2, y + height - 6, trim(selectedSkill.text, width - 4), "#8f9ba8")
-  canvas.write(x + 2, y + height - 5, trim(session.combat.message, width - 4), "#d8dee9")
+  canvas.fill(x + 2, y + height - 7, width - 4, 3, " ", UI.panel2, UI.panel2)
+  canvas.write(x + 3, y + height - 7, trim(selectedSkill.text, width - 6), UI.soft, UI.panel2)
+  canvas.write(x + 3, y + height - 6, trim(session.combat.message, width - 6), UI.ink, UI.panel2)
 
   const diceX = x + width - 15
   const diceY = y + height - 5
-  canvas.border(diceX, diceY, 12, 4, roll?.hit ? "#7dffb2" : "#d56b8c")
-  drawPixelBlock(canvas, diceX + 1, diceY + 1, pixelSprite("dice", 3, 2), 1)
-  canvas.write(diceX + 5, diceY + 1, roll ? `d20 ${roll.d20}` : "d20", roll?.hit ? "#7dffb2" : "#f4d06f")
-  canvas.write(diceX + 2, diceY + 2, roll ? `${roll.total}/${roll.dc}` : "roll", "#d8dee9")
+  canvas.border(diceX, diceY, 12, 4, roll?.hit ? UI.focus : UI.hp)
+  drawD20Icon(canvas, diceX + 1, diceY + 1, roll?.hit ? UI.focus : UI.gold)
+  canvas.write(diceX + 6, diceY + 1, roll ? String(roll.d20).padStart(2, "0") : "d20", roll?.hit ? UI.focus : UI.gold)
+  canvas.write(diceX + 2, diceY + 2, roll ? `${roll.total}/${roll.dc}` : "roll", UI.ink)
 
   const footer = roll ? `${roll.skill} ${roll.hit ? "hit" : "miss"} ${roll.target}` : "Enter rolls selected skill"
-  canvas.write(x + 2, y + height - 2, trim(footer, width - 4), "#66717d")
+  canvas.write(x + 2, y + height - 2, trim(footer, width - 4), UI.muted, UI.panel)
+}
+
+function gameHudHeight(canvas: Canvas) {
+  return canvas.height < 28 ? 4 : 7
+}
+
+function gameQuickbarHeight(canvas: Canvas) {
+  return canvas.height < 30 || canvas.width < 90 ? 0 : 8
+}
+
+function drawPanel(canvas: Canvas, x: number, y: number, width: number, height: number, title: string, accent = UI.edge) {
+  canvas.fill(x + 2, y + 1, width, height, " ", UI.shadow, UI.shadow)
+  canvas.fill(x, y, width, height, " ", UI.panel, UI.panel)
+  canvas.border(x, y, width, height, accent)
+  if (height > 3) {
+    canvas.fill(x + 1, y + 1, width - 2, 1, " ", UI.panel2, UI.panel2)
+    canvas.write(x + 2, y + 1, trim(title, width - 4), accent, UI.panel2)
+  }
+}
+
+function drawHudBar(
+  canvas: Canvas,
+  x: number,
+  y: number,
+  width: number,
+  labelText: string,
+  value: number,
+  max: number,
+  color: string,
+  back: string,
+) {
+  const stat = `${value}/${max}`
+  const barWidth = Math.max(4, width - labelText.length - stat.length - 3)
+  const filled = Math.max(0, Math.min(barWidth, Math.round((value / max) * barWidth)))
+  canvas.write(x, y, labelText, color, UI.panel)
+  canvas.fill(x + labelText.length + 1, y, barWidth, 1, " ", back, back)
+  canvas.fill(x + labelText.length + 1, y, filled, 1, " ", color, color)
+  canvas.write(x + labelText.length + barWidth + 2, y, stat, color, UI.panel)
+}
+
+function drawMiniIcon(canvas: Canvas, x: number, y: number, sprite: PixelSpriteId, width = 6, height = 2, dim = 1) {
+  drawPixelBlock(canvas, x, y, pixelSprite(sprite, width, height), dim)
+}
+
+function drawD20Icon(canvas: Canvas, x: number, y: number, color = UI.gold) {
+  canvas.write(x + 1, y, "/\\", color)
+  canvas.write(x, y + 1, "<20>", color)
+  canvas.write(x + 1, y + 2, "\\/", color)
+}
+
+function drawDialogFrame(
+  canvas: Canvas,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  title: string,
+  icon: PixelSpriteId | "d20",
+) {
+  canvas.fill(x + 2, y + 1, width, height, " ", UI.shadow, UI.shadow)
+  canvas.fill(x, y, width, height, " ", UI.panel, UI.panel)
+  canvas.border(x, y, width, height, UI.gold)
+  canvas.fill(x + 1, y + 1, width - 2, 2, " ", UI.panel2, UI.panel2)
+  canvas.write(x + 4, y + 1, title.toUpperCase(), UI.gold, UI.panel2)
+  if (icon === "d20") drawD20Icon(canvas, x + width - 10, y + 1, UI.gold)
+  else drawMiniIcon(canvas, x + width - 12, y + 1, icon, 7, 2)
+}
+
+function dialogTitle(dialog: NonNullable<DialogId>) {
+  if (dialog === "settings") return "Settings"
+  if (dialog === "inventory") return "Inventory"
+  if (dialog === "help") return "Controls"
+  if (dialog === "log") return "Run Log"
+  return "Paused"
+}
+
+function dialogIcon(dialog: NonNullable<DialogId>): PixelSpriteId | "d20" {
+  if (dialog === "settings") return "focus-gem"
+  if (dialog === "inventory") return "scroll"
+  if (dialog === "help") return "sword"
+  if (dialog === "log") return "coin"
+  return "d20"
+}
+
+function drawSettingRow(canvas: Canvas, x: number, y: number, width: number, labelText: string, value: string) {
+  canvas.fill(x, y, width, 1, " ", UI.panel2, UI.panel2)
+  canvas.write(x + 2, y, trim(labelText, 12), UI.brass, UI.panel2)
+  canvas.write(x + 16, y, trim(value, width - 18), UI.ink, UI.panel2)
+}
+
+function drawKeycap(canvas: Canvas, x: number, y: number, text: string) {
+  const key = trim(text, 9)
+  const width = Math.max(5, key.length + 4)
+  canvas.fill(x, y, width, 1, " ", UI.panel3, UI.panel3)
+  canvas.write(x, y, `[ ${key} ]`, UI.gold, UI.panel3)
+}
+
+function inventoryRows(session: GameSession) {
+  const counts = new Map<string, number>()
+  for (const item of session.inventory) counts.set(item, (counts.get(item) ?? 0) + 1)
+  return [...counts.entries()].map(([name, count]) => ({ name, count, sprite: inventorySprite(name) }))
+}
+
+function inventorySprite(name: string): PixelSpriteId {
+  const lower = name.toLowerCase()
+  if (lower.includes("potion") || lower.includes("vial")) return "potion"
+  if (lower.includes("blade") || lower.includes("sword")) return "sword"
+  if (lower.includes("scroll") || lower.includes("rollback")) return "scroll"
+  if (lower.includes("env") || lower.includes("idol") || lower.includes("relic")) return "relic"
+  return "chest"
+}
+
+function countInventory(session: GameSession, name: string) {
+  return session.inventory.filter((item) => item === name).length
+}
+
+function classSprite(classId: HeroClass): PixelSpriteId {
+  if (classId === "arcanist") return "necromancer"
+  if (classId === "warden") return "ghoul"
+  return "hero"
+}
+
+function actorSpriteId(kind: string): PixelSpriteId {
+  if (kind === "ghoul") return "ghoul"
+  if (kind === "necromancer") return "necromancer"
+  return "slime"
+}
+
+function compactControls(session: GameSession) {
+  return session.combat.active ? "Tab target   1-3 skill   Enter roll   H potion   Esc pause" : "I inventory   L log   H potion   R rest   ? help   Esc pause"
 }
 
 function writeRight(canvas: Canvas, y: number, text: string, color: string) {
@@ -415,47 +629,76 @@ function writeRight(canvas: Canvas, y: number, text: string, color: string) {
 }
 
 function drawDialog(canvas: Canvas, model: AppModel) {
-  const width = Math.min(70, canvas.width - 8)
-  const height = model.dialog === "inventory" || model.dialog === "log" ? 14 : 11
+  if (!model.dialog) return
+  const wide = model.dialog === "inventory" || model.dialog === "log" || model.dialog === "settings"
+  const width = Math.min(wide ? 88 : 74, canvas.width - 10)
+  const height = model.dialog === "inventory" || model.dialog === "log" ? 18 : model.dialog === "help" ? 16 : 14
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.floor((canvas.height - height) / 2)
-  canvas.fill(x, y, width, height, " ", "#05070a")
-  canvas.border(x, y, width, height, "#d6a85c")
+  drawDialogFrame(canvas, x, y, width, height, dialogTitle(model.dialog), dialogIcon(model.dialog))
 
   if (model.dialog === "settings") {
-    canvas.write(x + 3, y + 2, "Settings", "#f4d06f")
-    canvas.write(x + 3, y + 4, `Seed: ${model.seed}`, "#d8dee9")
-    canvas.write(x + 3, y + 5, `Renderer: ${model.rendererBackend === "three" ? "@opentui/three asset backend" : "Dawngeon asset tiles"}`, "#8f9ba8")
-    canvas.write(x + 3, y + 6, "Host: bun run host -- --mode race --seed " + model.seed, "#8f9ba8")
-    canvas.write(x + 3, y + 7, `Debug view: ${model.debugView ? "on" : "off"} (DUNGEON_DEBUG_VIEW=1)`, "#66717d")
-    canvas.write(x + 3, y + 8, "Lobby results auto-post when DUNGEON_LOBBY_URL is set.", "#66717d")
+    drawSettingRow(canvas, x + 4, y + 4, width - 8, "Seed", String(model.seed))
+    drawSettingRow(canvas, x + 4, y + 6, width - 8, "Renderer", model.rendererBackend === "three" ? "@opentui/three asset backend" : "0x72 terminal sprites")
+    drawSettingRow(canvas, x + 4, y + 8, width - 8, "Debug", model.debugView ? "on via DUNGEON_DEBUG_VIEW=1" : "off")
+    drawSettingRow(canvas, x + 4, y + 10, width - 8, "Host", `bun run host -- --mode race --seed ${model.seed}`)
   }
 
   if (model.dialog === "inventory") {
-    canvas.write(x + 3, y + 2, "Inventory", "#f4d06f")
-    model.session.inventory.slice(0, 8).forEach((item, index) => canvas.write(x + 3, y + 4 + index, `- ${item}`, "#d8dee9"))
+    const rows = inventoryRows(model.session)
+    const gridX = x + 4
+    const gridY = y + 4
+    rows.slice(0, 8).forEach((row, index) => {
+      const cardX = gridX + (index % 2) * Math.floor((width - 10) / 2)
+      const cardY = gridY + Math.floor(index / 2) * 3
+      const cardW = Math.floor((width - 12) / 2)
+      canvas.fill(cardX, cardY, cardW, 2, " ", UI.panel2, UI.panel2)
+      canvas.border(cardX, cardY, cardW, 3, UI.edgeDim)
+      drawMiniIcon(canvas, cardX + 2, cardY + 1, row.sprite, 6, 1)
+      canvas.write(cardX + 9, cardY + 1, trim(row.name, cardW - 15), UI.ink, UI.panel2)
+      canvas.write(cardX + cardW - 5, cardY + 1, `x${row.count}`, UI.gold, UI.panel2)
+    })
+    if (!rows.length) canvas.center(y + Math.floor(height / 2), "Your pack is empty.", UI.soft, UI.panel)
+    canvas.write(x + 4, y + height - 4, "Loot is run-scoped now; multiplayer trading will reuse this inventory grid.", UI.muted, UI.panel)
   }
 
   if (model.dialog === "log") {
-    canvas.write(x + 3, y + 2, "Log", "#f4d06f")
-    model.session.log.slice(0, 8).forEach((line, index) => canvas.write(x + 3, y + 4 + index, trim(line, width - 6), index === 0 ? "#d8dee9" : "#8f9ba8"))
+    model.session.log.slice(0, 10).forEach((line, index) => {
+      const rowY = y + 4 + index
+      const color = index === 0 ? UI.gold : index < 3 ? UI.ink : UI.soft
+      canvas.write(x + 4, rowY, String(index + 1).padStart(2, "0"), UI.muted, UI.panel)
+      canvas.write(x + 8, rowY, trim(line, width - 12), color, UI.panel)
+    })
   }
 
   if (model.dialog === "help") {
-    canvas.write(x + 3, y + 2, "Controls", "#f4d06f")
-    canvas.write(x + 3, y + 4, "Move: arrows/WASD    Confirm: Enter    Back: Esc", "#d8dee9")
-    canvas.write(x + 3, y + 5, "Inventory: i         Log: l           Potion: h         Rest: r", "#d8dee9")
-    canvas.write(x + 3, y + 7, "Combat: Tab target   1-3 skill   Enter/Space rolls d20.", "#8f9ba8")
-    canvas.write(x + 3, y + 8, "Stairs descend to a generated floor after guardians fall.", "#8f9ba8")
+    const rows = [
+      ["Move", "Arrows / WASD"],
+      ["Confirm", "Enter / Space"],
+      ["Pack", "I inventory, H potion, L log"],
+      ["Combat", "Tab target, 1-3 skill, Enter rolls d20"],
+      ["Run", "R rest, Esc pause, Q quit"],
+    ]
+    rows.forEach((row, index) => {
+      const rowY = y + 4 + index * 2
+      drawKeycap(canvas, x + 4, rowY, row[0])
+      canvas.write(x + 18, rowY, row[1], index === 3 ? UI.gold : UI.ink, UI.panel)
+    })
   }
 
   if (model.dialog === "pause") {
-    canvas.write(x + 3, y + 2, "Paused", "#f4d06f")
-    canvas.write(x + 3, y + 4, "Esc resumes. s opens settings. q quits.", "#d8dee9")
-    canvas.write(x + 3, y + 6, "The game keeps one shared seed so race mode can replay fairly.", "#8f9ba8")
+    drawPixelBlock(canvas, x + 5, y + 5, pixelSprite(classSprite(model.session.hero.classId), 10, 5), 0.75)
+    canvas.write(x + 19, y + 4, "The dungeon holds your place.", UI.ink, UI.panel)
+    drawKeycap(canvas, x + 19, y + 6, "Esc")
+    canvas.write(x + 30, y + 6, "Resume", UI.ink, UI.panel)
+    drawKeycap(canvas, x + 19, y + 8, "S")
+    canvas.write(x + 30, y + 8, "Settings", UI.ink, UI.panel)
+    drawKeycap(canvas, x + 19, y + 10, "Q")
+    canvas.write(x + 30, y + 10, "Quit to terminal", UI.hp, UI.panel)
+    canvas.write(x + 4, y + height - 4, "Race mode keeps the same seed so friends can replay the same generated crawl.", UI.soft, UI.panel)
   }
 
-  canvas.center(y + height - 2, "Esc close", "#66717d")
+  canvas.center(y + height - 2, "Esc close", UI.muted, UI.panel)
 }
 
 function drawRunEnd(canvas: Canvas, session: GameSession) {

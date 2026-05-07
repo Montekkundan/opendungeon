@@ -24,6 +24,10 @@ export type PixelSpriteId =
   | "potion"
   | "relic"
   | "chest"
+  | "coin"
+  | "scroll"
+  | "focus-gem"
+  | "ember"
   | "hero"
   | "slime"
   | "ghoul"
@@ -51,9 +55,13 @@ const spriteCrops: Record<PixelSpriteId, Crop> = {
   "wall-a": { sheet: "0x72", tileX: 0, tileY: 1 },
   "wall-b": { sheet: "0x72", tileX: 1, tileY: 1 },
   stairs: { sheet: "0x72", tileX: 6, tileY: 10 },
-  potion: { sheet: "0x72", tileX: 8, tileY: 2, transparent: true },
-  relic: { sheet: "0x72", tileX: 14, tileY: 0, transparent: true },
+  potion: { sheet: "0x72", tileX: 2, tileY: 10, transparent: true },
+  relic: { sheet: "0x72", tileX: 5, tileY: 14, transparent: true },
   chest: { sheet: "0x72", tileX: 5, tileY: 6, transparent: true },
+  coin: { sheet: "0x72", tileX: 1, tileY: 15, transparent: true },
+  scroll: { sheet: "0x72", tileX: 0, tileY: 15, transparent: true },
+  "focus-gem": { sheet: "0x72", tileX: 3, tileY: 14, transparent: true },
+  ember: { sheet: "0x72", tileX: 2, tileY: 14, transparent: true },
   hero: { sheet: "0x72", tileX: 6, tileY: 9, transparent: true },
   slime: { sheet: "0x72", tileX: 1, tileY: 13, transparent: true },
   ghoul: { sheet: "0x72", tileX: 1, tileY: 9, transparent: true },
