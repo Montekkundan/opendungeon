@@ -1,6 +1,6 @@
 import { activeAssetPack } from "../assets/packs.js"
 import { d20FrameCount, d20RollSprite } from "../assets/d20Sprites.js"
-import { pixelSprite, type PixelSprite, type PixelSpriteId } from "../assets/pixelSprites.js"
+import { animatedPixelSprite, pixelSprite, type PixelSprite, type PixelSpriteId, type SpriteAnimationId } from "../assets/pixelSprites.js"
 import {
   actorAt,
   combatSkills,
@@ -164,7 +164,7 @@ function drawCharacter(canvas: Canvas, model: AppModel) {
   classOptions.forEach((option, index) => {
     const selected = model.classIndex === index
     const row = y + 4 + index * 5
-    const sprite: PixelSpriteId = option.id === "arcanist" ? "necromancer" : option.id === "warden" ? "ghoul" : "hero"
+    const sprite = classSprite(option.id)
     canvas.fill(x + 3, row - 1, width - 6, 4, " ", selected ? UI.panel3 : UI.panel2, selected ? UI.panel3 : UI.panel2)
     canvas.border(x + 3, row - 1, width - 6, 4, selected ? UI.gold : UI.edgeDim)
     drawPixelBlock(canvas, x + 6, row, pixelSprite(sprite, 8, 3), selected ? 1 : 0.5)
@@ -304,8 +304,9 @@ function drawGame(canvas: Canvas, model: AppModel) {
 }
 
 function drawMap(canvas: Canvas, session: GameSession, debugView: boolean) {
-  const tileWidth = debugView ? 2 : 8
-  const tileHeight = debugView ? 1 : 4
+  const tileSize = mapTileSize(canvas, debugView)
+  const tileWidth = tileSize.width
+  const tileHeight = tileSize.height
   const hudHeight = debugView ? 4 : gameHudHeight(canvas)
   const bottomHudHeight = debugView ? 0 : gameQuickbarHeight(canvas)
   const viewWidth = Math.floor(canvas.width / tileWidth)
@@ -333,13 +334,28 @@ function drawMap(canvas: Canvas, session: GameSession, debugView: boolean) {
         drawAssetTile(canvas, screenX, screenY, tileWidth, tileHeight, session, x, y, visible, seen)
       }
 
-      if (session.player.x === x && session.player.y === y) drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, "hero", debugView)
+      if (session.player.x === x && session.player.y === y) {
+        drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, classSprite(session.hero.classId), debugView, playerAnimation(session), session.turn)
+      }
       else if (actor) {
-        drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, actor.kind, debugView)
+        drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, actor.kind, debugView, actorAnimation(actor.id === selectedTargetId, session), session.turn + sx + sy)
         if (actor.id === selectedTargetId) drawTargetFrame(canvas, screenX, screenY, tileWidth, tileHeight, debugView)
       }
     }
   }
+}
+
+function mapTileSize(canvas: Canvas, debugView: boolean) {
+  if (debugView) return { width: 2, height: 1 }
+
+  const forced = process.env.OPENDUNGEON_TILE_SCALE
+  if (forced === "compact") return { width: 8, height: 4 }
+  if (forced === "medium") return { width: 12, height: 6 }
+  if (forced === "large") return { width: 16, height: 8 }
+
+  if (canvas.width >= 132 && canvas.height >= 38) return { width: 16, height: 8 }
+  if (canvas.width >= 96 && canvas.height >= 30) return { width: 12, height: 6 }
+  return { width: 8, height: 4 }
 }
 
 function drawAssetTile(
@@ -405,15 +421,29 @@ function drawTileBlock(canvas: Canvas, x: number, y: number, width: number, heig
   }
 }
 
-function drawSprite(canvas: Canvas, x: number, y: number, width: number, height: number, sprite: "hero" | "player" | "slime" | "ghoul" | "necromancer", debugView: boolean) {
+function drawSprite(
+  canvas: Canvas,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  sprite: PixelSpriteId | "player",
+  debugView: boolean,
+  animation: SpriteAnimationId = "idle",
+  frameSeed = 0,
+) {
+  const spriteId: PixelSpriteId = sprite === "player" ? "hero-ranger" : sprite
   if (debugView) {
-    const debugGlyph = sprite === "hero" ? "@@" : activeAssetPack.actors[sprite].glyph.repeat(2)
-    canvas.write(x, y, debugGlyph, sprite === "hero" ? "#f4d06f" : activeAssetPack.actors[sprite].fg)
+    if (spriteId.startsWith("hero")) {
+      canvas.write(x, y, "@@", "#f4d06f")
+      return
+    }
+    const actor = spriteId === "ghoul" || spriteId === "necromancer" || spriteId === "slime" ? activeAssetPack.actors[spriteId] : activeAssetPack.actors.player
+    canvas.write(x, y, actor.glyph.repeat(2), actor.fg)
     return
   }
 
-  const spriteId = sprite === "hero" || sprite === "player" ? "hero" : sprite
-  drawPixelBlock(canvas, x, y, pixelSprite(spriteId, width, height), 1)
+  drawPixelBlock(canvas, x, y, animatedPixelSprite(spriteId, animation, frameSeed, width, height), 1)
 }
 
 function drawPixelBlock(canvas: Canvas, x: number, y: number, sprite: PixelSprite, dim = 1) {
@@ -773,10 +803,22 @@ function countInventory(session: GameSession, name: string) {
   return session.inventory.filter((item) => item === name).length
 }
 
+function playerAnimation(session: GameSession): SpriteAnimationId {
+  if (session.status === "dead") return "death"
+  if (session.combat.active) return session.combat.lastRoll?.hit ? "attack-melee" : "idle"
+  return "walk"
+}
+
+function actorAnimation(selected: boolean, session: GameSession): SpriteAnimationId {
+  if (selected) return "shocked"
+  if (session.combat.active) return "idle"
+  return "walk"
+}
+
 function classSprite(classId: HeroClass): PixelSpriteId {
-  if (classId === "arcanist") return "necromancer"
-  if (classId === "warden") return "ghoul"
-  return "hero"
+  if (classId === "arcanist") return "hero-arcanist"
+  if (classId === "warden") return "hero-warden"
+  return "hero-ranger"
 }
 
 function actorSpriteId(kind: string): PixelSpriteId {
@@ -799,18 +841,19 @@ function drawDialog(canvas: Canvas, model: AppModel) {
   if (!model.dialog) return
   const wide = model.dialog === "inventory" || model.dialog === "log" || model.dialog === "settings"
   const width = Math.min(wide ? 88 : 74, canvas.width - 10)
-  const height = model.dialog === "inventory" || model.dialog === "log" ? 18 : model.dialog === "settings" ? 18 : model.dialog === "help" ? 18 : 14
+  const height = model.dialog === "inventory" || model.dialog === "log" ? 18 : model.dialog === "settings" ? 20 : model.dialog === "help" ? 18 : 14
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.floor((canvas.height - height) / 2)
   drawDialogFrame(canvas, x, y, width, height, dialogTitle(model.dialog), dialogIcon(model.dialog))
 
   if (model.dialog === "settings") {
     drawSettingRow(canvas, x + 4, y + 4, width - 8, "Seed", String(model.seed))
-    drawSettingRow(canvas, x + 4, y + 6, width - 8, "Renderer", model.rendererBackend === "three" ? "@opentui/three asset backend" : "0x72 terminal sprites")
-    drawSettingRow(canvas, x + 4, y + 8, width - 8, "Debug", model.debugView ? "on via OPENDUNGEON_DEBUG_VIEW=1" : "off")
-    drawSettingRow(canvas, x + 4, y + 10, width - 8, "Save path", saveDirectory())
-    drawSettingRow(canvas, x + 4, y + 12, width - 8, "Cloud", "planned GitHub login + encrypted save sync")
-    drawSettingRow(canvas, x + 4, y + 14, width - 8, "Host", `bun run host -- --mode race --seed ${model.seed}`)
+    drawSettingRow(canvas, x + 4, y + 6, width - 8, "Renderer", model.rendererBackend === "three" ? "@opentui/three asset backend" : "owned terminal sprites")
+    drawSettingRow(canvas, x + 4, y + 8, width - 8, "Tiles", `${activeAssetPack.tileSize}px source, adaptive terminal scale`)
+    drawSettingRow(canvas, x + 4, y + 10, width - 8, "Debug", model.debugView ? "on via OPENDUNGEON_DEBUG_VIEW=1" : "off")
+    drawSettingRow(canvas, x + 4, y + 12, width - 8, "Save path", saveDirectory())
+    drawSettingRow(canvas, x + 4, y + 14, width - 8, "Cloud", "planned GitHub login + encrypted save sync")
+    drawSettingRow(canvas, x + 4, y + 16, width - 8, "Host", `bun run host -- --mode race --seed ${model.seed}`)
   }
 
   if (model.dialog === "inventory") {

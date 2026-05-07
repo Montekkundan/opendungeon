@@ -1,5 +1,0 @@
-Source: https://opengameart.org/content/d20-rolling-animations-high-resolution
-Author: lukems-br
-Asset license: CC0
-Downloaded files: r01.png through r20.png
-Notes: OpenGameArt page describes one 12-frame D20 rolling spritesheet per result, with each result licensed CC0.

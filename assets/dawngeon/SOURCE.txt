@@ -1,5 +1,0 @@
-Source: https://pebonius.itch.io/dawngeon
-Author: peb
-Asset license: Creative Commons Zero v1.0 Universal
-Downloaded files: preview.png, showcase-sprites.png
-Notes: Itch page lists Dawngeon as a 16x16 dungeon tileset containing walls, floors, player characters, enemies, chests, trapdoor, and column.

@@ -1,58 +1,56 @@
 import { SpriteResourceManager, type ResourceConfig, type SpriteDefinition } from "@opentui/three"
+import { spriteSheetPaths } from "../assets/opendungeonSprites.js"
 
 export type ThreeAssetManifest = {
   resources: Record<string, ResourceConfig>
 }
 
-export const dawngeonThreeAssets: ThreeAssetManifest = {
+export const opendungeonThreeAssets: ThreeAssetManifest = {
   resources: {
-    preview: {
-      imagePath: "assets/dawngeon/preview.png",
+    terrain: {
+      imagePath: spriteSheetPaths.terrain,
       sheetNumFrames: 1,
     },
-    dungeonSheet: {
-      imagePath: "assets/0x72/dungeon-tileset-v2.png",
+    items: {
+      imagePath: spriteSheetPaths.items,
+      sheetNumFrames: 1,
+    },
+    actors: {
+      imagePath: spriteSheetPaths.actors,
       sheetNumFrames: 1,
     },
   },
 }
 
-export async function createDawngeonSpriteDefinitions(resourceManager: SpriteResourceManager): Promise<Record<string, SpriteDefinition>> {
-  const previewResource = await resourceManager.createResource(dawngeonThreeAssets.resources.preview)
-  const dungeonSheetResource = await resourceManager.createResource(dawngeonThreeAssets.resources.dungeonSheet)
+export async function createOpendungeonSpriteDefinitions(resourceManager: SpriteResourceManager): Promise<Record<string, SpriteDefinition>> {
+  const terrainResource = await resourceManager.createResource(opendungeonThreeAssets.resources.terrain)
+  const itemResource = await resourceManager.createResource(opendungeonThreeAssets.resources.items)
+  const actorResource = await resourceManager.createResource(opendungeonThreeAssets.resources.actors)
 
   return {
-    preview: {
-      id: "dawngeon-preview",
-      initialAnimation: "idle",
-      animations: {
-        idle: {
-          resource: previewResource,
-          animNumFrames: 1,
-          animFrameOffset: 0,
-          frameDuration: 1000,
-          loop: false,
-        },
-      },
-      scale: 1,
-    },
-    dungeonSheet: {
-      id: "0x72-dungeon-sheet",
-      initialAnimation: "idle",
-      animations: {
-        idle: {
-          resource: dungeonSheetResource,
-          animNumFrames: 1,
-          animFrameOffset: 0,
-          frameDuration: 1000,
-          loop: false,
-        },
-      },
-      scale: 1,
-    },
+    terrain: singleFrameSprite("opendungeon-terrain", terrainResource),
+    items: singleFrameSprite("opendungeon-items", itemResource),
+    actors: singleFrameSprite("opendungeon-actors", actorResource),
   }
 }
 
 export function shouldUseThreeRenderer() {
   return (process.env.OPENDUNGEON_RENDERER ?? process.env.DUNGEON_RENDERER) === "three"
+}
+
+function singleFrameSprite(id: string, resource: Awaited<ReturnType<SpriteResourceManager["createResource"]>>): SpriteDefinition {
+  return {
+    id,
+    initialAnimation: "idle",
+    animations: {
+      idle: {
+        resource,
+        animNumFrames: 1,
+        animFrameOffset: 0,
+        frameDuration: 1000,
+        loop: false,
+      },
+    },
+    scale: 1,
+  }
 }

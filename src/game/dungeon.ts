@@ -1,5 +1,5 @@
 import { createRng, type Rng } from "./rng.js"
-import type { ActorId, TileId } from "../assets/packs.js"
+import type { ActorId, TileId } from "./domainTypes.js"
 
 export type Point = {
   x: number

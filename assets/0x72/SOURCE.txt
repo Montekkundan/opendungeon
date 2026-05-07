@@ -1,5 +1,0 @@
-Source: https://0x72.itch.io/16x16-dungeon-tileset
-Author: 0x72
-Asset license: Creative Commons Zero v1.0 Universal
-Downloaded file: dungeon-tileset-v2.png
-Notes: Itch page states the tileset can be used, modified, and distributed for private or commercial projects under CC0.

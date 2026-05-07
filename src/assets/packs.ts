@@ -1,5 +1,4 @@
-export type TileId = "void" | "floor" | "wall" | "door" | "stairs" | "potion" | "relic" | "chest"
-export type ActorId = "player" | "slime" | "ghoul" | "necromancer"
+import type { ActorId, TileId } from "../game/domainTypes.js"
 
 export type GlyphStyle = {
   glyph: string
@@ -10,7 +9,7 @@ export type AssetPack = {
   id: string
   name: string
   mood: "dark-serious" | "clean" | "custom"
-  tileSize: 16
+  tileSize: 64
   sourceUrl: string
   license: string
   author: string
@@ -20,20 +19,20 @@ export type AssetPack = {
   actors: Record<ActorId, GlyphStyle>
 }
 
-export const dawngeonPack: AssetPack = {
-  id: "dawngeon",
-  name: "Dawngeon",
-  mood: "dark-serious",
-  tileSize: 16,
-  sourceUrl: "https://pebonius.itch.io/dawngeon",
-  license: "Creative Commons Zero v1.0 Universal",
-  author: "peb",
-  previewPath: "assets/dawngeon/preview.png",
-  sheetPath: "assets/dawngeon/showcase-sprites.png",
+export const opendungeonPack: AssetPack = {
+  id: "opendungeon",
+  name: "opendungeon 64px",
+  mood: "custom",
+  tileSize: 64,
+  sourceUrl: "generated://opendungeon-owned-assets",
+  license: "Project-owned generated asset set",
+  author: "opendungeon",
+  previewPath: "assets/opendungeon/terrain.png",
+  sheetPath: "assets/opendungeon/actors.png",
   tiles: {
-    void: { glyph: " ", fg: "#071013" },
-    floor: { glyph: ".", fg: "#36595a" },
-    wall: { glyph: "#", fg: "#7a4f42" },
+    void: { glyph: " ", fg: "#05070a" },
+    floor: { glyph: ".", fg: "#5b6f76" },
+    wall: { glyph: "#", fg: "#7f7281" },
     door: { glyph: "+", fg: "#b88058" },
     stairs: { glyph: ">", fg: "#f4d06f" },
     potion: { glyph: "!", fg: "#d56b8c" },
@@ -41,47 +40,18 @@ export const dawngeonPack: AssetPack = {
     chest: { glyph: "=", fg: "#c38b6a" },
   },
   actors: {
-    player: { glyph: "@", fg: "#d8dee9" },
+    player: { glyph: "@", fg: "#f4d06f" },
     slime: { glyph: "s", fg: "#7dffb2" },
     ghoul: { glyph: "g", fg: "#b5bec6" },
     necromancer: { glyph: "n", fg: "#b48ead" },
   },
 }
 
-export const dungeonTilesetV2Pack: AssetPack = {
-  id: "0x72-dungeon-v2",
-  name: "0x72 Dungeon",
-  mood: "dark-serious",
-  tileSize: 16,
-  sourceUrl: "https://0x72.itch.io/16x16-dungeon-tileset",
-  license: "Creative Commons Zero v1.0 Universal",
-  author: "0x72",
-  previewPath: "assets/0x72/dungeon-tileset-v2.png",
-  sheetPath: "assets/0x72/dungeon-tileset-v2.png",
-  tiles: {
-    void: { glyph: " ", fg: "#071013" },
-    floor: { glyph: ".", fg: "#4a2c3b" },
-    wall: { glyph: "#", fg: "#74505f" },
-    door: { glyph: "+", fg: "#b88058" },
-    stairs: { glyph: ">", fg: "#d6a85c" },
-    potion: { glyph: "!", fg: "#d46a6a" },
-    relic: { glyph: "$", fg: "#d6a85c" },
-    chest: { glyph: "=", fg: "#c38b6a" },
-  },
-  actors: {
-    player: { glyph: "@", fg: "#d8dee9" },
-    slime: { glyph: "s", fg: "#5da9d6" },
-    ghoul: { glyph: "g", fg: "#e8dfd8" },
-    necromancer: { glyph: "n", fg: "#d6a85c" },
-  },
-}
-
 export const assetPacks = {
-  dawngeon: dawngeonPack,
-  dungeonTilesetV2: dungeonTilesetV2Pack,
+  opendungeon: opendungeonPack,
 } as const
 
 export type AssetPackId = keyof typeof assetPacks
 
-export const activeAssetPackId: AssetPackId = "dungeonTilesetV2"
+export const activeAssetPackId: AssetPackId = "opendungeon"
 export const activeAssetPack = assetPacks[activeAssetPackId]

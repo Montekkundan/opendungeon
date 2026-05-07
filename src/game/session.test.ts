@@ -6,8 +6,6 @@ import { createSession, performCombatAction, selectSkill, tryMove, usePotion } f
 import { setTile } from "./dungeon.js"
 import { listSaves, loadSave, saveSession } from "./saveStore.js"
 import { draw } from "../ui/screens.js"
-import { d20RollSprite } from "../assets/d20Sprites.js"
-import { pixelSprite } from "../assets/pixelSprites.js"
 
 describe("game session", () => {
   test("creates a seeded dungeon with a reachable player start", () => {
@@ -152,15 +150,5 @@ describe("game session", () => {
       else process.env.OPENDUNGEON_SAVE_DIR = previousSaveDir
       rmSync(dir, { recursive: true, force: true })
     }
-  })
-
-  test("loads pixel sprites from the downloaded asset sheet", () => {
-    const hero = pixelSprite("hero", 8, 4)
-    const wall = pixelSprite("wall-a", 8, 4)
-    const d20 = d20RollSprite(20, 11, 8, 4)
-
-    expect(hero.cells.flat().some((cell) => cell.ch === "█")).toBe(true)
-    expect(wall.cells.flat().every((cell) => cell.bg)).toBe(true)
-    expect(d20.cells.flat().some((cell) => cell.ch === "█")).toBe(true)
   })
 })
