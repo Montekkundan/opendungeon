@@ -10,8 +10,9 @@ Terminal roguelike RPG built with OpenTUI.
 - Single-player runs with co-op/race mode hooks
 - Local save/load system
 - Local profile and accessibility settings
-- Custom 64px owned sprite assets
-- High-resolution half-block terminal sprite renderer
+- Runtime Itch-source actor sprites
+- Procedural terminal terrain, item, and dice sprites
+- Adjustable camera FOV
 - Animated crawler, enemy, item, terrain, and dice sprites
 - Multiple animated d20 dice skins
 - Turn-based d20 combat

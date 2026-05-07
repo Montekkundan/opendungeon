@@ -5,7 +5,7 @@ import { defaultDiceSkin, diceSkinIds, type DiceSkinId } from "../assets/diceSki
 
 export type ControlScheme = "hybrid" | "arrows" | "vim"
 export type BackgroundFx = "low" | "normal" | "dense"
-export type TileScalePreference = "auto" | "medium" | "large" | "close"
+export type TileScalePreference = "overview" | "wide" | "medium" | "close"
 
 export type UserSettings = {
   username: string
@@ -37,7 +37,7 @@ export const defaultSettings: UserSettings = {
   highContrast: false,
   reduceMotion: false,
   backgroundFx: "normal",
-  tileScale: "close",
+  tileScale: "wide",
   diceSkin: defaultDiceSkin,
   music: false,
   sound: true,
@@ -112,7 +112,9 @@ function asBackgroundFx(value: unknown): BackgroundFx {
 }
 
 function asTileScale(value: unknown): TileScalePreference {
-  return value === "auto" || value === "medium" || value === "large" || value === "close" ? value : defaultSettings.tileScale
+  if (value === "overview" || value === "wide" || value === "medium" || value === "close") return value
+  if (value === "auto" || value === "large") return "medium"
+  return defaultSettings.tileScale
 }
 
 function asDiceSkin(value: unknown): DiceSkinId {

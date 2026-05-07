@@ -1,28 +1,5 @@
-import { diceSkinIds, defaultDiceSkin, type DiceSkinId } from "./diceSkins.js"
-
-export const sourceTileSize = 64
 export const animationFrameCount = 4
 export const diceFrameCount = 12
-
-export const spriteSheetPaths = {
-  terrain: "assets/opendungeon/atlases/terrain.png",
-  items: "assets/opendungeon/atlases/items.png",
-  actors: "assets/opendungeon/atlases/actors.png",
-} as const
-
-export const d20SheetPaths = Object.fromEntries(
-  diceSkinIds.map((skin) => [skin, `assets/opendungeon/atlases/d20-${skin}.png`]),
-) as Record<DiceSkinId, string>
-export const d20SheetPath = d20SheetPaths[defaultDiceSkin]
-
-export type SpriteSheetId = keyof typeof spriteSheetPaths
-
-export type SpriteCrop = {
-  sheet: SpriteSheetId
-  tileX: number
-  tileY: number
-  transparent?: boolean
-}
 
 export const spriteAnimations = [
   "idle",
@@ -54,68 +31,50 @@ export const animatedSpriteIds = [
 
 export type AnimatedSpriteId = (typeof animatedSpriteIds)[number]
 
-export const staticSpriteCrops = {
-  "floor-a": { sheet: "terrain", tileX: 0, tileY: 0 },
-  "floor-b": { sheet: "terrain", tileX: 1, tileY: 0 },
-  "floor-c": { sheet: "terrain", tileX: 2, tileY: 0 },
-  "wall-a": { sheet: "terrain", tileX: 3, tileY: 0 },
-  "wall-b": { sheet: "terrain", tileX: 4, tileY: 0 },
-  stairs: { sheet: "terrain", tileX: 5, tileY: 0, transparent: true },
-  door: { sheet: "terrain", tileX: 6, tileY: 0, transparent: true },
-  void: { sheet: "terrain", tileX: 7, tileY: 0 },
+export const staticSpriteIds = [
+  "floor-a",
+  "floor-b",
+  "floor-c",
+  "wall-a",
+  "wall-b",
+  "stairs",
+  "door",
+  "void",
+  "potion",
+  "relic",
+  "chest",
+  "coin",
+  "scroll",
+  "focus-gem",
+  "ember",
+  "sword",
+  "bow",
+  "staff",
+  "dagger",
+  "axe",
+  "shield",
+  "armor",
+  "key",
+  "map",
+  "trap",
+  "dice",
+] as const
 
-  potion: { sheet: "items", tileX: 0, tileY: 0, transparent: true },
-  relic: { sheet: "items", tileX: 1, tileY: 0, transparent: true },
-  chest: { sheet: "items", tileX: 2, tileY: 0, transparent: true },
-  coin: { sheet: "items", tileX: 3, tileY: 0, transparent: true },
-  scroll: { sheet: "items", tileX: 4, tileY: 0, transparent: true },
-  "focus-gem": { sheet: "items", tileX: 5, tileY: 0, transparent: true },
-  ember: { sheet: "items", tileX: 6, tileY: 0, transparent: true },
-  sword: { sheet: "items", tileX: 7, tileY: 0, transparent: true },
-  bow: { sheet: "items", tileX: 0, tileY: 1, transparent: true },
-  staff: { sheet: "items", tileX: 1, tileY: 1, transparent: true },
-  dagger: { sheet: "items", tileX: 2, tileY: 1, transparent: true },
-  axe: { sheet: "items", tileX: 3, tileY: 1, transparent: true },
-  shield: { sheet: "items", tileX: 4, tileY: 1, transparent: true },
-  armor: { sheet: "items", tileX: 5, tileY: 1, transparent: true },
-  key: { sheet: "items", tileX: 6, tileY: 1, transparent: true },
-  map: { sheet: "items", tileX: 7, tileY: 1, transparent: true },
-  trap: { sheet: "items", tileX: 0, tileY: 2, transparent: true },
-  dice: { sheet: "items", tileX: 1, tileY: 2, transparent: true },
-} as const satisfies Record<string, SpriteCrop>
-
-export const pixelSpriteIds = [...Object.keys(staticSpriteCrops), ...animatedSpriteIds] as PixelSpriteId[]
-
-export type StaticSpriteId = keyof typeof staticSpriteCrops
+export type StaticSpriteId = (typeof staticSpriteIds)[number]
 export type PixelSpriteId = StaticSpriteId | AnimatedSpriteId
 
+export const pixelSpriteIds = [...staticSpriteIds, ...animatedSpriteIds] as PixelSpriteId[]
 export const weaponSpriteIds = ["sword", "bow", "staff", "dagger", "axe", "shield"] as const
 export const lootSpriteIds = ["potion", "relic", "chest", "coin", "scroll", "focus-gem", "ember", "key", "map"] as const
-
-export function cropForSprite(id: PixelSpriteId, animation: SpriteAnimationId = "idle", frame = 0): SpriteCrop {
-  if (isAnimatedSprite(id)) {
-    const actorIndex = animatedSpriteIds.indexOf(id)
-    const animationIndex = spriteAnimations.indexOf(animation)
-    const safeAnimationIndex = animationIndex >= 0 ? animationIndex : 0
-    return {
-      sheet: "actors",
-      tileX: wrap(frame, animationFrameCount),
-      tileY: actorIndex * spriteAnimations.length + safeAnimationIndex,
-      transparent: true,
-    }
-  }
-
-  return staticSpriteCrops[id]
-}
 
 export function isAnimatedSprite(id: string): id is AnimatedSpriteId {
   return (animatedSpriteIds as readonly string[]).includes(id)
 }
 
-export function animationFramesForSprite(id: PixelSpriteId, animation: SpriteAnimationId) {
-  return isAnimatedSprite(id) && spriteAnimations.includes(animation) ? animationFrameCount : 1
+export function isStaticSprite(id: string): id is StaticSpriteId {
+  return (staticSpriteIds as readonly string[]).includes(id)
 }
 
-function wrap(value: number, count: number) {
-  return ((Math.round(value) % count) + count) % count
+export function animationFramesForSprite(id: PixelSpriteId, animation: SpriteAnimationId) {
+  return isAnimatedSprite(id) && spriteAnimations.includes(animation) ? animationFrameCount : 1
 }

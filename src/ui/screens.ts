@@ -74,7 +74,7 @@ const settingsOptions = [
   { id: "reduceMotion", name: "Reduce motion", text: "Quieter background and dice movement." },
   { id: "diceSkin", name: "Dice skin", text: "Faceted polyhedral dice color used in combat rolls." },
   { id: "backgroundFx", name: "Background FX", text: "How much title-screen dungeon rain appears." },
-  { id: "tileScale", name: "Map scale", text: "How close the dungeon camera feels." },
+  { id: "tileScale", name: "Camera FOV", text: "Wide shows more rooms; close keeps sprite detail." },
   { id: "music", name: "Music", text: "Stored for the future audio layer." },
   { id: "sound", name: "SFX", text: "Stored for combat and loot feedback later." },
 ] as const
@@ -426,7 +426,7 @@ function drawControls(canvas: Canvas, model: AppModel) {
     ["Inventory", "I opens pack. H drinks potion. L opens run log."],
     ["Run", "R rests outside combat. Esc pauses. Ctrl+S/F5 saves locally."],
     ["Accessibility", accessibilitySummary(model.settings)],
-    ["Visuals", `Map scale ${model.settings.tileScale}. Dice ${diceSkinName(model.settings.diceSkin)}. FX ${model.settings.backgroundFx}.`],
+    ["Visuals", `Camera ${model.settings.tileScale}. Dice ${diceSkinName(model.settings.diceSkin)}. FX ${model.settings.backgroundFx}.`],
     ["Audio", `Music ${onOff(model.settings.music)}. SFX ${onOff(model.settings.sound)}.`],
   ]
 
@@ -503,18 +503,18 @@ function mapTileSize(canvas: Canvas, debugView: boolean, preference: UserSetting
   if (debugView) return { width: 2, height: 1 }
 
   const forced = process.env.OPENDUNGEON_TILE_SCALE
-  if (forced === "compact") return { width: 12, height: 6 }
-  if (forced === "medium") return { width: 16, height: 8 }
-  if (forced === "large") return { width: 22, height: 11 }
-  if (forced === "close") return { width: 28, height: 14 }
-  if (preference === "medium") return { width: 16, height: 8 }
-  if (preference === "large") return { width: 22, height: 11 }
-  if (preference === "close") return { width: 28, height: 14 }
+  if (forced === "overview" || forced === "compact") return { width: 10, height: 5 }
+  if (forced === "wide") return { width: 14, height: 7 }
+  if (forced === "medium") return { width: 18, height: 9 }
+  if (forced === "large" || forced === "close") return { width: 24, height: 12 }
+  if (preference === "overview") return { width: 10, height: 5 }
+  if (preference === "wide") return { width: 14, height: 7 }
+  if (preference === "medium") return { width: 18, height: 9 }
+  if (preference === "close") return { width: 24, height: 12 }
 
-  if (canvas.width >= 180 && canvas.height >= 48) return { width: 28, height: 14 }
-  if (canvas.width >= 132 && canvas.height >= 38) return { width: 22, height: 11 }
-  if (canvas.width >= 96 && canvas.height >= 30) return { width: 16, height: 8 }
-  return { width: 12, height: 6 }
+  if (canvas.width >= 132 && canvas.height >= 38) return { width: 14, height: 7 }
+  if (canvas.width >= 96 && canvas.height >= 30) return { width: 12, height: 6 }
+  return { width: 10, height: 5 }
 }
 
 function drawAssetTile(
@@ -718,7 +718,7 @@ function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollA
   const height = gameQuickbarHeight(canvas)
   if (!height) return
   const slotCount = 6
-  const slotWidth = 13
+  const slotWidth = height >= 10 ? 16 : 13
   const width = slotCount * slotWidth + 4
   const x = Math.max(2, Math.floor((canvas.width - width) / 2))
   const y = canvas.height - height
@@ -744,8 +744,13 @@ function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollA
     canvas.fill(slotX + 1, y + 2, slotWidth - 3, height - 4, " ", UI.panel2, UI.panel2)
     canvas.border(slotX, y + 1, slotWidth - 1, height - 2, edge)
     canvas.write(slotX + 1, y + 1, item.key, item.active ? UI.gold : UI.muted, UI.panel2)
-    if (item.custom === "d20") drawD20Sprite(canvas, slotX + 2, y + 2, diceResult(session, animation), diceFrame(session, animation), 8, 3, settings.diceSkin, item.active && !settings.reduceMotion, animation)
-    else if (item.sprite) drawMiniIcon(canvas, slotX + 3, y + 2, item.sprite, 7, 3)
+    if (item.custom === "d20") {
+      const diceWidth = height >= 10 ? 11 : 8
+      const diceHeight = height >= 10 ? 5 : 3
+      drawD20Sprite(canvas, slotX + 2, y + 2, diceResult(session, animation), diceFrame(session, animation), diceWidth, diceHeight, settings.diceSkin, item.active && !settings.reduceMotion, animation)
+    } else if (item.sprite) {
+      drawMiniIcon(canvas, slotX + 3, y + 2, item.sprite, height >= 10 ? 9 : 7, height >= 10 ? 4 : 3)
+    }
     canvas.write(slotX + 1, y + height - 3, trim(item.label, slotWidth - 3), item.active ? UI.gold : UI.soft, UI.panel2)
     if (item.count !== undefined && item.count !== "0") {
       const count = trim(item.count, 3)
@@ -764,7 +769,7 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
   const roll = session.combat.lastRoll
 
   drawPanel(canvas, x, y, width, height, "Turn Combat", UI.gold)
-  drawD20Sprite(canvas, x + width - 11, y + 1, diceResult(session, animation), diceFrame(session, animation), 8, 3, settings.diceSkin, !settings.reduceMotion, animation)
+  drawD20Sprite(canvas, x + width - 14, y + 1, diceResult(session, animation), diceFrame(session, animation), 11, 4, settings.diceSkin, !settings.reduceMotion, animation)
 
   canvas.write(x + 2, y + 3, "Targets", UI.brass, UI.panel)
   targets.slice(0, 4).forEach((target, index) => {
@@ -792,12 +797,12 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
   canvas.write(x + 3, y + height - 7, trim(selectedSkill.text, width - 6), UI.soft, UI.panel2)
   canvas.write(x + 3, y + height - 6, trim(session.combat.message, width - 6), UI.ink, UI.panel2)
 
-  const diceX = x + width - 15
-  const diceY = y + height - 5
-  canvas.border(diceX, diceY, 12, 4, roll?.hit ? UI.focus : UI.hp)
-  drawD20Sprite(canvas, diceX + 1, diceY + 1, diceResult(session, animation), diceFrame(session, animation), 5, 2, settings.diceSkin, !settings.reduceMotion, animation)
-  canvas.write(diceX + 7, diceY + 1, roll ? String(roll.d20).padStart(2, "0") : "d20", roll?.hit ? UI.focus : UI.gold)
-  canvas.write(diceX + 2, diceY + 2, roll ? `${roll.total}/${roll.dc}` : statAbbreviations[selectedSkill.stat], UI.ink)
+  const diceX = x + width - 18
+  const diceY = y + height - 7
+  canvas.border(diceX, diceY, 15, 6, roll?.hit ? UI.focus : UI.hp)
+  drawD20Sprite(canvas, diceX + 1, diceY + 1, diceResult(session, animation), diceFrame(session, animation), 8, 4, settings.diceSkin, !settings.reduceMotion, animation)
+  canvas.write(diceX + 10, diceY + 2, roll ? String(roll.d20).padStart(2, "0") : "d20", roll?.hit ? UI.focus : UI.gold)
+  canvas.write(diceX + 2, diceY + 4, roll ? `${roll.total}/${roll.dc}` : statAbbreviations[selectedSkill.stat], UI.ink)
 
   const footer = roll ? `${roll.skill} ${roll.hit ? "hit" : "miss"} ${roll.target}` : "Enter rolls selected skill"
   canvas.write(x + 2, y + height - 2, trim(footer, width - 4), UI.muted, UI.panel)
@@ -874,7 +879,8 @@ function gameHudHeight(canvas: Canvas) {
 }
 
 function gameQuickbarHeight(canvas: Canvas) {
-  return canvas.height < 30 || canvas.width < 90 ? 0 : 8
+  if (canvas.height < 30 || canvas.width < 90) return 0
+  return canvas.height >= 42 && canvas.width >= 120 ? 10 : 8
 }
 
 function drawPanel(canvas: Canvas, x: number, y: number, width: number, height: number, title: string, accent = UI.edge) {
@@ -1124,7 +1130,7 @@ function actorSpriteId(kind: string): PixelSpriteId {
 function compactControls(session: GameSession) {
   return session.combat.active
     ? "Tab target   1-3 skill   Enter roll   H potion   Ctrl+S save"
-    : "I inventory   L log   H potion   R rest   Ctrl+S save   Esc pause"
+    : "I inventory   L log   H potion   -/= camera   Ctrl+S save   Esc pause"
 }
 
 function writeRight(canvas: Canvas, y: number, text: string, color: string) {
@@ -1142,8 +1148,8 @@ function drawDialog(canvas: Canvas, model: AppModel) {
 
   if (model.dialog === "settings") {
     drawSettingRow(canvas, x + 4, y + 4, width - 8, "Seed", String(model.seed))
-    drawSettingRow(canvas, x + 4, y + 6, width - 8, "Renderer", model.rendererBackend === "three" ? "@opentui/three asset backend" : "owned terminal sprites")
-    drawSettingRow(canvas, x + 4, y + 8, width - 8, "Tiles", `${activeAssetPack.tileSize}px source, adaptive terminal scale`)
+    drawSettingRow(canvas, x + 4, y + 6, width - 8, "Renderer", model.rendererBackend === "three" ? "@opentui/three preview disabled" : "Itch cache + terminal sprites")
+    drawSettingRow(canvas, x + 4, y + 8, width - 8, "Camera", `${model.settings.tileScale} FOV, ${activeAssetPack.tileSize}px source actors`)
     drawSettingRow(canvas, x + 4, y + 10, width - 8, "Debug", model.debugView ? "on via OPENDUNGEON_DEBUG_VIEW=1" : "off")
     drawSettingRow(canvas, x + 4, y + 12, width - 8, "Save path", saveDirectory())
     drawSettingRow(canvas, x + 4, y + 14, width - 8, "Cloud", "planned GitHub login + encrypted save sync")
@@ -1184,6 +1190,7 @@ function drawDialog(canvas: Canvas, model: AppModel) {
       ["Save", "Ctrl+S or F5 saves locally"],
       ["Pack", "I inventory, H potion, L log"],
       ["Combat", "Tab target, 1-3 skill, Enter rolls d20"],
+      ["Camera", "- wider FOV, = closer view"],
       ["Run", "R rest, Esc pause, Q quit"],
     ]
     rows.forEach((row, index) => {

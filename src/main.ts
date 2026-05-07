@@ -248,6 +248,14 @@ function handleGameKey(key: KeyEvent) {
     model.dialog = "help"
     return
   }
+  if (key.name === "-" || key.sequence === "-") {
+    adjustMapScale(-1)
+    return
+  }
+  if (key.name === "=" || key.sequence === "=" || key.sequence === "+") {
+    adjustMapScale(1)
+    return
+  }
 
   if (model.session.combat.active) {
     handleCombatKey(key)
@@ -459,7 +467,7 @@ function changeCurrentSetting() {
   if (item.id === "reduceMotion") model.settings.reduceMotion = !model.settings.reduceMotion
   if (item.id === "diceSkin") model.settings.diceSkin = cycleValue(model.settings.diceSkin, diceSkinIds)
   if (item.id === "backgroundFx") model.settings.backgroundFx = cycleValue(model.settings.backgroundFx, ["low", "normal", "dense"])
-  if (item.id === "tileScale") model.settings.tileScale = cycleValue(model.settings.tileScale, ["auto", "medium", "large", "close"])
+  if (item.id === "tileScale") model.settings.tileScale = cycleValue(model.settings.tileScale, mapScaleOptions)
   if (item.id === "music") model.settings.music = !model.settings.music
   if (item.id === "sound") model.settings.sound = !model.settings.sound
   saveUserSettings("Settings saved locally.")
@@ -503,6 +511,16 @@ function handleInputKey(key: KeyEvent) {
 function saveUserSettings(status: string) {
   saveSettings(model.settings)
   model.saveStatus = status
+}
+
+const mapScaleOptions: UserSettings["tileScale"][] = ["overview", "wide", "medium", "close"]
+
+function adjustMapScale(delta: number) {
+  const index = mapScaleOptions.indexOf(model.settings.tileScale)
+  const next = mapScaleOptions[clamp(index + delta, 0, mapScaleOptions.length - 1)] ?? "wide"
+  if (next === model.settings.tileScale) return
+  model.settings.tileScale = next
+  saveUserSettings(`Camera FOV set to ${next}.`)
 }
 
 function refresh() {

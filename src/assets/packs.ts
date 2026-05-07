@@ -9,7 +9,7 @@ export type AssetPack = {
   id: string
   name: string
   mood: "dark-serious" | "clean" | "custom"
-  tileSize: 64
+  tileSize: number
   sourceUrl: string
   license: string
   author: string
@@ -21,14 +21,13 @@ export type AssetPack = {
 
 export const opendungeonPack: AssetPack = {
   id: "opendungeon",
-  name: "opendungeon 64px",
+  name: "Itch runtime",
   mood: "custom",
-  tileSize: 64,
-  sourceUrl: "generated://opendungeon-owned-assets",
-  license: "Project-owned generated asset set",
-  author: "opendungeon",
-  previewPath: "assets/opendungeon/terrain.png",
-  sheetPath: "assets/opendungeon/actors.png",
+  tileSize: 100,
+  sourceUrl: "runtime://itch-cache-and-procedural-terminal-sprites",
+  license: "Runtime renderer uses locally cached free Itch sources where present; procedural terminal sprites for terrain, items, and dice.",
+  author: "Zerie, Xzany, MonopixelArt, opendungeon",
+  previewPath: ".asset-cache/itch/extracted/zerie/Tiny RPG Character Asset Pack v1.03 -Free Soldier&Orc/Characters(100x100)/Soldier/Soldier/Soldier-Idle.png",
   tiles: {
     void: { glyph: " ", fg: "#05070a" },
     floor: { glyph: ".", fg: "#5b6f76" },
