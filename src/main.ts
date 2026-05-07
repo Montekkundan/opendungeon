@@ -1,5 +1,5 @@
 import { TextRenderable, createCliRenderer, type KeyEvent } from "@opentui/core"
-import { createSession, rest, tryMove, usePotion, type HeroClass, type MultiplayerMode } from "./game/session.js"
+import { createSession, rest, tryMove, usePotion, type GameSession, type HeroClass, type MultiplayerMode } from "./game/session.js"
 import {
   currentClass,
   currentMode,
@@ -22,6 +22,7 @@ const model: AppModel = {
   debugView: process.env.DUNGEON_DEBUG_VIEW === "1",
   rendererBackend: shouldUseThreeRenderer() ? "three" : "terminal",
 }
+let submittedSession: GameSession | null = null
 
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
@@ -66,6 +67,7 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
   if (model.screen === "game") handleGameKey(key)
   else handleMenuKey(key)
 
+  maybeSubmitLobbyResult()
   refresh()
 })
 
@@ -169,6 +171,7 @@ function confirmMenu() {
 
 function startRun() {
   model.session = createSession(model.seed, currentMode(model).id, currentClass(model).id)
+  submittedSession = null
   model.screen = "game"
   model.dialog = null
 }
@@ -176,6 +179,35 @@ function startRun() {
 function refresh() {
   screen.content = draw(model, renderer.terminalWidth, renderer.terminalHeight)
   renderer.requestRender()
+}
+
+function maybeSubmitLobbyResult() {
+  const lobbyUrl = process.env.DUNGEON_LOBBY_URL
+  if (!lobbyUrl || model.session.status === "running" || submittedSession === model.session) return
+  submittedSession = model.session
+  const result = {
+    name: process.env.DUNGEON_PLAYER_NAME || model.session.hero.name,
+    status: model.session.status,
+    floor: model.session.floor,
+    turns: model.session.turn,
+    gold: model.session.gold,
+    kills: model.session.kills,
+  }
+
+  void fetch(new URL("/finish", lobbyUrl), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(result),
+  })
+    .then((response) => {
+      if (!response.ok) throw new Error(`Lobby returned ${response.status}`)
+      model.session.log.unshift("Lobby result submitted.")
+      refresh()
+    })
+    .catch(() => {
+      model.session.log.unshift("Lobby result failed to submit.")
+      refresh()
+    })
 }
 
 function seedFromEnv() {

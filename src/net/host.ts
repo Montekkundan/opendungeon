@@ -40,7 +40,7 @@ const server = Bun.serve<LobbySocketData>({
     if (url.pathname === "/finish" && request.method === "POST") return submitResult(request)
 
     if (url.pathname === "/") {
-      const body = renderLobbyPage()
+      const body = renderLobbyPage(url.host)
       return new Response(body, { headers: { "content-type": "text/html; charset=utf-8" } })
     }
 
@@ -70,7 +70,7 @@ console.log(`Dungeon Dev Crawl lobby`)
 console.log(`Mode: ${options.mode}`)
 console.log(`Seed: ${options.seed}`)
 console.log(`URL:  http://localhost:${server.port}`)
-console.log(`Run:  DUNGEON_MODE=${options.mode} DUNGEON_SEED=${options.seed} bun run dev`)
+console.log(`Run:  DUNGEON_MODE=${options.mode} DUNGEON_SEED=${options.seed} DUNGEON_LOBBY_URL=http://localhost:${server.port} bun run dev`)
 
 type ServerWebSocket = Bun.ServerWebSocket<LobbySocketData>
 
@@ -156,8 +156,8 @@ function json(body: unknown, status = 200) {
   })
 }
 
-function renderLobbyPage() {
-  const command = `DUNGEON_MODE=${options.mode} DUNGEON_SEED=${options.seed} bun run dev`
+function renderLobbyPage(host: string): string {
+  const command = `DUNGEON_MODE=${options.mode} DUNGEON_SEED=${options.seed} DUNGEON_LOBBY_URL=http://${host} bun run dev`
   return `<!doctype html>
 <html>
   <head>

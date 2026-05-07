@@ -253,6 +253,7 @@ function drawDialog(canvas: Canvas, model: AppModel) {
     canvas.write(x + 3, y + 5, `Renderer: ${model.rendererBackend === "three" ? "@opentui/three asset backend" : "Dawngeon asset tiles"}`, "#8f9ba8")
     canvas.write(x + 3, y + 6, "Host: bun run host -- --mode race --seed " + model.seed, "#8f9ba8")
     canvas.write(x + 3, y + 7, `Debug view: ${model.debugView ? "on" : "off"} (DUNGEON_DEBUG_VIEW=1)`, "#66717d")
+    canvas.write(x + 3, y + 8, "Lobby results auto-post when DUNGEON_LOBBY_URL is set.", "#66717d")
   }
 
   if (model.dialog === "inventory") {
