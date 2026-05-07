@@ -3,12 +3,13 @@ import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { PNG } from "pngjs"
 import { d20FrameCount, d20RollSprite } from "./d20Sprites.js"
+import { defaultDiceSkin, diceSkinIds } from "./diceSkins.js"
 import {
   animatedSpriteIds,
   animationFrameCount,
   animationFramesForSprite,
   cropForSprite,
-  d20SheetPath,
+  d20SheetPaths,
   sourceTileSize,
   spriteAnimations,
   spriteSheetPaths,
@@ -29,7 +30,6 @@ describe("opendungeon owned sprites", () => {
     const terrain = loadPng(spriteSheetPaths.terrain)
     const items = loadPng(spriteSheetPaths.items)
     const actors = loadPng(spriteSheetPaths.actors)
-    const d20 = loadPng(d20SheetPath)
 
     expect(terrain.width).toBe(8 * sourceTileSize)
     expect(terrain.height).toBe(sourceTileSize)
@@ -37,8 +37,11 @@ describe("opendungeon owned sprites", () => {
     expect(items.height).toBe(3 * sourceTileSize)
     expect(actors.width).toBe(animationFrameCount * sourceTileSize)
     expect(actors.height).toBe(animatedSpriteIds.length * spriteAnimations.length * sourceTileSize)
-    expect(d20.width).toBe(d20FrameCount() * sourceTileSize)
-    expect(d20.height).toBe(20 * sourceTileSize)
+    for (const skin of diceSkinIds) {
+      const d20 = loadPng(d20SheetPaths[skin])
+      expect(d20.width).toBe(d20FrameCount() * sourceTileSize)
+      expect(d20.height).toBe(20 * sourceTileSize)
+    }
 
     for (const crop of Object.values(staticSpriteCrops)) {
       const sheet = crop.sheet === "terrain" ? terrain : items
@@ -51,7 +54,7 @@ describe("opendungeon owned sprites", () => {
     const hero = pixelSprite("hero-ranger", 8, 4)
     const walk = animatedPixelSprite("hero-ranger", "walk", 2, 8, 4)
     const wall = pixelSprite("wall-a", 8, 4)
-    const d20 = d20RollSprite(20, 11, 8, 4)
+    const d20 = d20RollSprite(20, 11, 8, 4, defaultDiceSkin)
 
     expect(hero.cells.flat().some((cell) => cell.ch === "█")).toBe(true)
     expect(walk.cells.flat().some((cell) => cell.ch === "█")).toBe(true)
@@ -68,7 +71,8 @@ describe("opendungeon owned sprites", () => {
       "assets/opendungeon/biomes/crypt/terrain/floor-a.png",
       "assets/opendungeon/items/weapons/sword.png",
       "assets/opendungeon/items/loot/potion.png",
-      "assets/opendungeon/ui/dice/d20/result-20/frame-11.png",
+      "assets/opendungeon/ui/dice/d20/crimson/result-20/frame-11.png",
+      "assets/opendungeon/ui/dice/polyhedral/crimson/d20/frame-11.png",
     ]
 
     for (const file of files) {

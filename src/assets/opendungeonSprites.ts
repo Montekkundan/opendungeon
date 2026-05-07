@@ -1,5 +1,8 @@
+import { diceSkinIds, defaultDiceSkin, type DiceSkinId } from "./diceSkins.js"
+
 export const sourceTileSize = 64
 export const animationFrameCount = 4
+export const diceFrameCount = 12
 
 export const spriteSheetPaths = {
   terrain: "assets/opendungeon/atlases/terrain.png",
@@ -7,7 +10,10 @@ export const spriteSheetPaths = {
   actors: "assets/opendungeon/atlases/actors.png",
 } as const
 
-export const d20SheetPath = "assets/opendungeon/atlases/d20.png"
+export const d20SheetPaths = Object.fromEntries(
+  diceSkinIds.map((skin) => [skin, `assets/opendungeon/atlases/d20-${skin}.png`]),
+) as Record<DiceSkinId, string>
+export const d20SheetPath = d20SheetPaths[defaultDiceSkin]
 
 export type SpriteSheetId = keyof typeof spriteSheetPaths
 

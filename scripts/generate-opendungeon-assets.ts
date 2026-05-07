@@ -1,9 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { PNG } from "pngjs"
+import { defaultDiceSkin, diceSkins, type DiceSkin } from "../src/assets/diceSkins.js"
 import {
   animatedSpriteIds,
   animationFrameCount,
+  diceFrameCount,
   sourceTileSize,
   spriteAnimations,
   staticSpriteCrops,
@@ -11,8 +13,8 @@ import {
   type SpriteAnimationId,
 } from "../src/assets/opendungeonSprites.js"
 
-type Rgba = [number, number, number, number]
-type Rgb = [number, number, number]
+type Rgba = readonly [number, number, number, number]
+type Rgb = readonly [number, number, number]
 
 type ActorPalette = {
   skin: Rgb
@@ -32,7 +34,8 @@ const upscaleFactor = sourceTileSize / logicalTileSize
 const transparent: Rgba = [0, 0, 0, 0]
 const outline: Rgb = [9, 8, 13]
 const itchCacheRoot = ".asset-cache/itch/extracted"
-const openGameArtD20Root = ".asset-cache/opengameart-d20"
+const diceKinds = ["d4", "d6", "d8", "d10", "d12", "d20"] as const
+const diceSides = { d4: 4, d6: 6, d8: 8, d10: 10, d12: 12, d20: 20 } as const
 
 if (!Number.isInteger(upscaleFactor) || upscaleFactor < 1) {
   throw new Error(`sourceTileSize must be a positive multiple of ${logicalTileSize}`)
@@ -141,6 +144,9 @@ const palettes: Record<AnimatedSpriteId, ActorPalette> = {
 }
 
 mkdirSync(outDir, { recursive: true })
+rmSync(join(outDir, "ui/dice/d20"), { recursive: true, force: true })
+rmSync(join(outDir, "ui/dice/polyhedral"), { recursive: true, force: true })
+rmSync(join(outDir, "atlases/d20.png"), { force: true })
 writeTerrainSheet()
 writeItemSheet()
 writeActorSheet()
@@ -155,8 +161,8 @@ writeFileSync(
     "Debuggable source sprites live as individual PNGs under actors, biomes, items, and ui.",
     `Terrain, items, bosses, and NPCs are project-authored procedural pixel art from ${logicalTileSize}x${logicalTileSize} logical tiles.`,
     "Hero/enemy rows use cached free Itch reference packs when present: Zerie Tiny RPG Character Asset Pack, Mattz Art Samurai 2D Pixel Art, and MonoPixelArt Forest Monsters.",
-    "D20 rows use cached OpenGameArt CC0 rolling-animation frames when present.",
-    "The caches live in .asset-cache/itch and .asset-cache/opengameart-d20 and are intentionally not committed.",
+    "Dice rows are project-authored faceted 3D-style polyhedral sprites with per-skin d20 rolling atlases.",
+    "The Itch actor caches live in .asset-cache/itch and are intentionally not committed.",
     "",
   ].join("\n"),
   "utf8",
@@ -217,15 +223,27 @@ function writeActorSheet() {
 }
 
 function writeD20Sheet() {
-  const sheet = createSheet(12, 20, true)
-  for (let result = 1; result <= 20; result++) {
-    for (let frame = 0; frame < 12; frame++) {
-      const tile = createTile((tile) => drawD20Frame(tile, result, frame))
-      savePng(tile, d20AssetPath(result, frame))
-      blit(tile, sheet, frame * size, (result - 1) * size)
+  for (const skin of diceSkins) {
+    const sheet = createSheet(diceFrameCount, 20, true)
+    for (let result = 1; result <= 20; result++) {
+      for (let frame = 0; frame < diceFrameCount; frame++) {
+        const tile = createTile((tile) => drawFacetedDie(tile, "d20", result, frame, skin))
+        savePng(tile, d20AssetPath(skin.id, result, frame))
+        blit(tile, sheet, frame * size, (result - 1) * size)
+      }
+    }
+    savePng(sheet, `atlases/d20-${skin.id}.png`)
+  }
+
+  for (const skin of diceSkins) {
+    for (const kind of diceKinds) {
+      for (let frame = 0; frame < diceFrameCount; frame++) {
+        const result = diceSides[kind]
+        const tile = createTile((tile) => drawFacetedDie(tile, kind, result, frame, skin))
+        savePng(tile, polyhedralDiceAssetPath(skin.id, kind, frame))
+      }
     }
   }
-  savePng(sheet, "atlases/d20.png")
 }
 
 function writeUiAssets() {
@@ -244,7 +262,7 @@ function writeManifest() {
       actors: "atlases/actors.png",
       terrain: "atlases/terrain.png",
       items: "atlases/items.png",
-      d20: "atlases/d20.png",
+      d20: Object.fromEntries(diceSkins.map((skin) => [skin.id, `atlases/d20-${skin.id}.png`])),
     },
     folders: {
       actors: "actors",
@@ -255,6 +273,7 @@ function writeManifest() {
     actors: Object.fromEntries(animatedSpriteIds.map((id) => [id, actorBasePath(id)])),
     terrain: Object.fromEntries(Object.keys(staticSpriteCrops).filter((id) => staticSpriteCrops[id as keyof typeof staticSpriteCrops].sheet === "terrain").map((id) => [id, `biomes/${biomeId}/terrain/${id}.png`])),
     items: Object.fromEntries(Object.keys(staticSpriteCrops).filter((id) => staticSpriteCrops[id as keyof typeof staticSpriteCrops].sheet === "items").map((id) => [id, itemAssetPath(id)])),
+    dice: Object.fromEntries(diceSkins.map((skin) => [skin.id, Object.fromEntries(diceKinds.map((kind) => [kind, `ui/dice/polyhedral/${skin.id}/${kind}`]))])),
   }
 
   writeJson("manifest.json", manifest)
@@ -378,7 +397,7 @@ function item(tile: PNG, id: string) {
       for (let i = 0; i < 4; i++) triangle(tile, 7 + i * 5, 24, 10 + i * 5, 15, 13 + i * 5, 24, [137, 142, 151])
       break
     case "dice":
-      d20(tile, 20, 3)
+      drawFacetedDie(tile, "d20", 20, 10, diceSkins.find((skin) => skin.id === defaultDiceSkin) ?? diceSkins[0])
       break
   }
 }
@@ -514,54 +533,6 @@ function drawSourceFrame(tile: PNG, src: PNG, sx: number, sy: number, sw: number
   }
 }
 
-function drawMaskedSourceFrame(
-  tile: PNG,
-  src: PNG,
-  sx: number,
-  sy: number,
-  sw: number,
-  sh: number,
-  predicate: (src: PNG, x: number, y: number) => boolean,
-  tint?: (r: number, g: number, b: number) => Rgb,
-) {
-  const bounds = sourceBounds(src, sx + 96, sy + 96, sw - 192, sh - 192, predicate)
-  if (!bounds) return
-
-  const scale = Math.min((size - 4) / bounds.width, (size - 4) / bounds.height)
-  const width = Math.max(1, Math.floor(bounds.width * scale))
-  const height = Math.max(1, Math.floor(bounds.height * scale))
-  const ox = Math.floor((size - width) / 2)
-  const oy = Math.floor((size - height) / 2)
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const sourceX = bounds.x + Math.min(bounds.width - 1, Math.floor(x / scale))
-      const sourceY = bounds.y + Math.min(bounds.height - 1, Math.floor(y / scale))
-      if (!predicate(src, sourceX, sourceY)) continue
-      const sourceIndex = (src.width * sourceY + sourceX) << 2
-      const color = tint?.(src.data[sourceIndex], src.data[sourceIndex + 1], src.data[sourceIndex + 2]) ?? [
-        src.data[sourceIndex],
-        src.data[sourceIndex + 1],
-        src.data[sourceIndex + 2],
-      ]
-      set(tile, ox + x, oy + y, [...color, src.data[sourceIndex + 3]])
-    }
-  }
-}
-
-function isD20RollPixel(src: PNG, x: number, y: number) {
-  const index = (src.width * y + x) << 2
-  const r = src.data[index]
-  const g = src.data[index + 1]
-  const b = src.data[index + 2]
-  const a = src.data[index + 3]
-  if (a < 24) return false
-
-  const redPanel = r > 24 && r > g * 1.8 && r > b * 1.8
-  const greyFrame = Math.abs(r - g) < 12 && Math.abs(g - b) < 12 && r > 20 && r < 88
-  return !redPanel && !greyFrame
-}
-
 function sourceBounds(src: PNG, sx: number, sy: number, sw: number, sh: number, predicate?: (src: PNG, x: number, y: number) => boolean) {
   let minX = sx + sw
   let minY = sy + sh
@@ -666,38 +637,127 @@ function slime(tile: PNG, p: ActorPalette, animation: SpriteAnimationId, frame: 
   if (animation === "hurt") line(tile, 8, 17, 24, 24, [225, 64, 72])
 }
 
-function d20(tile: PNG, result: number, frame: number) {
-  const spin = frame % 4
-  const base = result === 20 ? [235, 200, 87] : result === 1 ? [171, 67, 84] : [93, 111, 136]
-  const glow = result === 20 ? [255, 238, 146] : result === 1 ? [236, 101, 117] : [179, 205, 232]
-  diamond(tile, 16 + (spin === 1 ? 1 : spin === 3 ? -1 : 0), 16, 13, darken(base, 0.5))
-  diamond(tile, 16, 15, 12, base)
-  triangle(tile, 16, 3, 27, 16, 16, 15, lighten(base, 1.22))
-  triangle(tile, 5, 16, 16, 3, 16, 15, darken(base, 0.82))
-  triangle(tile, 5, 16, 16, 28, 16, 16, darken(base, 0.64))
-  triangle(tile, 27, 16, 16, 28, 16, 16, darken(base, 0.74))
-  drawNumber(tile, result, 16, 16, glow)
+function drawFacetedDie(tile: PNG, kind: (typeof diceKinds)[number], result: number, frame: number, skin: DiceSkin) {
+  const angle = ((frame % diceFrameCount) / diceFrameCount) * Math.PI * 2
+  const cx = 16 + Math.round(Math.sin(angle) * 2)
+  const cy = 16 + Math.round(Math.abs(Math.sin(angle * 1.4)) * -2)
+  const wobble = Math.sin(angle)
+  const display = frame < diceFrameCount - 3 ? rollingFace(result, frame, diceSides[kind]) : result
+
+  ellipse(tile, cx - 11, 25, cx + 12, 30, skin.shadow, true)
+  if (kind === "d4") drawD4(tile, cx, cy, wobble, skin)
+  if (kind === "d6") drawD6(tile, cx, cy, wobble, skin)
+  if (kind === "d8") drawD8(tile, cx, cy, wobble, skin)
+  if (kind === "d10") drawD10(tile, cx, cy, wobble, skin)
+  if (kind === "d12") drawD12(tile, cx, cy, wobble, skin)
+  if (kind === "d20") drawD20Poly(tile, cx, cy, wobble, skin)
+
+  const numberY = kind === "d4" ? cy + 3 : cy
+  drawNumber(tile, display, cx, numberY, display === 20 ? [255, 244, 159] : skin.ink)
+  if (display === 20) diamond(tile, cx + 9, cy - 9, 2, [255, 244, 159])
 }
 
-function drawD20Frame(tile: PNG, result: number, frame: number) {
-  const path = join(openGameArtD20Root, `r${String(result).padStart(2, "0")}.png`)
-  if (existsSync(path)) {
-    const png = PNG.sync.read(readFileSync(path))
-    drawMaskedSourceFrame(tile, png, frame * 512, 0, 512, 512, isD20RollPixel, d20Tint(result))
-    return
-  }
-  d20(tile, result, frame)
+function rollingFace(result: number, frame: number, sides: number) {
+  return ((result + frame * 7 + Math.floor(frame / 2)) % sides) + 1
 }
 
-function d20Tint(result: number) {
-  const base: Rgb = result === 20 ? [221, 172, 69] : result === 1 ? [167, 61, 82] : [72, 92, 121]
-  const light: Rgb = result === 20 ? [255, 241, 155] : result === 1 ? [242, 127, 145] : [198, 218, 239]
-  return (r: number, g: number, b: number): Rgb => {
-    const brightness = (r + g + b) / 3
-    if (brightness > 170) return light
-    if (brightness > 85) return lighten(base, 1.22)
-    return base
-  }
+function drawD4(tile: PNG, cx: number, cy: number, wobble: number, skin: DiceSkin) {
+  const top = [cx, cy - 12]
+  const left = [cx - 13 - Math.round(wobble), cy + 9]
+  const right = [cx + 13 - Math.round(wobble), cy + 9]
+  const center = [cx, cy + 3]
+  polygon(tile, [top, left, center], skin.light)
+  polygon(tile, [top, center, right], skin.mid)
+  polygon(tile, [left, right, center], skin.base)
+  outlinePolygon(tile, [top, right, left], skin.shadow)
+  line(tile, top[0], top[1], center[0], center[1], lighten(skin.light, 1.18))
+}
+
+function drawD6(tile: PNG, cx: number, cy: number, wobble: number, skin: DiceSkin) {
+  const points = [
+    [cx, cy - 13],
+    [cx + 12 + Math.round(wobble), cy - 5],
+    [cx + 12, cy + 9],
+    [cx, cy + 15],
+    [cx - 12, cy + 9],
+    [cx - 12 + Math.round(wobble), cy - 5],
+  ]
+  const center = [cx, cy + 1]
+  polygon(tile, [points[5], points[0], points[1], center], skin.light)
+  polygon(tile, [points[1], points[2], points[3], center], skin.base)
+  polygon(tile, [points[3], points[4], points[5], center], skin.dark)
+  outlinePolygon(tile, points, skin.shadow)
+  line(tile, cx, cy - 12, cx, cy + 1, lighten(skin.light, 1.2))
+}
+
+function drawD8(tile: PNG, cx: number, cy: number, wobble: number, skin: DiceSkin) {
+  const top = [cx, cy - 13]
+  const right = [cx + 13 + Math.round(wobble), cy]
+  const bottom = [cx, cy + 13]
+  const left = [cx - 13 + Math.round(wobble), cy]
+  const center = [cx, cy]
+  polygon(tile, [top, left, center], skin.light)
+  polygon(tile, [top, center, right], skin.mid)
+  polygon(tile, [right, center, bottom], skin.base)
+  polygon(tile, [bottom, center, left], skin.dark)
+  outlinePolygon(tile, [top, right, bottom, left], skin.shadow)
+}
+
+function drawD10(tile: PNG, cx: number, cy: number, wobble: number, skin: DiceSkin) {
+  const points = [
+    [cx - 2, cy - 13],
+    [cx + 11, cy - 10],
+    [cx + 14 + Math.round(wobble), cy + 1],
+    [cx + 7, cy + 12],
+    [cx - 5, cy + 14],
+    [cx - 14 + Math.round(wobble), cy + 4],
+    [cx - 12, cy - 8],
+  ]
+  const center = [cx, cy + 1]
+  polygon(tile, [points[6], points[0], points[1], center], skin.light)
+  polygon(tile, [points[1], points[2], points[3], center], skin.base)
+  polygon(tile, [points[3], points[4], points[5], center], skin.mid)
+  polygon(tile, [points[5], points[6], center], skin.dark)
+  outlinePolygon(tile, points, skin.shadow)
+}
+
+function drawD12(tile: PNG, cx: number, cy: number, wobble: number, skin: DiceSkin) {
+  const points = [
+    [cx - 7, cy - 13],
+    [cx + 7, cy - 13],
+    [cx + 14 + Math.round(wobble), cy - 4],
+    [cx + 13, cy + 8],
+    [cx + 4, cy + 14],
+    [cx - 9, cy + 12],
+    [cx - 14 + Math.round(wobble), cy + 2],
+    [cx - 13, cy - 8],
+  ]
+  const center = [cx, cy]
+  polygon(tile, [points[7], points[0], points[1], center], skin.light)
+  polygon(tile, [points[1], points[2], points[3], center], skin.base)
+  polygon(tile, [points[3], points[4], points[5], center], skin.mid)
+  polygon(tile, [points[5], points[6], points[7], center], skin.dark)
+  outlinePolygon(tile, points, skin.shadow)
+}
+
+function drawD20Poly(tile: PNG, cx: number, cy: number, wobble: number, skin: DiceSkin) {
+  const top = [cx, cy - 14]
+  const upperLeft = [cx - 12 + Math.round(wobble), cy - 5]
+  const upperRight = [cx + 12 + Math.round(wobble), cy - 5]
+  const left = [cx - 14, cy + 6]
+  const right = [cx + 14, cy + 6]
+  const bottom = [cx, cy + 15]
+  const center = [cx, cy + 1]
+  polygon(tile, [top, upperLeft, center], skin.light)
+  polygon(tile, [top, center, upperRight], lighten(skin.light, 1.08))
+  polygon(tile, [upperRight, center, right], skin.base)
+  polygon(tile, [right, center, bottom], skin.mid)
+  polygon(tile, [bottom, center, left], skin.dark)
+  polygon(tile, [left, center, upperLeft], darken(skin.base, 0.72))
+  outlinePolygon(tile, [top, upperRight, right, bottom, left, upperLeft], skin.shadow)
+  line(tile, top[0], top[1], center[0], center[1], lighten(skin.light, 1.2))
+  line(tile, upperLeft[0], upperLeft[1], right[0], right[1], darken(skin.base, 0.85))
+  line(tile, upperRight[0], upperRight[1], left[0], left[1], darken(skin.base, 0.78))
 }
 
 function bottle(tile: PNG, body: Rgb, shade: Rgb) {
@@ -801,8 +861,12 @@ function actorAssetPath(id: AnimatedSpriteId, animation: SpriteAnimationId, fram
   return `${actorBasePath(id)}/${animation}/frame-${String(frame).padStart(2, "0")}.png`
 }
 
-function d20AssetPath(result: number, frame: number) {
-  return `ui/dice/d20/result-${String(result).padStart(2, "0")}/frame-${String(frame).padStart(2, "0")}.png`
+function d20AssetPath(skin: string, result: number, frame: number) {
+  return `ui/dice/d20/${skin}/result-${String(result).padStart(2, "0")}/frame-${String(frame).padStart(2, "0")}.png`
+}
+
+function polyhedralDiceAssetPath(skin: string, kind: string, frame: number) {
+  return `ui/dice/polyhedral/${skin}/${kind}/frame-${String(frame).padStart(2, "0")}.png`
 }
 
 function createSheet(columns: number, rows: number, clear: boolean) {
@@ -946,6 +1010,26 @@ function triangle(png: PNG, ax: number, ay: number, bx: number, by: number, cx: 
       const w2 = edge(ax, ay, bx, by, x, y)
       if ((area >= 0 && w0 >= 0 && w1 >= 0 && w2 >= 0) || (area < 0 && w0 <= 0 && w1 <= 0 && w2 <= 0)) set(png, x, y, [...color, 255])
     }
+  }
+}
+
+function polygon(png: PNG, points: number[][], color: Rgb) {
+  const first = points[0]
+  if (!first) return
+  for (let index = 1; index < points.length - 1; index++) {
+    const second = points[index]
+    const third = points[index + 1]
+    if (!second || !third) continue
+    triangle(png, first[0], first[1], second[0], second[1], third[0], third[1], color)
+  }
+}
+
+function outlinePolygon(png: PNG, points: number[][], color: Rgb) {
+  for (let index = 0; index < points.length; index++) {
+    const point = points[index]
+    const next = points[(index + 1) % points.length]
+    if (!point || !next) continue
+    line(png, point[0], point[1], next[0], next[1], color)
   }
 }
 

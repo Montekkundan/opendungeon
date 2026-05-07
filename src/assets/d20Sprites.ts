@@ -1,22 +1,22 @@
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { PNG } from "pngjs"
-import { d20SheetPath, sourceTileSize } from "./opendungeonSprites.js"
+import { defaultDiceSkin, type DiceSkinId } from "./diceSkins.js"
+import { d20SheetPaths, diceFrameCount, sourceTileSize } from "./opendungeonSprites.js"
 import type { PixelCell, PixelSprite } from "./pixelSprites.js"
 
-const frameCount = 12
 const resultCount = 20
-let sheet: PNG | null = null
+const sheets = new Map<DiceSkinId, PNG>()
 const cache = new Map<string, PixelSprite>()
 
-export function d20RollSprite(result: number, frame: number, width = 10, height = 5): PixelSprite {
+export function d20RollSprite(result: number, frame: number, width = 10, height = 5, skin: DiceSkinId = defaultDiceSkin): PixelSprite {
   const safeResult = clamp(Math.round(result), 1, resultCount)
-  const safeFrame = clamp(Math.round(frame), 0, frameCount - 1)
-  const key = `${safeResult}:${safeFrame}:${width}x${height}`
+  const safeFrame = clamp(Math.round(frame), 0, diceFrameCount - 1)
+  const key = `${skin}:${safeResult}:${safeFrame}:${width}x${height}`
   const cached = cache.get(key)
   if (cached) return cached
 
-  const d20Sheet = loadSheet()
+  const d20Sheet = loadSheet(skin)
   const sprite: PixelSprite = {
     width,
     height,
@@ -30,12 +30,15 @@ export function d20RollSprite(result: number, frame: number, width = 10, height 
 }
 
 export function d20FrameCount() {
-  return frameCount
+  return diceFrameCount
 }
 
-function loadSheet() {
-  if (sheet) return sheet
-  sheet = PNG.sync.read(readFileSync(resolve(process.cwd(), d20SheetPath)))
+function loadSheet(skin: DiceSkinId) {
+  const cached = sheets.get(skin)
+  if (cached) return cached
+  const path = d20SheetPaths[skin] ?? d20SheetPaths[defaultDiceSkin]
+  const sheet = PNG.sync.read(readFileSync(resolve(process.cwd(), path)))
+  sheets.set(skin, sheet)
   return sheet
 }
 

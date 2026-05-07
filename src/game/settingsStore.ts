@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import { defaultDiceSkin, diceSkinIds, type DiceSkinId } from "../assets/diceSkins.js"
 
 export type ControlScheme = "hybrid" | "arrows" | "vim"
 export type BackgroundFx = "low" | "normal" | "dense"
@@ -15,6 +16,7 @@ export type UserSettings = {
   reduceMotion: boolean
   backgroundFx: BackgroundFx
   tileScale: TileScalePreference
+  diceSkin: DiceSkinId
   music: boolean
   sound: boolean
 }
@@ -36,6 +38,7 @@ export const defaultSettings: UserSettings = {
   reduceMotion: false,
   backgroundFx: "normal",
   tileScale: "large",
+  diceSkin: defaultDiceSkin,
   music: false,
   sound: true,
 }
@@ -88,6 +91,7 @@ function normalizeSettings(settings: Partial<UserSettings>): UserSettings {
     reduceMotion: Boolean(settings.reduceMotion),
     backgroundFx: asBackgroundFx(settings.backgroundFx),
     tileScale: asTileScale(settings.tileScale),
+    diceSkin: asDiceSkin(settings.diceSkin),
     music: Boolean(settings.music),
     sound: settings.sound !== false,
   }
@@ -109,4 +113,8 @@ function asBackgroundFx(value: unknown): BackgroundFx {
 
 function asTileScale(value: unknown): TileScalePreference {
   return value === "auto" || value === "medium" || value === "large" ? value : defaultSettings.tileScale
+}
+
+function asDiceSkin(value: unknown): DiceSkinId {
+  return typeof value === "string" && (diceSkinIds as readonly string[]).includes(value) ? (value as DiceSkinId) : defaultDiceSkin
 }

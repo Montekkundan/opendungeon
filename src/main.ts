@@ -13,6 +13,7 @@ import {
 } from "./game/session.js"
 import { deleteSave, listSaves, loadSave, saveSession, type SaveSummary } from "./game/saveStore.js"
 import { loadSettings, saveSettings, type UserSettings } from "./game/settingsStore.js"
+import { diceSkinIds } from "./assets/diceSkins.js"
 import {
   currentClass,
   currentMode,
@@ -434,6 +435,7 @@ function changeCurrentSetting() {
   if (item.id === "controlScheme") model.settings.controlScheme = cycleValue(model.settings.controlScheme, ["hybrid", "arrows", "vim"])
   if (item.id === "highContrast") model.settings.highContrast = !model.settings.highContrast
   if (item.id === "reduceMotion") model.settings.reduceMotion = !model.settings.reduceMotion
+  if (item.id === "diceSkin") model.settings.diceSkin = cycleValue(model.settings.diceSkin, diceSkinIds)
   if (item.id === "backgroundFx") model.settings.backgroundFx = cycleValue(model.settings.backgroundFx, ["low", "normal", "dense"])
   if (item.id === "tileScale") model.settings.tileScale = cycleValue(model.settings.tileScale, ["auto", "medium", "large"])
   if (item.id === "music") model.settings.music = !model.settings.music

@@ -6,7 +6,14 @@
     "actors": "atlases/actors.png",
     "terrain": "atlases/terrain.png",
     "items": "atlases/items.png",
-    "d20": "atlases/d20.png"
+    "d20": {
+      "cobalt": "atlases/d20-cobalt.png",
+      "sunstone": "atlases/d20-sunstone.png",
+      "verdant": "atlases/d20-verdant.png",
+      "amethyst": "atlases/d20-amethyst.png",
+      "ember": "atlases/d20-ember.png",
+      "crimson": "atlases/d20-crimson.png"
+    }
   },
   "folders": {
     "actors": "actors",
@@ -56,5 +63,55 @@
     "map": "items/loot/map.png",
     "trap": "items/traps/trap.png",
     "dice": "ui/dice/dice.png"
+  },
+  "dice": {
+    "cobalt": {
+      "d4": "ui/dice/polyhedral/cobalt/d4",
+      "d6": "ui/dice/polyhedral/cobalt/d6",
+      "d8": "ui/dice/polyhedral/cobalt/d8",
+      "d10": "ui/dice/polyhedral/cobalt/d10",
+      "d12": "ui/dice/polyhedral/cobalt/d12",
+      "d20": "ui/dice/polyhedral/cobalt/d20"
+    },
+    "sunstone": {
+      "d4": "ui/dice/polyhedral/sunstone/d4",
+      "d6": "ui/dice/polyhedral/sunstone/d6",
+      "d8": "ui/dice/polyhedral/sunstone/d8",
+      "d10": "ui/dice/polyhedral/sunstone/d10",
+      "d12": "ui/dice/polyhedral/sunstone/d12",
+      "d20": "ui/dice/polyhedral/sunstone/d20"
+    },
+    "verdant": {
+      "d4": "ui/dice/polyhedral/verdant/d4",
+      "d6": "ui/dice/polyhedral/verdant/d6",
+      "d8": "ui/dice/polyhedral/verdant/d8",
+      "d10": "ui/dice/polyhedral/verdant/d10",
+      "d12": "ui/dice/polyhedral/verdant/d12",
+      "d20": "ui/dice/polyhedral/verdant/d20"
+    },
+    "amethyst": {
+      "d4": "ui/dice/polyhedral/amethyst/d4",
+      "d6": "ui/dice/polyhedral/amethyst/d6",
+      "d8": "ui/dice/polyhedral/amethyst/d8",
+      "d10": "ui/dice/polyhedral/amethyst/d10",
+      "d12": "ui/dice/polyhedral/amethyst/d12",
+      "d20": "ui/dice/polyhedral/amethyst/d20"
+    },
+    "ember": {
+      "d4": "ui/dice/polyhedral/ember/d4",
+      "d6": "ui/dice/polyhedral/ember/d6",
+      "d8": "ui/dice/polyhedral/ember/d8",
+      "d10": "ui/dice/polyhedral/ember/d10",
+      "d12": "ui/dice/polyhedral/ember/d12",
+      "d20": "ui/dice/polyhedral/ember/d20"
+    },
+    "crimson": {
+      "d4": "ui/dice/polyhedral/crimson/d4",
+      "d6": "ui/dice/polyhedral/crimson/d6",
+      "d8": "ui/dice/polyhedral/crimson/d8",
+      "d10": "ui/dice/polyhedral/crimson/d10",
+      "d12": "ui/dice/polyhedral/crimson/d12",
+      "d20": "ui/dice/polyhedral/crimson/d20"
+    }
   }
 }

@@ -1,6 +1,7 @@
 import { fonts, measureText, type ASCIIFontName, type OptimizedBuffer } from "@opentui/core"
 import { activeAssetPack } from "../assets/packs.js"
 import { d20FrameCount, d20RollSprite } from "../assets/d20Sprites.js"
+import { defaultDiceSkin, diceSkinName, type DiceSkinId } from "../assets/diceSkins.js"
 import { animatedPixelSprite, pixelSprite, type PixelSprite, type PixelSpriteId, type SpriteAnimationId } from "../assets/pixelSprites.js"
 import {
   actorAt,
@@ -68,6 +69,7 @@ const settingsOptions = [
   { id: "controlScheme", name: "Control scheme", text: "Movement and menu navigation preference." },
   { id: "highContrast", name: "High contrast", text: "Brighter borders and selected states." },
   { id: "reduceMotion", name: "Reduce motion", text: "Quieter background and dice movement." },
+  { id: "diceSkin", name: "Dice skin", text: "Faceted polyhedral dice color used in combat rolls." },
   { id: "backgroundFx", name: "Background FX", text: "How much title-screen dungeon rain appears." },
   { id: "tileScale", name: "Map scale", text: "How close the dungeon camera feels." },
   { id: "music", name: "Music", text: "Stored for the future audio layer." },
@@ -233,7 +235,7 @@ function drawMode(canvas: Canvas, model: AppModel) {
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.max(2, Math.floor((canvas.height - height) / 2))
   drawPanel(canvas, x, y, width, height, "Run Mode", UI.gold)
-  drawD20Sprite(canvas, x + 5, y + 4, 20, d20FrameCount() - 1, 10, 5)
+  drawD20Sprite(canvas, x + 5, y + 4, 20, d20FrameCount() - 1, 10, 5, model.settings.diceSkin)
 
   modeOptions.forEach((option, index) => {
     const selected = model.modeIndex === index
@@ -385,15 +387,17 @@ function drawSettings(canvas: Canvas, model: AppModel) {
   const detailX = listX + listW + 4
   const detailW = width - (detailX - x) - 4
   const detailH = Math.min(19, height - 8)
-  drawPanel(canvas, detailX, listY, detailW, detailH, "Local Profile", UI.edge)
+  drawPanel(canvas, detailX, listY, detailW, detailH, "Profile & Dice", UI.edge)
   drawMiniIcon(canvas, detailX + 3, listY + 3, "focus-gem", 8, 3)
+  if (detailW > 28 && detailH > 7) drawD20Sprite(canvas, detailX + detailW - 15, listY + 3, 20, d20FrameCount() - 1, 10, 4, model.settings.diceSkin)
   const editing = model.inputMode?.field === "username"
   const name = editing ? `${model.inputMode?.draft ?? ""}_` : `@${model.settings.username}`
   if (detailH > 8) drawSettingRow(canvas, detailX + 3, listY + 7, detailW - 6, "Player", name)
-  if (detailH > 10) drawSettingRow(canvas, detailX + 3, listY + 9, detailW - 6, "Profile", profilePath())
-  if (detailH > 12) drawSettingRow(canvas, detailX + 3, listY + 11, detailW - 6, "Saves", saveDirectory())
-  if (detailH > 14) drawSettingRow(canvas, detailX + 3, listY + 13, detailW - 6, "Cloud", model.settings.cloudProvider === "github" ? "GitHub selected" : "local-only")
-  if (detailH > 17) canvas.write(detailX + 3, listY + 16, "Settings are saved immediately on this computer.", UI.soft, UI.panel)
+  if (detailH > 10) drawSettingRow(canvas, detailX + 3, listY + 9, detailW - 6, "Dice", diceSkinName(model.settings.diceSkin))
+  if (detailH > 12) drawSettingRow(canvas, detailX + 3, listY + 11, detailW - 6, "Profile", profilePath())
+  if (detailH > 14) drawSettingRow(canvas, detailX + 3, listY + 13, detailW - 6, "Saves", saveDirectory())
+  if (detailH > 16) drawSettingRow(canvas, detailX + 3, listY + 15, detailW - 6, "Cloud", model.settings.cloudProvider === "github" ? "GitHub selected" : "local-only")
+  if (detailH > 18) canvas.write(detailX + 3, listY + 17, "Settings are saved immediately on this computer.", UI.soft, UI.panel)
 
   drawFooter(canvas, [
     ["Enter", "change"],
@@ -418,7 +422,7 @@ function drawControls(canvas: Canvas, model: AppModel) {
     ["Inventory", "I opens pack. H drinks potion. L opens run log."],
     ["Run", "R rests outside combat. Esc pauses. Ctrl+S/F5 saves locally."],
     ["Accessibility", accessibilitySummary(model.settings)],
-    ["Visuals", `Map scale ${model.settings.tileScale}. Background FX ${model.settings.backgroundFx}.`],
+    ["Visuals", `Map scale ${model.settings.tileScale}. Dice ${diceSkinName(model.settings.diceSkin)}. FX ${model.settings.backgroundFx}.`],
     ["Audio", `Music ${onOff(model.settings.music)}. SFX ${onOff(model.settings.sound)}.`],
   ]
 
@@ -730,7 +734,7 @@ function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollA
     canvas.fill(slotX + 1, y + 2, slotWidth - 3, height - 4, " ", UI.panel2, UI.panel2)
     canvas.border(slotX, y + 1, slotWidth - 1, height - 2, edge)
     canvas.write(slotX + 1, y + 1, item.key, item.active ? UI.gold : UI.muted, UI.panel2)
-    if (item.custom === "d20") drawD20Sprite(canvas, slotX + 2, y + 2, diceResult(session, animation), diceFrame(session, animation), 8, 3, item.active && !settings.reduceMotion, animation)
+    if (item.custom === "d20") drawD20Sprite(canvas, slotX + 2, y + 2, diceResult(session, animation), diceFrame(session, animation), 8, 3, settings.diceSkin, item.active && !settings.reduceMotion, animation)
     else if (item.sprite) drawMiniIcon(canvas, slotX + 3, y + 2, item.sprite, 7, 3)
     canvas.write(slotX + 1, y + height - 3, trim(item.label, slotWidth - 3), item.active ? UI.gold : UI.soft, UI.panel2)
     if (item.count !== undefined && item.count !== "0") {
@@ -750,7 +754,7 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
   const roll = session.combat.lastRoll
 
   drawPanel(canvas, x, y, width, height, "Turn Combat", UI.gold)
-  drawD20Sprite(canvas, x + width - 11, y + 1, diceResult(session, animation), diceFrame(session, animation), 8, 3, !settings.reduceMotion, animation)
+  drawD20Sprite(canvas, x + width - 11, y + 1, diceResult(session, animation), diceFrame(session, animation), 8, 3, settings.diceSkin, !settings.reduceMotion, animation)
 
   canvas.write(x + 2, y + 3, "Targets", UI.brass, UI.panel)
   targets.slice(0, 4).forEach((target, index) => {
@@ -780,7 +784,7 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
   const diceX = x + width - 15
   const diceY = y + height - 5
   canvas.border(diceX, diceY, 12, 4, roll?.hit ? UI.focus : UI.hp)
-  drawD20Sprite(canvas, diceX + 1, diceY + 1, diceResult(session, animation), diceFrame(session, animation), 5, 2, !settings.reduceMotion, animation)
+  drawD20Sprite(canvas, diceX + 1, diceY + 1, diceResult(session, animation), diceFrame(session, animation), 5, 2, settings.diceSkin, !settings.reduceMotion, animation)
   canvas.write(diceX + 7, diceY + 1, roll ? String(roll.d20).padStart(2, "0") : "d20", roll?.hit ? UI.focus : UI.gold)
   canvas.write(diceX + 2, diceY + 2, roll ? `${roll.total}/${roll.dc}` : "roll", UI.ink)
 
@@ -916,11 +920,12 @@ function drawD20Sprite(
   frame: number,
   width = 10,
   height = 5,
+  skin: DiceSkinId = defaultDiceSkin,
   moving = false,
   animation?: DiceRollAnimation | null,
 ) {
   const shake = moving && animation ? diceShake(frame) : { x: 0, y: 0 }
-  drawPixelBlock(canvas, x + shake.x, y + shake.y, d20RollSprite(result, frame, width, height), 1)
+  drawPixelBlock(canvas, x + shake.x, y + shake.y, d20RollSprite(result, frame, width, height, skin), 1)
 }
 
 function diceResult(session: GameSession, animation?: DiceRollAnimation | null) {
@@ -936,12 +941,14 @@ function diceFrame(_session: GameSession, animation?: DiceRollAnimation | null) 
 
 function diceShake(frame: number) {
   const pattern = [
-    { x: -1, y: 0 },
-    { x: 1, y: -1 },
-    { x: 0, y: 1 },
-    { x: -1, y: 1 },
-    { x: 1, y: 0 },
-    { x: 0, y: -1 },
+    { x: -2, y: 0 },
+    { x: 2, y: -1 },
+    { x: 1, y: 1 },
+    { x: -1, y: 2 },
+    { x: 2, y: 0 },
+    { x: 0, y: -2 },
+    { x: -1, y: -1 },
+    { x: 1, y: 1 },
   ]
   return pattern[frame % pattern.length]
 }
@@ -954,13 +961,14 @@ function drawDialogFrame(
   height: number,
   title: string,
   icon: PixelSpriteId | "d20",
+  skin: DiceSkinId = defaultDiceSkin,
 ) {
   canvas.fill(x + 2, y + 1, width, height, " ", UI.shadow, UI.shadow)
   canvas.fill(x, y, width, height, " ", UI.panel, UI.panel)
   canvas.border(x, y, width, height, UI.gold)
   canvas.fill(x + 1, y + 1, width - 2, 2, " ", UI.panel2, UI.panel2)
   canvas.write(x + 4, y + 1, title.toUpperCase(), UI.gold, UI.panel2)
-  if (icon === "d20") drawD20Sprite(canvas, x + width - 12, y + 1, 20, d20FrameCount() - 1, 9, 3)
+  if (icon === "d20") drawD20Sprite(canvas, x + width - 12, y + 1, 20, d20FrameCount() - 1, 9, 3, skin)
   else drawMiniIcon(canvas, x + width - 12, y + 1, icon, 7, 2)
 }
 
@@ -1053,7 +1061,7 @@ function drawDialog(canvas: Canvas, model: AppModel) {
   const height = model.dialog === "inventory" || model.dialog === "log" ? 18 : model.dialog === "settings" ? 20 : model.dialog === "help" ? 18 : 14
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.floor((canvas.height - height) / 2)
-  drawDialogFrame(canvas, x, y, width, height, dialogTitle(model.dialog), dialogIcon(model.dialog))
+  drawDialogFrame(canvas, x, y, width, height, dialogTitle(model.dialog), dialogIcon(model.dialog), model.settings.diceSkin)
 
   if (model.dialog === "settings") {
     drawSettingRow(canvas, x + 4, y + 4, width - 8, "Seed", String(model.seed))
@@ -1217,6 +1225,7 @@ function settingValue(settings: UserSettings, id: (typeof settingsOptions)[numbe
   if (id === "controlScheme") return settings.controlScheme
   if (id === "highContrast") return onOff(settings.highContrast)
   if (id === "reduceMotion") return onOff(settings.reduceMotion)
+  if (id === "diceSkin") return diceSkinName(settings.diceSkin)
   if (id === "backgroundFx") return settings.backgroundFx
   if (id === "tileScale") return settings.tileScale
   if (id === "music") return onOff(settings.music)
