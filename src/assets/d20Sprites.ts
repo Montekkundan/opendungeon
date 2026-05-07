@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import { PNG } from "pngjs"
-import { sourceTileSize } from "./opendungeonSprites.js"
+import { d20SheetPath, sourceTileSize } from "./opendungeonSprites.js"
 import type { PixelCell, PixelSprite } from "./pixelSprites.js"
 
 const frameCount = 12
@@ -35,7 +35,7 @@ export function d20FrameCount() {
 
 function loadSheet() {
   if (sheet) return sheet
-  sheet = PNG.sync.read(readFileSync(resolve(process.cwd(), "assets/opendungeon/d20.png")))
+  sheet = PNG.sync.read(readFileSync(resolve(process.cwd(), d20SheetPath)))
   return sheet
 }
 

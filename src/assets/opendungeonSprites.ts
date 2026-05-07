@@ -2,10 +2,12 @@ export const sourceTileSize = 64
 export const animationFrameCount = 4
 
 export const spriteSheetPaths = {
-  terrain: "assets/opendungeon/terrain.png",
-  items: "assets/opendungeon/items.png",
-  actors: "assets/opendungeon/actors.png",
+  terrain: "assets/opendungeon/atlases/terrain.png",
+  items: "assets/opendungeon/atlases/items.png",
+  actors: "assets/opendungeon/atlases/actors.png",
 } as const
+
+export const d20SheetPath = "assets/opendungeon/atlases/d20.png"
 
 export type SpriteSheetId = keyof typeof spriteSheetPaths
 

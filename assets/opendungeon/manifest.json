@@ -1,0 +1,60 @@
+{
+  "game": "opendungeon",
+  "version": 1,
+  "tileSize": 64,
+  "atlases": {
+    "actors": "atlases/actors.png",
+    "terrain": "atlases/terrain.png",
+    "items": "atlases/items.png",
+    "d20": "atlases/d20.png"
+  },
+  "folders": {
+    "actors": "actors",
+    "biomes": "biomes/crypt",
+    "items": "items",
+    "ui": "ui"
+  },
+  "actors": {
+    "hero-ranger": "actors/heroes/ranger-soldier",
+    "hero-warden": "actors/heroes/samurai",
+    "hero-arcanist": "actors/heroes/arcanist",
+    "npc-smith": "actors/npcs/smith",
+    "npc-oracle": "actors/npcs/oracle",
+    "slime": "actors/enemies/mushroom-slime",
+    "ghoul": "actors/enemies/orc-ghoul",
+    "necromancer": "actors/enemies/orc-necromancer",
+    "boss-forgemaster": "actors/bosses/forgemaster",
+    "boss-lich": "actors/bosses/lich",
+    "boss-minotaur": "actors/bosses/minotaur"
+  },
+  "terrain": {
+    "floor-a": "biomes/crypt/terrain/floor-a.png",
+    "floor-b": "biomes/crypt/terrain/floor-b.png",
+    "floor-c": "biomes/crypt/terrain/floor-c.png",
+    "wall-a": "biomes/crypt/terrain/wall-a.png",
+    "wall-b": "biomes/crypt/terrain/wall-b.png",
+    "stairs": "biomes/crypt/terrain/stairs.png",
+    "door": "biomes/crypt/terrain/door.png",
+    "void": "biomes/crypt/terrain/void.png"
+  },
+  "items": {
+    "potion": "items/loot/potion.png",
+    "relic": "items/loot/relic.png",
+    "chest": "items/loot/chest.png",
+    "coin": "items/loot/coin.png",
+    "scroll": "items/loot/scroll.png",
+    "focus-gem": "items/loot/focus-gem.png",
+    "ember": "items/loot/ember.png",
+    "sword": "items/weapons/sword.png",
+    "bow": "items/weapons/bow.png",
+    "staff": "items/weapons/staff.png",
+    "dagger": "items/weapons/dagger.png",
+    "axe": "items/weapons/axe.png",
+    "shield": "items/weapons/shield.png",
+    "armor": "items/gear/armor.png",
+    "key": "items/loot/key.png",
+    "map": "items/loot/map.png",
+    "trap": "items/traps/trap.png",
+    "dice": "ui/dice/dice.png"
+  }
+}

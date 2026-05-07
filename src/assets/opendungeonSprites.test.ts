@@ -8,6 +8,7 @@ import {
   animationFrameCount,
   animationFramesForSprite,
   cropForSprite,
+  d20SheetPath,
   sourceTileSize,
   spriteAnimations,
   spriteSheetPaths,
@@ -28,7 +29,7 @@ describe("opendungeon owned sprites", () => {
     const terrain = loadPng(spriteSheetPaths.terrain)
     const items = loadPng(spriteSheetPaths.items)
     const actors = loadPng(spriteSheetPaths.actors)
-    const d20 = loadPng("assets/opendungeon/d20.png")
+    const d20 = loadPng(d20SheetPath)
 
     expect(terrain.width).toBe(8 * sourceTileSize)
     expect(terrain.height).toBe(sourceTileSize)
@@ -56,6 +57,31 @@ describe("opendungeon owned sprites", () => {
     expect(walk.cells.flat().some((cell) => cell.ch === "█")).toBe(true)
     expect(wall.cells.flat().every((cell) => cell.bg)).toBe(true)
     expect(d20.cells.flat().some((cell) => cell.ch === "█")).toBe(true)
+  })
+
+  test("writes debuggable per-asset sprite files", () => {
+    const files = [
+      "assets/opendungeon/actors/heroes/samurai/idle/frame-00.png",
+      "assets/opendungeon/actors/heroes/ranger-soldier/attack-melee/frame-02.png",
+      "assets/opendungeon/actors/enemies/mushroom-slime/walk/frame-03.png",
+      "assets/opendungeon/biomes/crypt/terrain/wall-a.png",
+      "assets/opendungeon/biomes/crypt/terrain/floor-a.png",
+      "assets/opendungeon/items/weapons/sword.png",
+      "assets/opendungeon/items/loot/potion.png",
+      "assets/opendungeon/ui/dice/d20/result-20/frame-11.png",
+    ]
+
+    for (const file of files) {
+      expect(existsSync(file), `${file} should exist`).toBe(true)
+      const png = loadPng(file)
+      expect(png.width).toBe(sourceTileSize)
+      expect(png.height).toBe(sourceTileSize)
+    }
+
+    expect(loadPng("assets/opendungeon/ui/bars/health.png").width).toBe(sourceTileSize)
+    expect(loadPng("assets/opendungeon/ui/bars/health.png").height).toBe(16)
+    expect(loadPng("assets/opendungeon/ui/bars/focus.png").width).toBe(sourceTileSize)
+    expect(existsSync("assets/opendungeon/manifest.json")).toBe(true)
   })
 
   test("animation crop math wraps frames and stays inside the actor sheet", () => {
