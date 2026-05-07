@@ -106,6 +106,10 @@ function handleGameKey(key: KeyEvent) {
     model.dialog = "inventory"
     return
   }
+  if (key.name === "l") {
+    model.dialog = "log"
+    return
+  }
   if (key.name === "r") {
     rest(model.session)
     return

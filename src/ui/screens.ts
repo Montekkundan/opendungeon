@@ -9,7 +9,7 @@ type TileRenderStyle = {
 }
 
 export type ScreenId = "start" | "character" | "mode" | "game"
-export type DialogId = "settings" | "inventory" | "help" | "pause" | null
+export type DialogId = "settings" | "inventory" | "help" | "log" | "pause" | null
 
 export type AppModel = {
   screen: ScreenId
@@ -120,19 +120,18 @@ function drawGame(canvas: Canvas, model: AppModel) {
   const session = model.session
   drawMap(canvas, session, model.debugView)
   drawHud(canvas, session)
-  drawBottomLog(canvas, session)
   if (session.status !== "running") drawRunEnd(canvas, session)
 }
 
 function drawMap(canvas: Canvas, session: GameSession, debugView: boolean) {
-  const tileWidth = debugView ? 2 : 6
-  const tileHeight = debugView ? 1 : 3
+  const tileWidth = debugView ? 2 : 8
+  const tileHeight = debugView ? 1 : 4
   const hudHeight = 4
-  const logHeight = 6
+  const logHeight = 0
   const viewWidth = Math.floor(canvas.width / tileWidth)
   const viewHeight = Math.max(4, Math.floor((canvas.height - hudHeight - logHeight) / tileHeight))
-  const startX = Math.max(0, session.player.x - Math.floor(viewWidth / 2))
-  const startY = Math.max(0, session.player.y - Math.floor(viewHeight / 2))
+  const startX = session.player.x - Math.floor(viewWidth / 2)
+  const startY = session.player.y - Math.floor(viewHeight / 2)
 
   for (let sy = 0; sy < viewHeight; sy++) {
     for (let sx = 0; sx < viewWidth; sx++) {
@@ -156,14 +155,14 @@ function drawMap(canvas: Canvas, session: GameSession, debugView: boolean) {
 function tileStyle(session: GameSession, x: number, y: number, debugView: boolean, visible: boolean, seen: boolean): TileRenderStyle {
   const tile = session.dungeon.tiles[y]?.[x] ?? "void"
   if (debugView) return debugTileStyle(session, x, y)
-  if (!seen) return { pattern: ["      ", "      ", "      "], fg: "#05070a", bg: "#05070a" }
+  if (!seen) return { pattern: ["        ", "        ", "        ", "        "], fg: "#05070a", bg: "#05070a" }
   if (tile === "floor") return floorStyle(x, y, visible)
   if (tile === "wall") return wallStyle(x, y, visible)
-  if (tile === "stairs") return visible ? { pattern: [" /==\\ ", " |  | ", " \\==/ "], fg: "#2d1d17", bg: "#b4915a" } : floorStyle(x, y, false)
-  if (tile === "potion") return visible ? { pattern: ["      ", "  ●   ", "      "], fg: "#f4a6b8", bg: textureColor(x, y) } : floorStyle(x, y, false)
-  if (tile === "relic") return visible ? { pattern: ["      ", "  ◆   ", "      "], fg: "#f4d06f", bg: textureColor(x, y) } : floorStyle(x, y, false)
-  if (tile === "chest") return visible ? { pattern: ["      ", " [▤]  ", "      "], fg: "#f4d06f", bg: "#9a6c4e" } : floorStyle(x, y, false)
-  return { pattern: ["      ", "      ", "      "], fg: "#05070a", bg: "#05070a" }
+  if (tile === "stairs") return visible ? { pattern: ["        ", "  /==\\  ", "  |  |  ", "  \\==/  "], fg: "#2d1d17", bg: "#b4915a" } : floorStyle(x, y, false)
+  if (tile === "potion") return visible ? { pattern: ["        ", "        ", "   ●    ", "        "], fg: "#f4a6b8", bg: textureColor(x, y) } : floorStyle(x, y, false)
+  if (tile === "relic") return visible ? { pattern: ["        ", "        ", "   ◆    ", "        "], fg: "#f4d06f", bg: textureColor(x, y) } : floorStyle(x, y, false)
+  if (tile === "chest") return visible ? { pattern: ["        ", "        ", "  [▤]   ", "        "], fg: "#f4d06f", bg: "#9a6c4e" } : floorStyle(x, y, false)
+  return { pattern: ["        ", "        ", "        ", "        "], fg: "#05070a", bg: "#05070a" }
 }
 
 function debugTileStyle(session: GameSession, x: number, y: number): TileRenderStyle {
@@ -203,23 +202,23 @@ function floorStyle(x: number, y: number, visible: boolean): TileRenderStyle {
   const bg = visible ? textureColor(x, y) : dimTextureColor(x, y)
   const fg = visible ? "#5b7f7a" : "#253a3b"
   const n = (x * 5 + y * 9) % 4
-  if (n === 0) return { pattern: ["      ", "  ░   ", "      "], fg, bg }
-  if (n === 1) return { pattern: ["   ░  ", "      ", "      "], fg, bg }
-  if (n === 2) return { pattern: ["      ", "      ", " ░    "], fg, bg }
-  return { pattern: ["      ", "      ", "     ░"], fg, bg }
+  if (n === 0) return { pattern: ["        ", "   ░    ", "        ", "      ░ "], fg, bg }
+  if (n === 1) return { pattern: ["     ░  ", "        ", "  ░     ", "        "], fg, bg }
+  if (n === 2) return { pattern: ["        ", " ░      ", "        ", "    ░   "], fg, bg }
+  return { pattern: ["        ", "        ", "      ░ ", " ░      "], fg, bg }
 }
 
 function wallStyle(x: number, y: number, visible: boolean): TileRenderStyle {
   const bg = visible ? stoneColor(x, y) : "#171a1f"
   const fg = visible ? "#777f8b" : "#282e36"
-  return { pattern: ["▛▀▀▀▜", "▌▒▒▒▐", "▙▄▄▄▟"], fg, bg }
+  return { pattern: ["▛▀▀▀▀▀▜", "▌ ▗▄▄▖ ▐", "▌ ▝▀▀▘ ▐", "▙▄▄▄▄▄▟"], fg, bg }
 }
 
 function spriteLines(sprite: "hero" | "player" | "slime" | "ghoul" | "necromancer") {
-  if (sprite === "hero") return ["  o   ", " /█\\  ", " / \\  "]
-  if (sprite === "slime") return ["      ", " ◖▰◗  ", "  ▔   "]
-  if (sprite === "ghoul") return ["  ◉   ", " /▓\\  ", " / \\  "]
-  return ["  ☾   ", " /▓\\  ", "  ║   "]
+  if (sprite === "hero") return ["   o    ", "  /█\\   ", "  / \\   ", "        "]
+  if (sprite === "slime") return ["        ", "  ◖▰▰◗  ", "   ▔▔   ", "        "]
+  if (sprite === "ghoul") return ["   ◉    ", "  /▓\\   ", "  / \\   ", "        "]
+  return ["   ☾    ", "  /▓\\   ", "   ║    ", "        "]
 }
 
 function spriteColor(sprite: "hero" | "player" | "slime" | "ghoul" | "necromancer") {
@@ -269,22 +268,16 @@ function drawHud(canvas: Canvas, session: GameSession) {
   if (canvas.width >= 96) canvas.write(canvas.width - 38, 1, `Mode ${session.mode}  Art ${activeAssetPack.name}`, "#8f9ba8")
   const status = session.status === "running" ? `Turn ${session.turn}` : session.status.toUpperCase()
   if (canvas.width >= 96) canvas.write(canvas.width - 38, 2, status, session.status === "dead" ? "#d56b8c" : "#66717d")
-  canvas.write(1, 2, trim("i inventory   h potion   r rest   ? help   esc pause", canvas.width < 96 ? canvas.width - progress.length - 4 : 50), "#66717d")
+  canvas.write(1, 2, trim("i inventory   l log   h potion   r rest   ? help   esc pause", canvas.width < 96 ? canvas.width - progress.length - 4 : 58), "#66717d")
 }
 
 function writeRight(canvas: Canvas, y: number, text: string, color: string) {
   canvas.write(Math.max(1, canvas.width - text.length - 2), y, text, color)
 }
 
-function drawBottomLog(canvas: Canvas, session: GameSession) {
-  const y = Math.max(0, canvas.height - 5)
-  canvas.write(1, y, "LOG", "#d6a85c")
-  session.log.slice(0, 4).forEach((line, index) => canvas.write(1, y + index + 1, trim(line, canvas.width - 2), index === 0 ? "#d8dee9" : "#8f9ba8"))
-}
-
 function drawDialog(canvas: Canvas, model: AppModel) {
   const width = Math.min(70, canvas.width - 8)
-  const height = model.dialog === "inventory" ? 14 : 11
+  const height = model.dialog === "inventory" || model.dialog === "log" ? 14 : 11
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.floor((canvas.height - height) / 2)
   canvas.fill(x, y, width, height, " ", "#05070a")
@@ -304,10 +297,15 @@ function drawDialog(canvas: Canvas, model: AppModel) {
     model.session.inventory.slice(0, 8).forEach((item, index) => canvas.write(x + 3, y + 4 + index, `- ${item}`, "#d8dee9"))
   }
 
+  if (model.dialog === "log") {
+    canvas.write(x + 3, y + 2, "Log", "#f4d06f")
+    model.session.log.slice(0, 8).forEach((line, index) => canvas.write(x + 3, y + 4 + index, trim(line, width - 6), index === 0 ? "#d8dee9" : "#8f9ba8"))
+  }
+
   if (model.dialog === "help") {
     canvas.write(x + 3, y + 2, "Controls", "#f4d06f")
     canvas.write(x + 3, y + 4, "Move: arrows/WASD    Confirm: Enter    Back: Esc", "#d8dee9")
-    canvas.write(x + 3, y + 5, "Inventory: i         Potion: h         Rest: r", "#d8dee9")
+    canvas.write(x + 3, y + 5, "Inventory: i         Log: l           Potion: h         Rest: r", "#d8dee9")
     canvas.write(x + 3, y + 7, "Bump enemies to attack. Stairs descend to a generated floor.", "#8f9ba8")
   }
 
