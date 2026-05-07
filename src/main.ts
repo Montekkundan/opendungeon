@@ -1,5 +1,5 @@
 import { TextRenderable, createCliRenderer, type KeyEvent } from "@opentui/core"
-import { createSession, rest, tryMove, usePotion } from "./game/session.js"
+import { createSession, rest, tryMove, usePotion, type HeroClass, type MultiplayerMode } from "./game/session.js"
 import {
   currentClass,
   currentMode,
@@ -14,10 +14,10 @@ const model: AppModel = {
   screen: "start",
   dialog: null,
   menuIndex: 0,
-  classIndex: 2,
-  modeIndex: 0,
-  seed: 2423368,
-  session: createSession(),
+  classIndex: classIndexFromEnv(),
+  modeIndex: modeIndexFromEnv(),
+  seed: seedFromEnv(),
+  session: createSession(seedFromEnv(), modeFromEnv(), classFromEnv()),
   message: "",
   debugView: process.env.DUNGEON_DEBUG_VIEW === "1",
   rendererBackend: shouldUseThreeRenderer() ? "three" : "terminal",
@@ -176,4 +176,33 @@ function startRun() {
 function refresh() {
   screen.content = draw(model, renderer.terminalWidth, renderer.terminalHeight)
   renderer.requestRender()
+}
+
+function seedFromEnv() {
+  const value = Number(process.env.DUNGEON_SEED)
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 2423368
+}
+
+function modeFromEnv(): MultiplayerMode {
+  const value = process.env.DUNGEON_MODE
+  return value === "coop" || value === "race" || value === "solo" ? value : "solo"
+}
+
+function classFromEnv(): HeroClass {
+  const value = process.env.DUNGEON_CLASS
+  return value === "warden" || value === "arcanist" || value === "ranger" ? value : "ranger"
+}
+
+function modeIndexFromEnv() {
+  const mode = modeFromEnv()
+  if (mode === "coop") return 1
+  if (mode === "race") return 2
+  return 0
+}
+
+function classIndexFromEnv() {
+  const heroClass = classFromEnv()
+  if (heroClass === "warden") return 0
+  if (heroClass === "arcanist") return 1
+  return 2
 }

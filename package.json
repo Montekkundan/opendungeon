@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun run src/main.ts",
+    "host": "bun run src/net/host.ts",
     "start": "bun run src/main.ts",
     "check": "tsc --noEmit",
     "test": "bun test"

@@ -111,7 +111,8 @@ function drawMode(canvas: Canvas, model: AppModel) {
     canvas.write(x + 4, y + index * 4 + 1, option.text, selected ? "#b5bec6" : "#66717d")
   })
 
-  canvas.center(canvas.height - 4, "Co-op and race are available as local modes; network hosting is next.", "#66717d")
+  canvas.center(canvas.height - 5, `Host lobby: bun run host -- --mode ${currentMode(model).id} --seed ${model.seed}`, "#66717d")
+  canvas.center(canvas.height - 3, "Friends run with the shared DUNGEON_MODE and DUNGEON_SEED shown by the lobby.", "#66717d")
 }
 
 function drawGame(canvas: Canvas, model: AppModel) {
@@ -250,6 +251,7 @@ function drawDialog(canvas: Canvas, model: AppModel) {
     canvas.write(x + 3, y + 2, "Settings", "#f4d06f")
     canvas.write(x + 3, y + 4, `Seed: ${model.seed}`, "#d8dee9")
     canvas.write(x + 3, y + 5, `Renderer: ${model.rendererBackend === "three" ? "@opentui/three asset backend" : "Dawngeon asset tiles"}`, "#8f9ba8")
+    canvas.write(x + 3, y + 6, "Host: bun run host -- --mode race --seed " + model.seed, "#8f9ba8")
     canvas.write(x + 3, y + 7, `Debug view: ${model.debugView ? "on" : "off"} (DUNGEON_DEBUG_VIEW=1)`, "#66717d")
   }
 
