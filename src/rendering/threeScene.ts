@@ -19,8 +19,11 @@ export async function createDawngeonThreeScene(): Promise<DawngeonThreeScene> {
   const animator = new SpriteAnimator(scene)
   const sprites = await createDawngeonSpriteDefinitions(resourceManager)
   const preview = await animator.createSprite(sprites.preview)
-  preview.setPosition(new Vector3(0, 0, 0))
-  preview.setScale(new Vector3(10, 6, 1))
+  preview.setPosition(new Vector3(-4.5, 0, 0))
+  preview.setScale(new Vector3(7, 5.5, 1))
+  const dungeonSheet = await animator.createSprite(sprites.dungeonSheet)
+  dungeonSheet.setPosition(new Vector3(5.5, 0, 0))
+  dungeonSheet.setScale(new Vector3(5, 5, 1))
 
   return {
     scene,

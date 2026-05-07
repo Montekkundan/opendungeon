@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createSession, performCombatAction, selectSkill, tryMove, usePotion } from "./session.js"
 import { setTile } from "./dungeon.js"
 import { draw } from "../ui/screens.js"
+import { pixelSprite } from "../assets/pixelSprites.js"
 
 describe("game session", () => {
   test("creates a seeded dungeon with a reachable player start", () => {
@@ -113,5 +114,13 @@ describe("game session", () => {
     ).chunks
 
     expect(start.map((chunk) => chunk.text).join("")).toContain("DUNGEON DEV CRAWL")
+  })
+
+  test("loads pixel sprites from the downloaded asset sheet", () => {
+    const hero = pixelSprite("hero", 8, 4)
+    const wall = pixelSprite("wall-a", 8, 4)
+
+    expect(hero.cells.flat().some((cell) => cell.ch === "█")).toBe(true)
+    expect(wall.cells.flat().every((cell) => cell.bg)).toBe(true)
   })
 })

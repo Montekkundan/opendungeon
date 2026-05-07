@@ -1,4 +1,5 @@
 import { activeAssetPack } from "../assets/packs.js"
+import { pixelSprite, type PixelSprite, type PixelSpriteId } from "../assets/pixelSprites.js"
 import {
   actorAt,
   combatSkills,
@@ -101,8 +102,11 @@ function drawCharacter(canvas: Canvas, model: AppModel) {
 
   classOptions.forEach((option, index) => {
     const selected = model.classIndex === index
-    canvas.write(x, y + index * 4, `${selected ? ">" : " "} ${option.name}`, selected ? "#f4d06f" : "#d8dee9")
-    canvas.write(x + 4, y + index * 4 + 1, option.text, selected ? "#b5bec6" : "#66717d")
+    const row = y + index * 4
+    const sprite: PixelSpriteId = option.id === "arcanist" ? "necromancer" : option.id === "warden" ? "ghoul" : "hero"
+    drawPixelBlock(canvas, x, row, pixelSprite(sprite, 8, 3), selected ? 1 : 0.45)
+    canvas.write(x + 10, row, `${selected ? ">" : " "} ${option.name}`, selected ? "#f4d06f" : "#d8dee9")
+    canvas.write(x + 14, row + 1, option.text, selected ? "#b5bec6" : "#66717d")
   })
 
   canvas.center(canvas.height - 4, "Enter confirm  Esc start", "#66717d")
@@ -128,6 +132,7 @@ function drawGame(canvas: Canvas, model: AppModel) {
   const session = model.session
   drawMap(canvas, session, model.debugView)
   drawHud(canvas, session)
+  if (!model.debugView) drawQuickbar(canvas, session)
   if (session.combat.active) drawCombatPanel(canvas, session)
   if (session.status !== "running") drawRunEnd(canvas, session)
 }
@@ -152,10 +157,15 @@ function drawMap(canvas: Canvas, session: GameSession, debugView: boolean) {
       const visible = session.visible.has(pointKey(point))
       const seen = session.seen.has(pointKey(point))
       const actor = visible ? actorAt(session.dungeon.actors, point) : undefined
-      const style = tileStyle(session, x, y, debugView, visible, seen)
       const screenX = sx * tileWidth
       const screenY = hudHeight + sy * tileHeight
-      drawTileBlock(canvas, screenX, screenY, tileWidth, tileHeight, style)
+
+      if (debugView) {
+        const style = tileStyle(session, x, y, true, visible, seen)
+        drawTileBlock(canvas, screenX, screenY, tileWidth, tileHeight, style)
+      } else {
+        drawAssetTile(canvas, screenX, screenY, tileWidth, tileHeight, session, x, y, visible, seen)
+      }
 
       if (session.player.x === x && session.player.y === y) drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, "hero", debugView)
       else if (actor) {
@@ -164,6 +174,38 @@ function drawMap(canvas: Canvas, session: GameSession, debugView: boolean) {
       }
     }
   }
+}
+
+function drawAssetTile(
+  canvas: Canvas,
+  screenX: number,
+  screenY: number,
+  tileWidth: number,
+  tileHeight: number,
+  session: GameSession,
+  x: number,
+  y: number,
+  visible: boolean,
+  seen: boolean,
+) {
+  const tile = session.dungeon.tiles[y]?.[x] ?? "void"
+  if (!seen || tile === "void") {
+    canvas.fill(screenX, screenY, tileWidth, tileHeight, " ", "#05070a", "#05070a")
+    return
+  }
+
+  const dim = visible ? 1 : 0.42
+  if (tile === "wall") {
+    drawPixelBlock(canvas, screenX, screenY, pixelSprite((x + y) % 2 === 0 ? "wall-a" : "wall-b", tileWidth, tileHeight), dim)
+    return
+  }
+
+  drawPixelBlock(canvas, screenX, screenY, floorSprite(x, y, tileWidth, tileHeight), dim)
+  if (!visible) return
+  if (tile === "stairs") drawPixelBlock(canvas, screenX, screenY, pixelSprite("stairs", tileWidth, tileHeight), 1)
+  if (tile === "potion") drawPixelBlock(canvas, screenX, screenY, pixelSprite("potion", tileWidth, tileHeight), 1)
+  if (tile === "relic") drawPixelBlock(canvas, screenX, screenY, pixelSprite("relic", tileWidth, tileHeight), 1)
+  if (tile === "chest") drawPixelBlock(canvas, screenX, screenY, pixelSprite("chest", tileWidth, tileHeight), 1)
 }
 
 function tileStyle(session: GameSession, x: number, y: number, debugView: boolean, visible: boolean, seen: boolean): TileRenderStyle {
@@ -204,12 +246,25 @@ function drawSprite(canvas: Canvas, x: number, y: number, width: number, height:
     return
   }
 
-  const lines = spriteLines(sprite)
-  const fgColor = spriteColor(sprite)
-  const offsetY = Math.max(0, Math.floor((height - lines.length) / 2))
-  for (let row = 0; row < Math.min(height, lines.length); row++) {
-    canvas.write(x, y + offsetY + row, fitPattern(lines[row], width), fgColor, "#24484a")
+  const spriteId = sprite === "hero" || sprite === "player" ? "hero" : sprite
+  drawPixelBlock(canvas, x, y, pixelSprite(spriteId, width, height), 1)
+}
+
+function drawPixelBlock(canvas: Canvas, x: number, y: number, sprite: PixelSprite, dim = 1) {
+  for (let row = 0; row < sprite.height; row++) {
+    for (let col = 0; col < sprite.width; col++) {
+      const cell = sprite.cells[row][col]
+      if (cell.ch === " " && !cell.bg) continue
+      canvas.write(x + col, y + row, cell.ch, tint(cell.fg, dim), cell.bg ? tint(cell.bg, dim) : undefined)
+    }
   }
+}
+
+function floorSprite(x: number, y: number, width: number, height: number) {
+  const variant = (x * 7 + y * 11) % 3
+  if (variant === 0) return pixelSprite("floor-a", width, height)
+  if (variant === 1) return pixelSprite("floor-b", width, height)
+  return pixelSprite("floor-c", width, height)
 }
 
 function drawTargetFrame(canvas: Canvas, x: number, y: number, width: number, height: number, debugView: boolean) {
@@ -236,20 +291,6 @@ function wallStyle(x: number, y: number, visible: boolean): TileRenderStyle {
   return { pattern: ["▛▀▀▀▀▀▜", "▌ ▗▄▄▖ ▐", "▌ ▝▀▀▘ ▐", "▙▄▄▄▄▄▟"], fg, bg }
 }
 
-function spriteLines(sprite: "hero" | "player" | "slime" | "ghoul" | "necromancer") {
-  if (sprite === "hero") return ["   o    ", "  /█\\   ", "  / \\   ", "        "]
-  if (sprite === "slime") return ["        ", "  ◖▰▰◗  ", "   ▔▔   ", "        "]
-  if (sprite === "ghoul") return ["   ◉    ", "  /▓\\   ", "  / \\   ", "        "]
-  return ["   ☾    ", "  /▓\\   ", "   ║    ", "        "]
-}
-
-function spriteColor(sprite: "hero" | "player" | "slime" | "ghoul" | "necromancer") {
-  if (sprite === "hero") return "#f4d06f"
-  if (sprite === "slime") return "#91d66f"
-  if (sprite === "ghoul") return "#c5cbd3"
-  return "#c892d7"
-}
-
 function textureColor(x: number, y: number) {
   const n = (x * 13 + y * 17) % 7
   if (n === 0) return "#305b58"
@@ -274,6 +315,7 @@ function stoneColor(x: number, y: number) {
 }
 
 function drawHud(canvas: Canvas, session: GameSession) {
+  canvas.fill(0, 0, canvas.width, 4, " ", "#05070a", "#05070a")
   const hero = trim(`${session.hero.name} · ${session.hero.title}`, Math.max(16, canvas.width - 34))
   canvas.write(1, 0, hero, "#d8dee9")
   writeRight(canvas, 0, `Floor ${session.floor}/${session.finalFloor}  Seed ${session.seed}`, "#d6a85c")
@@ -294,6 +336,34 @@ function drawHud(canvas: Canvas, session: GameSession) {
     ? "tab target   1-3 skill   enter/space roll   h potion   l log   esc pause"
     : "i inventory   l log   h potion   r rest   ? help   esc pause"
   canvas.write(1, 2, trim(controls, canvas.width < 96 ? canvas.width - progress.length - 4 : 72), "#66717d")
+}
+
+function drawQuickbar(canvas: Canvas, session: GameSession) {
+  if (canvas.height < 30 || canvas.width < 90) return
+  const slotCount = 6
+  const slotWidth = 11
+  const width = slotCount * slotWidth + 2
+  const height = 6
+  const x = Math.max(2, Math.floor((canvas.width - width) / 2))
+  const y = canvas.height - height - 1
+  const items: Array<{ label: string; sprite: PixelSpriteId; count?: string }> = [
+    { label: "Strike", sprite: "sword" },
+    { label: "Potion", sprite: "potion", count: String(session.inventory.filter((item) => item === "Deploy nerve potion").length) },
+    { label: "Loot", sprite: "chest", count: String(session.gold) },
+    { label: "Relic", sprite: "relic" },
+    { label: "Roll", sprite: "dice" },
+    { label: "Pack", sprite: "chest", count: String(session.inventory.length) },
+  ]
+
+  canvas.fill(x, y, width, height, " ", "#05070a", "#05070a")
+  canvas.border(x, y, width, height, "#343b45")
+  items.forEach((item, index) => {
+    const slotX = x + 1 + index * slotWidth
+    canvas.border(slotX, y + 1, slotWidth - 1, height - 2, index === 0 && session.combat.active ? "#f4d06f" : "#59616d")
+    drawPixelBlock(canvas, slotX + 1, y + 2, pixelSprite(item.sprite, 5, 2), 1)
+    canvas.write(slotX + 1, y + height - 2, trim(item.label, slotWidth - 4), "#8f9ba8")
+    if (item.count) canvas.write(slotX + slotWidth - item.count.length - 2, y + 1, item.count, "#f4d06f")
+  })
 }
 
 function drawCombatPanel(canvas: Canvas, session: GameSession) {
@@ -332,7 +402,8 @@ function drawCombatPanel(canvas: Canvas, session: GameSession) {
   const diceX = x + width - 15
   const diceY = y + height - 5
   canvas.border(diceX, diceY, 12, 4, roll?.hit ? "#7dffb2" : "#d56b8c")
-  canvas.write(diceX + 2, diceY + 1, roll ? `d20 ${roll.d20}` : "d20 --", roll?.hit ? "#7dffb2" : "#f4d06f")
+  drawPixelBlock(canvas, diceX + 1, diceY + 1, pixelSprite("dice", 3, 2), 1)
+  canvas.write(diceX + 5, diceY + 1, roll ? `d20 ${roll.d20}` : "d20", roll?.hit ? "#7dffb2" : "#f4d06f")
   canvas.write(diceX + 2, diceY + 2, roll ? `${roll.total}/${roll.dc}` : "roll", "#d8dee9")
 
   const footer = roll ? `${roll.skill} ${roll.hit ? "hit" : "miss"} ${roll.target}` : "Enter rolls selected skill"
@@ -434,6 +505,18 @@ function label(kind: string) {
 
 function trim(text: string, width: number) {
   return text.length <= width ? text : text.slice(0, Math.max(0, width - 1))
+}
+
+function tint(color: string, factor: number) {
+  if (factor >= 0.99) return color
+  const r = Math.round(parseInt(color.slice(1, 3), 16) * factor)
+  const g = Math.round(parseInt(color.slice(3, 5), 16) * factor)
+  const b = Math.round(parseInt(color.slice(5, 7), 16) * factor)
+  return `#${hex(r)}${hex(g)}${hex(b)}`
+}
+
+function hex(value: number) {
+  return Math.max(0, Math.min(255, value)).toString(16).padStart(2, "0")
 }
 
 function fitPattern(text: string, width: number) {
