@@ -2,6 +2,12 @@ import { activeAssetPack } from "../assets/packs.js"
 import { actorAt, type GameSession, type HeroClass, type MultiplayerMode } from "../game/session.js"
 import { Canvas } from "./canvas.js"
 
+type TileRenderStyle = {
+  glyph: string
+  fg: string
+  bg?: string
+}
+
 export type ScreenId = "start" | "character" | "mode" | "game"
 export type DialogId = "settings" | "inventory" | "help" | "pause" | null
 
@@ -14,6 +20,8 @@ export type AppModel = {
   seed: number
   session: GameSession
   message: string
+  debugView: boolean
+  rendererBackend: "terminal" | "three"
 }
 
 const startItems = ["Begin descent", "Character", "Multiplayer", "Settings", "Quit"]
@@ -108,12 +116,13 @@ function drawMode(canvas: Canvas, model: AppModel) {
 
 function drawGame(canvas: Canvas, model: AppModel) {
   const session = model.session
-  drawMap(canvas, session)
+  drawMap(canvas, session, model.debugView)
   drawHud(canvas, session)
   drawBottomLog(canvas, session)
+  if (session.status !== "running") drawRunEnd(canvas, session)
 }
 
-function drawMap(canvas: Canvas, session: GameSession) {
+function drawMap(canvas: Canvas, session: GameSession, debugView: boolean) {
   const tileWidth = 2
   const hudHeight = 3
   const logHeight = 5
@@ -127,19 +136,28 @@ function drawMap(canvas: Canvas, session: GameSession) {
       const x = startX + sx
       const y = startY + sy
       const actor = actorAt(session.dungeon.actors, { x, y })
-      const style =
-        session.player.x === x && session.player.y === y
-          ? { glyph: "@@", fg: "#f4d06f" }
-          : actor
-            ? { glyph: activeAssetPack.actors[actor.kind].glyph.repeat(2), fg: activeAssetPack.actors[actor.kind].fg }
-            : tileStyle(session, x, y)
+      const style = tileStyle(session, x, y, debugView)
+      canvas.write(sx * tileWidth, hudHeight + sy, style.glyph, style.fg, style.bg)
 
-      canvas.write(sx * tileWidth, hudHeight + sy, style.glyph, style.fg)
+      if (session.player.x === x && session.player.y === y) drawSprite(canvas, sx * tileWidth, hudHeight + sy, "hero", debugView)
+      else if (actor) drawSprite(canvas, sx * tileWidth, hudHeight + sy, actor.kind, debugView)
     }
   }
 }
 
-function tileStyle(session: GameSession, x: number, y: number) {
+function tileStyle(session: GameSession, x: number, y: number, debugView: boolean): TileRenderStyle {
+  const tile = session.dungeon.tiles[y]?.[x] ?? "void"
+  if (debugView) return debugTileStyle(session, x, y)
+  if (tile === "floor") return { glyph: "  ", fg: "#24484a", bg: textureColor(x, y) }
+  if (tile === "wall") return { glyph: "  ", fg: "#3e444b", bg: stoneColor(x, y) }
+  if (tile === "stairs") return { glyph: "▣ ", fg: "#1b1115", bg: "#b4915a" }
+  if (tile === "potion") return { glyph: "● ", fg: "#f4a6b8", bg: textureColor(x, y) }
+  if (tile === "relic") return { glyph: "◆ ", fg: "#f4d06f", bg: textureColor(x, y) }
+  if (tile === "chest") return { glyph: "▤ ", fg: "#2d1d17", bg: "#9a6c4e" }
+  return { glyph: "  ", fg: "#05070a", bg: "#05070a" }
+}
+
+function debugTileStyle(session: GameSession, x: number, y: number): TileRenderStyle {
   const tile = session.dungeon.tiles[y]?.[x] ?? "void"
   if (tile === "floor") return { glyph: "··", fg: "#36595a" }
   if (tile === "wall") return { glyph: "██", fg: "#3b3f46" }
@@ -150,15 +168,56 @@ function tileStyle(session: GameSession, x: number, y: number) {
   return { glyph: "  ", fg: "#05070a" }
 }
 
+function drawSprite(canvas: Canvas, x: number, y: number, sprite: "hero" | "player" | "slime" | "ghoul" | "necromancer", debugView: boolean) {
+  if (debugView) {
+    const debugGlyph = sprite === "hero" ? "@@" : activeAssetPack.actors[sprite].glyph.repeat(2)
+    canvas.write(x, y, debugGlyph, sprite === "hero" ? "#f4d06f" : activeAssetPack.actors[sprite].fg)
+    return
+  }
+
+  if (sprite === "hero") canvas.write(x, y, "♜ ", "#f4d06f", "#24484a")
+  if (sprite === "slime") canvas.write(x, y, "◖◗", "#91d66f", "#24484a")
+  if (sprite === "ghoul") canvas.write(x, y, "◉ ", "#c5cbd3", "#24484a")
+  if (sprite === "necromancer") canvas.write(x, y, "☾ ", "#c892d7", "#24484a")
+}
+
+function textureColor(x: number, y: number) {
+  const n = (x * 13 + y * 17) % 7
+  if (n === 0) return "#305b58"
+  if (n === 1) return "#24484a"
+  if (n === 2) return "#2b5350"
+  return "#203d40"
+}
+
+function stoneColor(x: number, y: number) {
+  const n = (x * 11 + y * 19) % 6
+  if (n === 0) return "#535963"
+  if (n === 1) return "#454b54"
+  return "#3b4048"
+}
+
 function drawHud(canvas: Canvas, session: GameSession) {
-  canvas.write(1, 0, `${session.hero.name} · ${session.hero.title}`, "#d8dee9")
-  canvas.write(1, 1, bar("HP", session.hp, session.maxHp, 18), "#d56b8c")
-  canvas.write(25, 1, bar("FOCUS", session.focus, session.maxFocus, 14), "#7dffb2")
-  canvas.write(canvas.width - 33, 0, `Floor ${session.floor}  Seed ${session.seed}`, "#d6a85c")
-  canvas.write(canvas.width - 33, 1, `Mode ${session.mode}  Art ${activeAssetPack.name}`, "#8f9ba8")
+  const hero = trim(`${session.hero.name} · ${session.hero.title}`, Math.max(16, canvas.width - 34))
+  canvas.write(1, 0, hero, "#d8dee9")
+  writeRight(canvas, 0, `Floor ${session.floor}/${session.finalFloor}  Seed ${session.seed}`, "#d6a85c")
+
+  const hpBar = bar("HP", session.hp, session.maxHp, canvas.width < 90 ? 10 : 18)
+  const focusBar = bar("FOCUS", session.focus, session.maxFocus, canvas.width < 90 ? 8 : 14)
+  canvas.write(1, 1, hpBar, "#d56b8c")
+  canvas.write(Math.min(canvas.width - 1, hpBar.length + 4), 1, focusBar, "#7dffb2")
+
+  const progress = `LV ${session.level}  XP ${session.xp}/${session.level * 10}  Gold ${session.gold}`
+  if (canvas.width >= 96) canvas.write(55, 2, progress, "#d6a85c")
+  else writeRight(canvas, 2, progress, "#d6a85c")
+
+  if (canvas.width >= 96) canvas.write(canvas.width - 38, 1, `Mode ${session.mode}  Art ${activeAssetPack.name}`, "#8f9ba8")
   const status = session.status === "running" ? `Turn ${session.turn}` : session.status.toUpperCase()
-  canvas.write(canvas.width - 33, 2, status, session.status === "dead" ? "#d56b8c" : "#66717d")
-  canvas.write(1, 2, "i inventory   h potion   r rest   ? help   esc pause", "#66717d")
+  if (canvas.width >= 96) canvas.write(canvas.width - 38, 2, status, session.status === "dead" ? "#d56b8c" : "#66717d")
+  canvas.write(1, 2, trim("i inventory   h potion   r rest   ? help   esc pause", canvas.width < 96 ? canvas.width - progress.length - 4 : 50), "#66717d")
+}
+
+function writeRight(canvas: Canvas, y: number, text: string, color: string) {
+  canvas.write(Math.max(1, canvas.width - text.length - 2), y, text, color)
 }
 
 function drawBottomLog(canvas: Canvas, session: GameSession) {
@@ -178,8 +237,8 @@ function drawDialog(canvas: Canvas, model: AppModel) {
   if (model.dialog === "settings") {
     canvas.write(x + 3, y + 2, "Settings", "#f4d06f")
     canvas.write(x + 3, y + 4, `Seed: ${model.seed}`, "#d8dee9")
-    canvas.write(x + 3, y + 5, "Renderer: full terminal glyph surface", "#8f9ba8")
-    canvas.write(x + 3, y + 7, "Later: swap glyph styles for @opentui/three sprites.", "#66717d")
+    canvas.write(x + 3, y + 5, `Renderer: ${model.rendererBackend === "three" ? "@opentui/three asset backend" : "Dawngeon asset tiles"}`, "#8f9ba8")
+    canvas.write(x + 3, y + 7, `Debug view: ${model.debugView ? "on" : "off"} (DUNGEON_DEBUG_VIEW=1)`, "#66717d")
   }
 
   if (model.dialog === "inventory") {
@@ -201,6 +260,26 @@ function drawDialog(canvas: Canvas, model: AppModel) {
   }
 
   canvas.center(y + height - 2, "Esc close", "#66717d")
+}
+
+function drawRunEnd(canvas: Canvas, session: GameSession) {
+  const width = Math.min(68, canvas.width - 8)
+  const height = 13
+  const x = Math.floor((canvas.width - width) / 2)
+  const y = Math.floor((canvas.height - height) / 2)
+  canvas.fill(x, y, width, height, " ", "#05070a", "#05070a")
+  canvas.border(x, y, width, height, session.status === "victory" ? "#f4d06f" : "#d56b8c")
+
+  const title = session.status === "victory" ? "VICTORY" : "YOU FELL"
+  const body =
+    session.status === "victory"
+      ? "The final gate opens. The dungeon releases its claim."
+      : "The dungeon closes around your unfinished oath."
+
+  canvas.center(y + 2, title, session.status === "victory" ? "#f4d06f" : "#d56b8c")
+  canvas.center(y + 4, body, "#d8dee9")
+  canvas.center(y + 6, `Floor ${session.floor}/${session.finalFloor}  Kills ${session.kills}  Gold ${session.gold}  Level ${session.level}`, "#8f9ba8")
+  canvas.center(y + 9, "Enter rerun this seed    Esc title    q quit", "#66717d")
 }
 
 function drawDungeonBackdrop(canvas: Canvas, seed: number) {

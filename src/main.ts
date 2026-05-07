@@ -8,6 +8,7 @@ import {
   moveSelection,
   type AppModel,
 } from "./ui/screens.js"
+import { shouldUseThreeRenderer } from "./rendering/threeAssets.js"
 
 const model: AppModel = {
   screen: "start",
@@ -18,6 +19,8 @@ const model: AppModel = {
   seed: 2423368,
   session: createSession(),
   message: "",
+  debugView: process.env.DUNGEON_DEBUG_VIEW === "1",
+  rendererBackend: shouldUseThreeRenderer() ? "three" : "terminal",
 }
 
 const renderer = await createCliRenderer({
@@ -83,6 +86,15 @@ function handleMenuKey(key: KeyEvent) {
 }
 
 function handleGameKey(key: KeyEvent) {
+  if (model.session.status !== "running") {
+    if (key.name === "return" || key.name === "enter" || key.name === "linefeed" || key.name === "space") startRun()
+    if (key.name === "escape") {
+      model.screen = "start"
+      model.menuIndex = 0
+    }
+    return
+  }
+
   if (key.name === "escape") {
     model.dialog = "pause"
     return

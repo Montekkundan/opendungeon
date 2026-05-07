@@ -46,6 +46,8 @@ describe("game session", () => {
         seed: 2423368,
         session,
         message: "",
+        debugView: false,
+        rendererBackend: "terminal",
       },
       80,
       24,

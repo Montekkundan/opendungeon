@@ -1,8 +1,9 @@
-import { StyledText, fg, type TextChunk } from "@opentui/core"
+import { RGBA, StyledText, fg, type TextChunk } from "@opentui/core"
 
 type Cell = {
   text: string
   fg: string
+  bg?: string
 }
 
 export class Canvas {
@@ -12,28 +13,29 @@ export class Canvas {
     readonly width: number,
     readonly height: number,
     private defaultFg = "#1f2933",
+    private defaultBg = "#05070a",
   ) {
     this.cells = Array.from({ length: height }, () =>
-      Array.from({ length: width }, () => ({ text: " ", fg: defaultFg })),
+      Array.from({ length: width }, () => ({ text: " ", fg: defaultFg, bg: defaultBg })),
     )
   }
 
-  write(x: number, y: number, text: string, fgColor = "#d8dee9") {
+  write(x: number, y: number, text: string, fgColor = "#d8dee9", bgColor?: string) {
     if (y < 0 || y >= this.height) return
     for (let i = 0; i < text.length; i++) {
       const cellX = x + i
       if (cellX < 0 || cellX >= this.width) continue
-      this.cells[y][cellX] = { text: text[i], fg: fgColor }
+      this.cells[y][cellX] = { text: text[i], fg: fgColor, bg: bgColor }
     }
   }
 
-  center(y: number, text: string, fgColor = "#d8dee9") {
-    this.write(Math.max(0, Math.floor((this.width - text.length) / 2)), y, text, fgColor)
+  center(y: number, text: string, fgColor = "#d8dee9", bgColor?: string) {
+    this.write(Math.max(0, Math.floor((this.width - text.length) / 2)), y, text, fgColor, bgColor)
   }
 
-  fill(x: number, y: number, width: number, height: number, text = " ", fgColor = this.defaultFg) {
+  fill(x: number, y: number, width: number, height: number, text = " ", fgColor = this.defaultFg, bgColor = this.defaultBg) {
     for (let row = y; row < y + height; row++) {
-      for (let col = x; col < x + width; col++) this.write(col, row, text[0] ?? " ", fgColor)
+      for (let col = x; col < x + width; col++) this.write(col, row, text[0] ?? " ", fgColor, bgColor)
     }
   }
 
@@ -50,9 +52,15 @@ export class Canvas {
   toStyledText(): StyledText {
     const chunks: TextChunk[] = []
     for (let y = 0; y < this.height; y++) {
-      for (const cell of this.cells[y]) chunks.push(fg(cell.fg)(cell.text))
-      if (y < this.height - 1) chunks.push(fg(this.defaultFg)("\n"))
+      for (const cell of this.cells[y]) chunks.push(toChunk(cell))
+      if (y < this.height - 1) chunks.push(toChunk({ text: "\n", fg: this.defaultFg, bg: this.defaultBg }))
     }
     return new StyledText(chunks)
   }
+}
+
+function toChunk(cell: Cell): TextChunk {
+  const chunk = fg(cell.fg)(cell.text)
+  if (cell.bg) chunk.bg = RGBA.fromHex(cell.bg)
+  return chunk
 }

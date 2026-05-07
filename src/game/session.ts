@@ -24,6 +24,11 @@ export type GameSession = {
   inventory: string[]
   turn: number
   status: "running" | "dead" | "victory"
+  gold: number
+  xp: number
+  level: number
+  kills: number
+  finalFloor: number
 }
 
 const lootEvents = {
@@ -60,6 +65,11 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
     inventory: ["Rusty blade", "Dew vial"],
     turn: 0,
     status: "running",
+    gold: 0,
+    xp: 0,
+    level: 1,
+    kills: 0,
+    finalFloor: 5,
   }
 }
 
@@ -87,6 +97,7 @@ export function tryMove(session: GameSession, dx: number, dy: number) {
   else if (tile in lootEvents) {
     const lootTile = tile as keyof typeof lootEvents
     session.log.unshift(lootEvents[lootTile])
+    session.gold += lootTile === "relic" ? 12 : lootTile === "chest" ? 20 : 4
     session.inventory.unshift(inventoryItem(lootTile))
     setTile(session.dungeon, next, "floor")
   } else {
@@ -128,11 +139,15 @@ function removeActor(actors: Actor[], actor: Actor) {
 
 function attack(session: GameSession, actor: Actor) {
   const focusBonus = session.focus > 0 ? 1 : 0
-  actor.hp -= 2 + focusBonus
+  const levelBonus = Math.floor(session.level / 2)
+  actor.hp -= 2 + focusBonus + levelBonus
   session.focus = Math.max(0, session.focus - 1)
 
   if (actor.hp <= 0) {
     removeActor(session.dungeon.actors, actor)
+    session.kills += 1
+    session.xp += xpFor(actor.kind)
+    maybeLevelUp(session)
     session.log.unshift(defeatMessage(actor.kind))
     return
   }
@@ -152,10 +167,34 @@ function inventoryItem(tile: keyof typeof lootEvents) {
   return "Rollback scroll"
 }
 
+function xpFor(kind: Actor["kind"]) {
+  if (kind === "necromancer") return 7
+  if (kind === "ghoul") return 4
+  return 2
+}
+
+function maybeLevelUp(session: GameSession) {
+  const needed = session.level * 10
+  if (session.xp < needed) return
+  session.xp -= needed
+  session.level += 1
+  session.maxHp += 2
+  session.maxFocus += 1
+  session.hp = Math.min(session.maxHp, session.hp + 4)
+  session.focus = session.maxFocus
+  session.log.unshift(`Level ${session.level}. The oath hardens.`)
+}
+
 function descend(session: GameSession) {
+  if (session.floor >= session.finalFloor) {
+    session.status = "victory"
+    session.log.unshift("The final gate opens. The dungeon releases you.")
+    return
+  }
   session.floor += 1
   session.dungeon = createDungeon(session.seed, session.floor)
   session.player = { ...session.dungeon.playerStart }
+  session.hp = Math.min(session.maxHp, session.hp + 3)
   session.focus = Math.min(session.maxFocus, session.focus + 2)
   session.log.unshift(`Floor ${session.floor}. Same seed, darker shape.`)
 }
