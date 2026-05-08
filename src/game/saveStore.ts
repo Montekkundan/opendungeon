@@ -288,6 +288,7 @@ function createSaveThumbnail(session: GameSession) {
 
 function tileGlyph(tile: string) {
   if (tile === "wall") return "#"
+  if (tile === "door") return "+"
   if (tile === "stairs") return ">"
   if (tile === "potion") return "!"
   if (tile === "relic") return "*"

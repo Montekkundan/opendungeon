@@ -163,7 +163,7 @@ const movement: Partial<Record<HeadlessActionId, Point>> = {
   "move-east": { x: 1, y: 0 },
 }
 
-const passableTiles = new Set<TileId>(["floor", "stairs", "potion", "relic", "chest", "trap"])
+const passableTiles = new Set<TileId>(["floor", "door", "stairs", "potion", "relic", "chest", "trap"])
 
 export class HeadlessGameEnv {
   session: GameSession
@@ -802,6 +802,13 @@ export function validateHeadlessInvariants(session: GameSession): string[] {
     }
   }
 
+  for (const secret of session.dungeon.secrets ?? []) {
+    const doorTile = tileAt(session.dungeon, secret.door)
+    const rewardTile = tileAt(session.dungeon, secret.reward)
+    if (!passableTiles.has(doorTile)) errors.push(`Secret ${secret.id} door is on non-passable tile ${doorTile}.`)
+    if (!passableTiles.has(rewardTile)) errors.push(`Secret ${secret.id} reward is on non-passable tile ${rewardTile}.`)
+  }
+
   errors.push(...validateWorldConfig(session.world).map((error) => `World config: ${error}`))
   const worldAnchorIds = new Set(session.world.anchors.map((anchor) => anchor.id))
   for (const event of session.world.events) {
@@ -847,6 +854,7 @@ function serializeSessionForObservation(session: GameSession) {
       })),
       playerStart: { ...session.dungeon.playerStart },
       anchors: session.dungeon.anchors.map((anchor) => ({ ...anchor, position: { ...anchor.position } })),
+      secrets: (session.dungeon.secrets ?? []).map((secret) => ({ ...secret, door: { ...secret.door }, reward: { ...secret.reward } })),
     },
   }
 }
@@ -967,11 +975,13 @@ function tileCode(session: GameSession, point: Point) {
   if (tile === "relic") return 5
   if (tile === "chest") return 6
   if (tile === "trap") return 10
+  if (tile === "door") return 11
   return 0
 }
 
 function tileGlyph(tile: TileId) {
   if (tile === "wall") return "#"
+  if (tile === "door") return "+"
   if (tile === "stairs") return ">"
   if (tile === "potion") return "!"
   if (tile === "relic") return "*"

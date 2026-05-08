@@ -413,7 +413,9 @@ export function tryMove(session: GameSession, dx: number, dy: number) {
 
   session.player = next
 
-  if (tile === "stairs") {
+  if (tile === "door") {
+    unlockDoor(session, next)
+  } else if (tile === "stairs") {
     if (hasFinalGuardian(session)) {
       session.log.unshift("The final gate is sealed by the necromancer.")
       trimLog(session)
@@ -557,6 +559,7 @@ export function normalizeSessionAfterLoad(session: GameSession): GameSession {
     actor.phase = Math.max(1, Math.floor(actor.phase ?? 1))
     ensureEnemyAi(actor, index, session.floor)
   })
+  session.dungeon.secrets ??= []
   pruneStatusEffects(session)
   return session
 }
@@ -903,6 +906,20 @@ function triggerTrap(session: GameSession, point: Point) {
   session.hp -= damage
   session.log.unshift(`Trap sprung for ${damage}. The room remembers your step.`)
   completeWorldProgress(session, "interaction", point, `Trap sprung on floor ${session.floor}.`)
+}
+
+function unlockDoor(session: GameSession, point: Point) {
+  setTile(session.dungeon, point, "floor")
+  const secret = session.dungeon.secrets?.find((candidate) => samePoint(candidate.door, point))
+  if (secret && !secret.discovered) {
+    secret.discovered = true
+    session.log.unshift("Locked door opens. A secret room breathes out.")
+    completeWorldProgress(session, "interaction", point, `Secret room ${secret.id} discovered.`)
+    return
+  }
+
+  session.log.unshift("Locked door opens.")
+  completeWorldProgress(session, "interaction", point, "Locked door opened.")
 }
 
 function isSkillCheckSource(tile: string): tile is SkillCheckSource {

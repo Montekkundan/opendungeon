@@ -113,7 +113,7 @@
 - [x] Traps.
 - [ ] Merchants.
 - [x] Floor modifiers.
-- [ ] Secret rooms and locked doors.
+- [x] Secret rooms and locked doors.
 - [ ] NPC conversations.
 
 ## Packaging

@@ -226,6 +226,15 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
     ]
   }
 
+  if (name === "secret-door") {
+    return [
+      { command: "set-relative-tile", dx: 1, dy: 0, tile: "door" },
+      { action: "move-east" },
+      { assert: { path: "session.log.0", contains: "Locked door opens" } },
+      { command: "check-invariants" },
+    ]
+  }
+
   if (name === "floor-modifier") {
     return [
       { assert: { path: "floorModifier.id", truthy: true } },

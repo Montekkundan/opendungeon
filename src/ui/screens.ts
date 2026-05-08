@@ -638,6 +638,7 @@ function drawAssetTile(
 
   drawPixelBlock(canvas, screenX, screenY, floorSprite(x, y, tileWidth, tileHeight), dim)
   if (!visible) return
+  if (tile === "door") canvas.write(screenX + Math.floor(tileWidth / 2), screenY + Math.floor(tileHeight / 2), "+", UI.gold)
   if (tile === "stairs") drawPixelBlock(canvas, screenX, screenY, pixelSprite("stairs", tileWidth, tileHeight), 1)
   if (tile === "potion") drawPixelBlock(canvas, screenX, screenY, pixelSprite("potion", tileWidth, tileHeight), 1)
   if (tile === "relic") drawPixelBlock(canvas, screenX, screenY, pixelSprite("relic", tileWidth, tileHeight), 1)
@@ -651,6 +652,7 @@ function tileStyle(session: GameSession, x: number, y: number, debugView: boolea
   if (!seen) return { pattern: ["        ", "        ", "        ", "        "], fg: "#05070a", bg: "#05070a" }
   if (tile === "floor") return floorStyle(x, y, visible)
   if (tile === "wall") return wallStyle(x, y, visible)
+  if (tile === "door") return visible ? { pattern: ["        ", "  +--+  ", "  |  |  ", "  +--+  "], fg: "#f4d06f", bg: "#3a2731" } : floorStyle(x, y, false)
   if (tile === "stairs") return visible ? { pattern: ["        ", "  /==\\  ", "  |  |  ", "  \\==/  "], fg: "#2d1d17", bg: "#b4915a" } : floorStyle(x, y, false)
   if (tile === "potion") return visible ? { pattern: ["        ", "        ", "   ●    ", "        "], fg: "#f4a6b8", bg: textureColor(x, y) } : floorStyle(x, y, false)
   if (tile === "relic") return visible ? { pattern: ["        ", "        ", "   ◆    ", "        "], fg: "#f4d06f", bg: textureColor(x, y) } : floorStyle(x, y, false)
@@ -663,6 +665,7 @@ function debugTileStyle(session: GameSession, x: number, y: number): TileRenderS
   const tile = session.dungeon.tiles[y]?.[x] ?? "void"
   if (tile === "floor") return { pattern: ["··"], fg: "#36595a" }
   if (tile === "wall") return { pattern: ["██"], fg: "#3b3f46" }
+  if (tile === "door") return { pattern: ["++"], fg: "#f4d06f" }
   if (tile === "stairs") return { pattern: [">>"], fg: "#f4d06f" }
   if (tile === "potion") return { pattern: ["!!"], fg: "#d56b8c" }
   if (tile === "relic") return { pattern: ["$$"], fg: "#d6a85c" }

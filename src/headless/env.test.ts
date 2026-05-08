@@ -68,7 +68,7 @@ describe("headless game env", () => {
   })
 
   test("runs built-in and file-backed scenarios", () => {
-    for (const name of ["smoke", "combat", "combat-skills", "area-combat", "boss-phase", "status-effects", "reaction-block", "character-name", "starting-loadout", "biome", "trap", "floor-modifier", "skill-check", "save-load", "save-management", "auth-local", "auth-expired", "map-generation", "npc-event", "full-run"]) {
+    for (const name of ["smoke", "combat", "combat-skills", "area-combat", "boss-phase", "status-effects", "reaction-block", "character-name", "starting-loadout", "biome", "trap", "secret-door", "floor-modifier", "skill-check", "save-load", "save-management", "auth-local", "auth-expired", "map-generation", "npc-event", "full-run"]) {
       const scenario = builtinScenario(name)
       expect(scenario).not.toBeNull()
       const result = runScenario(name, scenario!, { seed: 1234 })
@@ -91,6 +91,7 @@ describe("headless game env", () => {
     expect(mapFingerprint(sameA)).toBe(mapFingerprint(sameB))
     expect(mapFingerprint(sameA)).not.toBe(mapFingerprint(otherSeed))
     expect(mapFingerprint(sameA)).not.toBe(mapFingerprint(otherFloor))
+    expect(sameA.dungeon.secrets.length).toBeGreaterThan(0)
     for (const seed of [1, 2, 3, 1234, 9999]) {
       const session = createSession(seed)
       expect(validateHeadlessInvariants(session)).toEqual([])

@@ -26,6 +26,7 @@ export type Dungeon = {
   actors: Actor[]
   playerStart: Point
   anchors: DungeonAnchor[]
+  secrets: DungeonSecret[]
 }
 
 export type DungeonAnchor = {
@@ -36,6 +37,14 @@ export type DungeonAnchor = {
   position: Point
   width: number
   height: number
+}
+
+export type DungeonSecret = {
+  id: string
+  roomIndex: number
+  door: Point
+  reward: Point
+  discovered: boolean
 }
 
 export type EnemyPattern = "sentinel" | "wander" | "patrol-horizontal" | "patrol-vertical" | "stalker"
@@ -76,6 +85,7 @@ export function createDungeon(seed: number, floor: number, width = 96, height = 
 
   placeFeature(tiles, center(lastRoom), "stairs")
   scatterFeatures(tiles, rooms, rng)
+  const secrets = placeSecretRooms(tiles, rooms, rng, floor)
 
   const actors = spawnActors(tiles, rooms.slice(1), rng, floor)
   if (floor >= 5) actors.push(finalGuardian(center(lastRoom), floor))
@@ -89,6 +99,7 @@ export function createDungeon(seed: number, floor: number, width = 96, height = 
     actors,
     playerStart,
     anchors: createDungeonAnchors(rooms, floor),
+    secrets,
   }
 }
 
@@ -163,6 +174,60 @@ function scatterFeatures(tiles: TileId[][], rooms: Room[], rng: Rng) {
     const point = randomInteriorPoint(room, rng)
     if (tiles[point.y][point.x] === "floor") tiles[point.y][point.x] = rng.pick(featureTiles)
   }
+}
+
+function placeSecretRooms(tiles: TileId[][], rooms: Room[], rng: Rng, floor: number): DungeonSecret[] {
+  const candidates = rooms.slice(2, Math.max(3, rooms.length - 1))
+  if (!candidates.length) return []
+  const count = Math.min(2, Math.max(1, Math.floor(rooms.length / 18)))
+  const secrets: DungeonSecret[] = []
+
+  for (let index = 0; index < count; index++) {
+    const room = candidates[(rng.int(0, candidates.length - 1) + index * 5) % candidates.length]
+    const roomIndex = rooms.indexOf(room)
+    const door = secretDoorPoint(tiles, room)
+    if (!door || secrets.some((secret) => secret.door.x === door.x && secret.door.y === door.y)) continue
+    const reward = randomInteriorPoint(room, rng)
+    if (tiles[reward.y][reward.x] === "floor") tiles[reward.y][reward.x] = index % 2 === 0 ? "chest" : "relic"
+    tiles[door.y][door.x] = "door"
+    secrets.push({
+      id: `secret-${floor}-${roomIndex}`,
+      roomIndex,
+      door,
+      reward,
+      discovered: false,
+    })
+  }
+
+  return secrets
+}
+
+function secretDoorPoint(tiles: TileId[][], room: Room): Point | null {
+  const candidates: Point[] = []
+  for (let x = room.x; x < room.x + room.width; x++) {
+    candidates.push({ x, y: room.y }, { x, y: room.y + room.height - 1 })
+  }
+  for (let y = room.y + 1; y < room.y + room.height - 1; y++) {
+    candidates.push({ x: room.x, y }, { x: room.x + room.width - 1, y })
+  }
+
+  return candidates.find((point) => {
+    if (tiles[point.y]?.[point.x] !== "floor") return false
+    return cardinalNeighbors(point).some((neighbor) => !insideRoom(neighbor, room) && tiles[neighbor.y]?.[neighbor.x] === "floor")
+  }) ?? null
+}
+
+function insideRoom(point: Point, room: Room) {
+  return point.x >= room.x && point.y >= room.y && point.x < room.x + room.width && point.y < room.y + room.height
+}
+
+function cardinalNeighbors(point: Point): Point[] {
+  return [
+    { x: point.x + 1, y: point.y },
+    { x: point.x - 1, y: point.y },
+    { x: point.x, y: point.y + 1 },
+    { x: point.x, y: point.y - 1 },
+  ]
 }
 
 function spawnActors(tiles: TileId[][], rooms: Room[], rng: Rng, floor: number): Actor[] {

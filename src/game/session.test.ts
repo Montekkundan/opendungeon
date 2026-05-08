@@ -21,7 +21,7 @@ import {
   usePotion,
 } from "./session.js"
 import type { GameSession } from "./session.js"
-import { setTile } from "./dungeon.js"
+import { setTile, tileAt } from "./dungeon.js"
 import type { ActorId } from "./domainTypes.js"
 import { listSaves, loadSave, saveSession } from "./saveStore.js"
 import { defaultSettings, loadSettings, profilePath, saveSettings } from "./settingsStore.js"
@@ -386,6 +386,24 @@ describe("game session", () => {
     expect(session.turn).toBe(1)
   })
 
+  test("generates locked secret-room doors that can be discovered", () => {
+    const session = createSession(1234)
+    const secret = session.dungeon.secrets[0]
+    expect(secret).toBeDefined()
+    expect(tileAt(session.dungeon, secret.door)).toBe("door")
+
+    const entry = cardinalNeighbors(secret.door).find((point) => tileAt(session.dungeon, point) === "floor")
+    expect(entry).toBeDefined()
+    session.player = { ...entry! }
+
+    tryMove(session, secret.door.x - entry!.x, secret.door.y - entry!.y)
+
+    expect(session.player).toEqual(secret.door)
+    expect(secret.discovered).toBe(true)
+    expect(tileAt(session.dungeon, secret.door)).toBe("floor")
+    expect(session.log[0]).toContain("secret room")
+  })
+
   test("locks final stairs until the guardian is defeated", () => {
     const session = createSession(1234)
     session.floor = session.finalFloor
@@ -571,3 +589,12 @@ describe("game session", () => {
     }
   })
 })
+
+function cardinalNeighbors(point: { x: number; y: number }) {
+  return [
+    { x: point.x + 1, y: point.y },
+    { x: point.x - 1, y: point.y },
+    { x: point.x, y: point.y + 1 },
+    { x: point.x, y: point.y - 1 },
+  ]
+}
