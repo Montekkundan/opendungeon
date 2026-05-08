@@ -32,8 +32,8 @@
 - [x] Add opencode-style app shell with `MetaProvider`, `Router`, `FileRoutes`, and language providers.
 - [x] Add `en.ts` and `fr.ts` translations.
 - [x] Add homepage and docs pages.
-- [ ] Add full docs content beyond the first architecture/quickstart page.
-- [ ] Add deploy target and production build verification.
+- [x] Add full docs content beyond the first architecture/quickstart page.
+- [x] Add deploy target and production build verification.
 
 ## Cloud/Auth
 

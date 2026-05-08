@@ -45,6 +45,7 @@
     "www:dev": "bun --cwd packages/www dev",
     "www:build": "bun --cwd packages/www build",
     "www:typecheck": "bun --cwd packages/www typecheck",
+    "www:verify": "bun --cwd packages/www verify",
     "host": "bun run src/net/host.ts",
     "start": "bun run src/main.ts",
     "build:binary": "bun build --compile --outfile=dist/opendungeon src/main.ts",

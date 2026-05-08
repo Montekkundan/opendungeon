@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "vite dev --host 0.0.0.0",
     "build": "vite build",
+    "build:vercel": "NITRO_PRESET=vercel vite build",
     "start": "vite start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify": "bun run typecheck && bun run build:vercel"
   },
   "dependencies": {
     "@ibm/plex": "6.4.1",

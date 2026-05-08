@@ -5,6 +5,25 @@ import { Footer } from "~/component/footer"
 import { LocaleLinks } from "~/component/locale-links"
 import { useI18n } from "~/context/i18n"
 
+const sections = [
+  {
+    title: "docs.testing.title",
+    items: ["docs.testing.check", "docs.testing.headless", "docs.testing.rl"],
+  },
+  {
+    title: "docs.saves.title",
+    items: ["docs.saves.local", "docs.saves.auth", "docs.saves.cloud"],
+  },
+  {
+    title: "docs.content.title",
+    items: ["docs.content.world", "docs.content.npcs", "docs.content.assets"],
+  },
+  {
+    title: "docs.deploy.title",
+    items: ["docs.deploy.typecheck", "docs.deploy.build", "docs.deploy.vercel"],
+  },
+] as const
+
 export default function Docs() {
   const i18n = useI18n()
 
@@ -36,6 +55,17 @@ export default function Docs() {
               <li>{i18n.t("docs.arch.storage")}</li>
             </ul>
           </section>
+
+          {sections.map((section) => (
+            <section>
+              <h2>{i18n.t(section.title)}</h2>
+              <ul>
+                {section.items.map((item) => (
+                  <li>{i18n.t(item)}</li>
+                ))}
+              </ul>
+            </section>
+          ))}
 
           <section>
             <h2>{i18n.t("docs.links.title")}</h2>
