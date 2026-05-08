@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { PNG } from "pngjs"
-import { makeVirtual, setVirtual, spriteFromVirtual } from "./virtualSprites.js"
+import { makeVirtual, rgbToHex, setVirtual, spriteFromVirtual } from "./virtualSprites.js"
 
 export type PixelCell = {
   ch: string
@@ -73,7 +73,7 @@ export function assetPath(...parts: string[]) {
   return resolve(assetRoot(), ...parts)
 }
 
-export function assetRoot() {
+function assetRoot() {
   const configured = process.env.OPENDUNGEON_ASSET_DIR
   const candidates = [
     configured,
@@ -128,14 +128,6 @@ function samplePngPixel(sheet: PNG, x: number, y: number) {
   const alpha = sheet.data[index + 3]
   if (alpha < 36) return undefined
   return rgbToHex(sheet.data[index], sheet.data[index + 1], sheet.data[index + 2])
-}
-
-function rgbToHex(r: number, g: number, b: number) {
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`
-}
-
-function toHex(value: number) {
-  return value.toString(16).padStart(2, "0")
 }
 
 function wrap(value: number, count: number) {

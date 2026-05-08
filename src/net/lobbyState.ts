@@ -168,7 +168,7 @@ export function createInviteCode(seed: number, mode: LobbyMode, salt = "opendung
   return createHash("sha256").update(`${salt}:${mode}:${seed}`).digest("hex").slice(0, 8).toUpperCase()
 }
 
-export function normalizeRaceResult(input: Partial<RaceResult>, submittedAt = Date.now()): RaceResult {
+function normalizeRaceResult(input: Partial<RaceResult>, submittedAt = Date.now()): RaceResult {
   return {
     name: cleanName(input.name || "Crawler"),
     status: String(input.status || "running").slice(0, 16),
@@ -181,7 +181,7 @@ export function normalizeRaceResult(input: Partial<RaceResult>, submittedAt = Da
   }
 }
 
-export function sortLeaderboard(results: RaceResult[]) {
+function sortLeaderboard(results: RaceResult[]) {
   return [...results].sort((a, b) => {
     if (a.status === "victory" && b.status !== "victory") return -1
     if (a.status !== "victory" && b.status === "victory") return 1

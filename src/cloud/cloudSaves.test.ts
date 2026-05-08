@@ -116,8 +116,6 @@ function saveSummary(id: string, savedAt: string): SaveSummary {
     id,
     name: `Manual save: ${id}`,
     savedAt,
-    runId: `run-${id}`,
-    startedAt: "2026-05-08T11:00:00.000Z",
     heroName: "Mira",
     heroTitle: "Ranger",
     classId: "ranger",

@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from "nod
 import { dirname, isAbsolute, normalize, resolve, sep } from "node:path"
 import { assetPath } from "./spriteSampler.js"
 
-export const acceptedReferenceLicenseIds = [
+const acceptedReferenceLicenseIds = [
   "project-owned",
   "CC0-1.0",
   "CC-BY-3.0",

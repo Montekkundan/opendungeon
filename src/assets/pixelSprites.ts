@@ -8,10 +8,10 @@ import {
   type StaticSpriteId,
 } from "./opendungeonSprites.js"
 import { assetPath, sampleSourceFrame, type PixelCell, type PixelSprite, type SourceSheet } from "./spriteSampler.js"
-import { drawLine, fillPolygon, fillRect, makeVirtual, setVirtual, spriteFromVirtual } from "./virtualSprites.js"
+import { drawLine, fillEllipse, fillPolygon, fillRect, makeVirtual, makeVirtualSpriteCanvas, spriteFromVirtual } from "./virtualSprites.js"
 
 export type { PixelSpriteId, SpriteAnimationId } from "./opendungeonSprites.js"
-export type { PixelCell, PixelSprite } from "./spriteSampler.js"
+export type { PixelSprite } from "./spriteSampler.js"
 
 type RuntimeActorSource = {
   folder: string
@@ -116,9 +116,7 @@ function runtimeActorSource(sourceId: keyof typeof runtimeActorSources, animatio
 }
 
 function fallbackActorSprite(id: AnimatedSpriteId, animation: SpriteAnimationId, frame: number, width: number, height: number): PixelSprite {
-  const virtualWidth = Math.max(1, width)
-  const virtualHeight = Math.max(1, height * 2)
-  const pixels = makeVirtual(virtualWidth, virtualHeight)
+  const { virtualWidth, virtualHeight, pixels } = makeVirtualSpriteCanvas(width, height)
   const palette = actorPalette(id)
   const boss = id.startsWith("boss-")
   const slime = id === "slime"
@@ -291,20 +289,6 @@ function drawStaticIcon(pixels: Array<string | undefined>, width: number, height
   if (id === "dice") {
     fillPolygon(pixels, width, height, [[cx, height * 0.18], [width * 0.74, cy], [cx, height * 0.82], [width * 0.26, cy]], "#d56b8c")
     drawLine(pixels, width, height, cx, height * 0.2, cx, height * 0.8, "#f4a6b8")
-  }
-}
-
-function fillEllipse(pixels: Array<string | undefined>, width: number, height: number, cx: number, cy: number, rx: number, ry: number, color: string) {
-  const minX = Math.floor(cx - rx)
-  const maxX = Math.ceil(cx + rx)
-  const minY = Math.floor(cy - ry)
-  const maxY = Math.ceil(cy + ry)
-  for (let y = minY; y <= maxY; y++) {
-    for (let x = minX; x <= maxX; x++) {
-      const dx = (x - cx) / Math.max(1, rx)
-      const dy = (y - cy) / Math.max(1, ry)
-      if (dx * dx + dy * dy <= 1) setVirtual(pixels, width, height, x, y, color)
-    }
   }
 }
 

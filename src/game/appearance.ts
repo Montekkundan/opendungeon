@@ -1,7 +1,7 @@
-export const cosmeticPaletteIds = ["class-default", "ember", "moonlit", "verdant", "royal"] as const
-export const portraitVariantIds = ["class-default", "hooded", "masked", "scarred"] as const
-export const heroWeaponSpriteIds = ["class-default", "sword", "bow", "staff", "dagger", "axe", "shield"] as const
-export const heroAnimationSetIds = ["class-default", "ranger", "warden", "arcanist"] as const
+const cosmeticPaletteIds = ["class-default", "ember", "moonlit", "verdant", "royal"] as const
+const portraitVariantIds = ["class-default", "hooded", "masked", "scarred"] as const
+const heroWeaponSpriteIds = ["class-default", "sword", "bow", "staff", "dagger", "axe", "shield"] as const
+const heroAnimationSetIds = ["class-default", "ranger", "warden", "arcanist"] as const
 
 export type CosmeticPaletteId = (typeof cosmeticPaletteIds)[number]
 export type PortraitVariantId = (typeof portraitVariantIds)[number]

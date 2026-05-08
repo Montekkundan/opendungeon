@@ -3,8 +3,9 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { authStatusReport } from "../cloud/authStatus.js"
 import { loadAuthSession, saveAuthSession, type AuthSession } from "../cloud/authStore.js"
-import { setTile, tileAt, type Actor, type Point } from "../game/dungeon.js"
+import { cardinalNeighbors, setTile, tileAt, type Actor, type Point } from "../game/dungeon.js"
 import { isNpcActorId, type TileId } from "../game/domainTypes.js"
+import { actorGlyph, tileGlyph } from "../game/glyphs.js"
 import {
   attemptFlee,
   combatSkills,
@@ -28,6 +29,7 @@ import {
 } from "../game/session.js"
 import { defaultSettings, loadSettings } from "../game/settingsStore.js"
 import { deleteSave, exportSave, importSave, listSaves, loadSave, renameSave, saveAutosave, saveSession, validateSave, type SaveSummary } from "../game/saveStore.js"
+import { hashText } from "../shared/hash.js"
 import { validateWorldConfig } from "../world/worldConfig.js"
 
 export const headlessActionIds = [
@@ -152,10 +154,8 @@ export type ReplayResult = {
   finalSnapshot: HeadlessSnapshot
 }
 
-export type TestObservation = ReturnType<HeadlessGameEnv["observeTest"]>
-
-export const agentViewRadius = 5
-export const maxObservedActors = 8
+const agentViewRadius = 5
+const maxObservedActors = 8
 const agentCoreFeatureSize = 8 + heroClassIds.length + 3 + 2
 export const agentObservationSize = (agentViewRadius * 2 + 1) ** 2 + agentCoreFeatureSize + 12 + maxObservedActors * 6 + 23
 
@@ -752,16 +752,12 @@ export class HeadlessGameEnv {
   }
 }
 
-export function actionIndexFor(input: HeadlessActionInput): number {
+function actionIndexFor(input: HeadlessActionInput): number {
   if (typeof input === "number") return input
   if (typeof input === "string") return headlessActionIds.indexOf(input)
   if (typeof input.index === "number") return input.index
   if (input.id) return headlessActionIds.indexOf(input.id)
   return -1
-}
-
-export function actionIdFor(input: HeadlessActionInput): HeadlessActionId {
-  return headlessActionIds[actionIndexFor(input)] ?? "noop"
 }
 
 export function mapFingerprint(session: GameSession) {
@@ -978,18 +974,6 @@ function tileCode(session: GameSession, point: Point) {
   return 0
 }
 
-function tileGlyph(tile: TileId) {
-  if (tile === "wall") return "#"
-  if (tile === "door") return "+"
-  if (tile === "stairs") return ">"
-  if (tile === "potion") return "!"
-  if (tile === "relic") return "*"
-  if (tile === "chest") return "$"
-  if (tile === "trap") return "^"
-  if (tile === "void") return " "
-  return "."
-}
-
 function visibleActors(session: GameSession) {
   return session.dungeon.actors.filter((actor) => session.visible.has(`${actor.position.x},${actor.position.y}`))
 }
@@ -1004,18 +988,6 @@ function actorKindCode(kind: Actor["kind"]) {
   if (kind === "crypt-mimic") return 1.75
   if (kind === "grave-root-boss") return 2
   return isNpcActorId(kind) ? -0.5 : 0
-}
-
-function actorGlyph(kind: Actor["kind"]) {
-  if (kind === "slime") return "s"
-  if (kind === "ghoul") return "g"
-  if (kind === "necromancer") return "n"
-  if (kind === "gallows-wisp") return "w"
-  if (kind === "rust-squire") return "r"
-  if (kind === "carrion-moth") return "m"
-  if (kind === "crypt-mimic") return "c"
-  if (kind === "grave-root-boss") return "b"
-  return isNpcActorId(kind) ? "?" : "a"
 }
 
 function statCode(stat: string | undefined) {
@@ -1082,12 +1054,7 @@ function isReachable(dungeon: GameSession["dungeon"], start: Point, target: Poin
   while (queue.length) {
     const point = queue.shift()!
     if (samePoint(point, target)) return true
-    for (const next of [
-      { x: point.x + 1, y: point.y },
-      { x: point.x - 1, y: point.y },
-      { x: point.x, y: point.y + 1 },
-      { x: point.x, y: point.y - 1 },
-    ]) {
+    for (const next of cardinalNeighbors(point)) {
       const key = `${next.x},${next.y}`
       if (seen.has(key) || !passableTiles.has(tileAt(dungeon, next))) continue
       seen.add(key)
@@ -1106,13 +1073,7 @@ function distance(left: Point, right: Point) {
 }
 
 function stableHash(value: unknown) {
-  const text = stableStringify(value)
-  let hash = 0x811c9dc5
-  for (let index = 0; index < text.length; index++) {
-    hash ^= text.charCodeAt(index)
-    hash = Math.imul(hash, 0x01000193) >>> 0
-  }
-  return hash.toString(16).padStart(8, "0")
+  return hashText(stableStringify(value))
 }
 
 function stableStringify(value: unknown): string {

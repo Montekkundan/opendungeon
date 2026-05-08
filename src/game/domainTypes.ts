@@ -1,6 +1,6 @@
 export type TileId = "void" | "floor" | "wall" | "door" | "stairs" | "potion" | "relic" | "chest" | "trap"
 
-export const enemyActorIds = [
+const enemyActorIds = [
   "slime",
   "ghoul",
   "necromancer",
@@ -11,7 +11,7 @@ export const enemyActorIds = [
   "grave-root-boss",
 ] as const
 
-export const npcActorIds = [
+const npcActorIds = [
   "cartographer",
   "wound-surgeon",
   "shrine-keeper",

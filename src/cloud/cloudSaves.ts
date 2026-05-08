@@ -1,8 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto"
-import type { SupabaseClient } from "@supabase/supabase-js"
 import type { SaveSummary } from "../game/saveStore.js"
 import { authStatusReport, type AuthStatusReport } from "./authStatus.js"
-import type { AuthSession } from "./authStore.js"
 
 export type EncryptedSavePayload = {
   version: 1
@@ -187,37 +185,6 @@ export function buildCloudSaveBrowserState(
   }
 }
 
-export function cloudSaveSecret(session: AuthSession) {
-  return [session.userId, session.accessToken, session.refreshToken ?? ""].filter(Boolean).join(":")
-}
-
-export function createSupabaseCloudSaveStore(client: SupabaseClient): CloudSaveStore {
-  return {
-    async get(ownerId, saveId) {
-      const { data, error } = await client.from("opendungeon_cloud_saves").select("*").eq("owner_id", ownerId).eq("save_id", saveId).maybeSingle()
-      if (error) throw new Error(`Cloud save fetch failed: ${error.message}`)
-      return data ? rowToCloudSave(data) : null
-    },
-    async list(ownerId) {
-      const { data, error } = await client.from("opendungeon_cloud_saves").select("*").eq("owner_id", ownerId).order("updated_at", { ascending: false })
-      if (error) throw new Error(`Cloud save list failed: ${error.message}`)
-      return (data ?? []).map(rowToCloudSave)
-    },
-    async upsert(record) {
-      const { error } = await client.from("opendungeon_cloud_saves").upsert({
-        owner_id: record.ownerId,
-        save_id: record.saveId,
-        summary: record.summary,
-        encrypted_payload: record.encrypted,
-        checksum: record.encrypted.checksum,
-        generation: record.generation,
-        updated_at: record.updatedAt,
-      })
-      if (error) throw new Error(`Cloud save upload failed: ${error.message}`)
-    },
-  }
-}
-
 function shouldRejectUpload(conflict: CloudSaveConflict, policy: CloudSaveConflictPolicy) {
   if (conflict.kind === "none" || conflict.kind === "local-newer") return false
   return policy === "reject" || policy === "use-cloud" || (policy === "newer-wins" && conflict.kind === "cloud-newer")
@@ -226,17 +193,6 @@ function shouldRejectUpload(conflict: CloudSaveConflict, policy: CloudSaveConfli
 function shouldRejectDownload(conflict: CloudSaveConflict, policy: CloudSaveConflictPolicy) {
   if (conflict.kind === "none" || conflict.kind === "cloud-newer") return false
   return policy === "reject" || policy === "keep-local" || (policy === "newer-wins" && conflict.kind === "local-newer")
-}
-
-function rowToCloudSave(row: Record<string, unknown>): CloudSaveRecord {
-  return {
-    saveId: String(row.save_id),
-    ownerId: String(row.owner_id),
-    summary: row.summary as SaveSummary,
-    encrypted: row.encrypted_payload as EncryptedSavePayload,
-    updatedAt: String(row.updated_at),
-    generation: Number(row.generation ?? 1),
-  }
 }
 
 function encryptionKey(secret: string) {

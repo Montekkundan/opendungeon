@@ -1,5 +1,6 @@
 import { createDungeon, enemyAi, setTile, tileAt, type Actor, type Dungeon, type EnemyAi, type Point } from "./dungeon.js"
 import { isBossActorId, isEnemyActorId, isNpcActorId, type NpcActorId } from "./domainTypes.js"
+import { actorLabel as label } from "./glyphs.js"
 import {
   applyLevelGrowth,
   derivedMaxFocus,
@@ -588,7 +589,7 @@ export function currentBiome(session: GameSession) {
   return biomeAt(session, session.player)
 }
 
-export function biomeAt(session: GameSession, point: Point) {
+function biomeAt(session: GameSession, point: Point) {
   const anchorId = nearestWorldAnchorId(session, point)
   const anchor = anchorId ? session.world.anchors.find((candidate) => candidate.id === anchorId) : null
   return anchor?.biome ?? session.world.anchors.find((candidate) => candidate.floor === session.floor)?.biome ?? "crypt"
@@ -1578,22 +1579,6 @@ function rollSkillCheckD20(session: GameSession, check: SkillCheckState) {
 
 function formatSigned(value: number) {
   return value >= 0 ? `+${value}` : String(value)
-}
-
-function label(kind: Actor["kind"]) {
-  if (kind === "slime") return "Slime"
-  if (kind === "ghoul") return "Ghoul"
-  if (kind === "gallows-wisp") return "Gallows Wisp"
-  if (kind === "rust-squire") return "Rust Squire"
-  if (kind === "carrion-moth") return "Carrion Moth"
-  if (kind === "crypt-mimic") return "Crypt Mimic"
-  if (kind === "grave-root-boss") return "Grave-root Boss"
-  if (kind === "merchant") return "Merchant"
-  if (kind === "cartographer") return "Cartographer"
-  if (kind === "wound-surgeon") return "Wound Surgeon"
-  if (kind === "shrine-keeper") return "Shrine Keeper"
-  if (kind === "jailer") return "Jailer"
-  return "Necromancer"
 }
 
 function ensureEnemyAi(actor: Actor, index: number, floor: number) {

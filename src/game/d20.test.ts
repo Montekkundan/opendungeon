@@ -15,14 +15,7 @@ import {
 } from "./session.js"
 import type { GameSession } from "./session.js"
 import { setTile } from "./dungeon.js"
-import type { ActorId } from "./domainTypes.js"
-
-function addEnemyBesidePlayer(session: GameSession, id: string, kind: ActorId, hp: number, damage: number) {
-  const target = { x: session.player.x + 1, y: session.player.y }
-  setTile(session.dungeon, target, "floor")
-  session.dungeon.actors.push({ id, kind, position: target, hp, damage })
-  return target
-}
+import { addEnemyBesidePlayer } from "./testHelpers.test.js"
 
 function startTwoEnemyFight(session: GameSession) {
   addEnemyBesidePlayer(session, "initiative-slime", "slime", 20, 1)

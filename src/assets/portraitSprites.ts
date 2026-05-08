@@ -7,7 +7,7 @@ import {
 } from "./opendungeonSprites.js"
 import { characterMetadata } from "./spriteMetadata.js"
 import { assetPath, sampleSourceFrame, type PixelSprite, type SourceSheet } from "./spriteSampler.js"
-import { fillEllipse, fillPolygon, fillRect, makeVirtual, spriteFromVirtual } from "./virtualSprites.js"
+import { fillEllipse, fillPolygon, fillRect, makeVirtualSpriteCanvas, spriteFromVirtual } from "./virtualSprites.js"
 
 export const portraitIds = [
   "portrait.hero-ranger",
@@ -46,11 +46,11 @@ export function loadPortraitManifest(path = portraitManifestPath()): PortraitMan
   return parsed
 }
 
-export function portraitManifestPath() {
+function portraitManifestPath() {
   return assetPath("opendungeon-assets", "runtime", "portraits", "portrait-manifest.json")
 }
 
-export function validatePortraitManifest(manifest: Partial<PortraitManifest> | undefined): string[] {
+function validatePortraitManifest(manifest: Partial<PortraitManifest> | undefined): string[] {
   const errors: string[] = []
   if (!manifest || manifest.version !== 1) errors.push("version must be 1.")
   if (!manifest?.sheet?.path || typeof manifest.sheet.path !== "string") errors.push("sheet path is required.")
@@ -103,9 +103,7 @@ export function validatePortraitSpriteCoverage(manifest = loadPortraitManifest()
 }
 
 function fallbackPortraitSprite(id: PortraitId, width: number, height: number): PixelSprite {
-  const virtualWidth = Math.max(1, width)
-  const virtualHeight = Math.max(1, height * 2)
-  const pixels = makeVirtual(virtualWidth, virtualHeight)
+  const { virtualWidth, virtualHeight, pixels } = makeVirtualSpriteCanvas(width, height)
   const palette = portraitPalette(id)
   const cx = virtualWidth / 2
   const faceY = virtualHeight * 0.38

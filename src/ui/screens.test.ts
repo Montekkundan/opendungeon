@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createSession, selectSkill, tryMove } from "../game/session.js"
 import { setTile } from "../game/dungeon.js"
 import { defaultSettings } from "../game/settingsStore.js"
+import { hashText } from "../shared/hash.js"
 import { draw, type AppModel, type ScreenId } from "./screens.js"
 
 type RenderCase = {
@@ -68,7 +69,7 @@ describe("terminal renderer snapshots", () => {
       expect(text).not.toContain("undefined")
       expect(text).not.toContain("NaN")
       for (const required of renderCase.requiredText) expect(text).toContain(required)
-      expect(stableHash(styledSignature(output.chunks))).toBe(renderCase.expectedHash)
+      expect(hashText(styledSignature(output.chunks))).toBe(renderCase.expectedHash)
     })
   }
 })
@@ -144,13 +145,4 @@ function escapeText(text: string) {
   if (text === "\n") return "\\n"
   if (text === "|") return "\\|"
   return text
-}
-
-function stableHash(text: string) {
-  let hash = 0x811c9dc5
-  for (let index = 0; index < text.length; index++) {
-    hash ^= text.charCodeAt(index)
-    hash = Math.imul(hash, 0x01000193) >>> 0
-  }
-  return hash.toString(16).padStart(8, "0")
 }

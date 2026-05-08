@@ -3,8 +3,10 @@ __pycache__/
 .pytest_cache/
 .venv/
 dist/
+.next/
 .output/
 *.log
+*.tsbuildinfo
 .DS_Store
 .env
 .env.*

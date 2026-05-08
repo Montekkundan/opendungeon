@@ -3,6 +3,7 @@ import { homedir } from "node:os"
 import { basename, dirname, join } from "node:path"
 import { normalizeSessionAfterLoad, type GameSession } from "./session.js"
 import { tileAt } from "./dungeon.js"
+import { actorGlyph, tileGlyph } from "./glyphs.js"
 import { readWorldConfig, writeWorldConfig, writeWorldLog } from "../world/worldConfig.js"
 
 export type SaveSummary = {
@@ -123,7 +124,7 @@ export function validateSave(id: string): string[] {
   }
 }
 
-export function validateSaveEnvelope(envelope: Partial<SaveEnvelope>): string[] {
+function validateSaveEnvelope(envelope: Partial<SaveEnvelope>): string[] {
   const errors: string[] = []
   if (envelope.game !== "opendungeon") errors.push("Save game marker must be opendungeon.")
   if (envelope.version !== saveVersion) errors.push(`Save version must be ${saveVersion}.`)
@@ -278,36 +279,12 @@ function createSaveThumbnail(session: GameSession) {
     for (let x = session.player.x - radiusX; x <= session.player.x + radiusX; x++) {
       const actor = session.dungeon.actors.find((candidate) => candidate.position.x === x && candidate.position.y === y)
       if (session.player.x === x && session.player.y === y) row += "@"
-      else if (actor) row += actorGlyph(actor.kind)
+      else if (actor) row += actorGlyph(actor.kind, "?")
       else row += tileGlyph(tileAt(session.dungeon, { x, y }))
     }
     rows.push(row)
   }
   return rows
-}
-
-function tileGlyph(tile: string) {
-  if (tile === "wall") return "#"
-  if (tile === "door") return "+"
-  if (tile === "stairs") return ">"
-  if (tile === "potion") return "!"
-  if (tile === "relic") return "*"
-  if (tile === "chest") return "$"
-  if (tile === "trap") return "^"
-  if (tile === "floor") return "."
-  return " "
-}
-
-function actorGlyph(kind: string) {
-  if (kind === "slime") return "s"
-  if (kind === "ghoul") return "g"
-  if (kind === "necromancer") return "n"
-  if (kind === "gallows-wisp") return "w"
-  if (kind === "rust-squire") return "r"
-  if (kind === "carrion-moth") return "m"
-  if (kind === "crypt-mimic") return "c"
-  if (kind === "grave-root-boss") return "b"
-  return "?"
 }
 
 function importedId(session: GameSession) {

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
 import { PNG } from "pngjs"
 import type { GeneratedImage } from "../cloud/aiGateway.js"
-import { makeVirtual, setVirtual, spriteFromVirtual } from "./virtualSprites.js"
+import { makeVirtual, rgbToHex, setVirtual, spriteFromVirtual } from "./virtualSprites.js"
 import type { PixelSprite } from "./spriteSampler.js"
 
 export type GeneratedSpriteSample = {
@@ -11,7 +11,7 @@ export type GeneratedSpriteSample = {
   hash: string
 }
 
-export function sampleGeneratedSpriteImage(image: GeneratedImage, width = 12, height = 6): PixelSprite {
+function sampleGeneratedSpriteImage(image: GeneratedImage, width = 12, height = 6): PixelSprite {
   if (image.mimeType !== "image/png") throw new Error("Generated sprite sampling requires a PNG image.")
   const png = PNG.sync.read(Buffer.from(image.bytes))
   const virtualWidth = Math.max(1, width)
@@ -51,12 +51,4 @@ function samplePngPixel(png: PNG, x: number, y: number) {
   const alpha = png.data[index + 3]
   if (alpha < 36) return undefined
   return rgbToHex(png.data[index], png.data[index + 1], png.data[index + 2])
-}
-
-function rgbToHex(r: number, g: number, b: number) {
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`
-}
-
-function toHex(value: number) {
-  return value.toString(16).padStart(2, "0")
 }

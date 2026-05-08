@@ -221,7 +221,7 @@ function insideRoom(point: Point, room: Room) {
   return point.x >= room.x && point.y >= room.y && point.x < room.x + room.width && point.y < room.y + room.height
 }
 
-function cardinalNeighbors(point: Point): Point[] {
+export function cardinalNeighbors(point: Point): Point[] {
   return [
     { x: point.x + 1, y: point.y },
     { x: point.x - 1, y: point.y },

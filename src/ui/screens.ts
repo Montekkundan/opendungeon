@@ -24,6 +24,7 @@ import {
   type MultiplayerMode,
 } from "../game/session.js"
 import { appearanceLabel, heroSpriteForAppearance, normalizeHeroAppearance, weaponSpriteForAppearance, type HeroAppearance } from "../game/appearance.js"
+import { actorLabel } from "../game/glyphs.js"
 import { saveDirectory, type SaveSummary } from "../game/saveStore.js"
 import { profilePath, type UserSettings } from "../game/settingsStore.js"
 import { formatModifier, statAbbreviations, statLabels, statLine, statsForClass } from "../game/stats.js"
@@ -962,7 +963,7 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
     canvas.border(x + 2, cardY, targetW, 3, selected ? UI.gold : UI.edgeDim)
     if (selected) canvas.fill(x + 3, cardY + 1, 1, 1, " ", UI.gold, UI.gold)
     drawMiniIcon(canvas, x + 5, cardY + 1, actorSpriteId(target.kind), 7, 1, selected ? 1 : 0.75)
-    canvas.write(x + 13, cardY + 1, trim(`${selected ? ">" : " "} ${label(target.kind)}  HP ${target.hp}`, targetW - 15), selected ? UI.gold : UI.ink, bg)
+    canvas.write(x + 13, cardY + 1, trim(`${selected ? ">" : " "} ${actorLabel(target.kind)}  HP ${target.hp}`, targetW - 15), selected ? UI.gold : UI.ink, bg)
     const targetStatus = formatStatusEffects(statusEffectsFor(session, target.id))
     canvas.write(x + 13, cardY + 2, trim(targetStatus || enemyBehaviorText(target), targetW - 15), targetStatus ? UI.focus : target.ai?.alerted ? UI.hp : UI.muted, bg)
   })
@@ -1882,22 +1883,11 @@ function statusColor(status: string) {
   return UI.soft
 }
 
-function label(kind: string) {
-  if (kind === "slime") return "Slime"
-  if (kind === "ghoul") return "Ghoul"
-  if (kind === "gallows-wisp") return "Gallows Wisp"
-  if (kind === "rust-squire") return "Rust Squire"
-  if (kind === "carrion-moth") return "Carrion Moth"
-  if (kind === "crypt-mimic") return "Crypt Mimic"
-  if (kind === "grave-root-boss") return "Grave-root Boss"
-  return "Necromancer"
-}
-
 function formatInitiativeOrder(session: GameSession) {
   const enemies = (session.combat.initiative ?? [])
     .filter((entry) => entry.id !== "player")
     .slice(0, 4)
-    .map((entry) => label(entry.kind))
+    .map((entry) => actorLabel(entry.kind))
   return ["You", ...enemies].join(" > ")
 }
 

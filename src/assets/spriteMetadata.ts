@@ -12,7 +12,7 @@ import { assetPath } from "./spriteSampler.js"
 
 export const requiredSpriteFrameTagIds = ["windup", "impact", "recover", "cast-loop", "pickup", "block", "open"] as const
 
-export const spriteFrameTagIds = [
+const spriteFrameTagIds = [
   "idle",
   "stride",
   "windup",
@@ -67,7 +67,7 @@ export function loadSpriteMetadataManifest(path = spriteMetadataPath()): SpriteM
   return parsed
 }
 
-export function spriteMetadataPath() {
+function spriteMetadataPath() {
   return assetPath("opendungeon-assets", "runtime", "sprite-metadata.json")
 }
 
@@ -81,10 +81,6 @@ export function frameTagsForStaticSprite(id: StaticSpriteId, manifest = loadSpri
 
 export function characterMetadata(id: AnimatedSpriteId, manifest = loadSpriteMetadataManifest()) {
   return manifest.characters[id] ?? null
-}
-
-export function allCharacterMetadata(manifest = loadSpriteMetadataManifest()) {
-  return { ...manifest.characters }
 }
 
 export function validateSpriteMetadataManifest(manifest: Partial<SpriteMetadataManifest> | undefined): string[] {

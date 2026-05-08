@@ -4,6 +4,16 @@ export function makeVirtual(width: number, height: number) {
   return Array.from<string | undefined>({ length: width * height })
 }
 
+export function makeVirtualSpriteCanvas(width: number, height: number) {
+  const virtualWidth = Math.max(1, width)
+  const virtualHeight = Math.max(1, height * 2)
+  return {
+    virtualWidth,
+    virtualHeight,
+    pixels: makeVirtual(virtualWidth, virtualHeight),
+  }
+}
+
 export function setVirtual(pixels: Array<string | undefined>, width: number, height: number, x: number, y: number, color: string) {
   const px = Math.round(x)
   const py = Math.round(y)
@@ -51,6 +61,10 @@ export function drawLine(pixels: Array<string | undefined>, width: number, heigh
   }
 }
 
+export function rgbToHex(r: number, g: number, b: number) {
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`
+}
+
 export function spriteFromVirtual(pixels: Array<string | undefined>, width: number, height: number) {
   const cells = []
   for (let row = 0; row < height; row++) {
@@ -66,6 +80,10 @@ export function spriteFromVirtual(pixels: Array<string | undefined>, width: numb
     cells.push(cellsRow)
   }
   return { width, height, cells }
+}
+
+function toHex(value: number) {
+  return value.toString(16).padStart(2, "0")
 }
 
 function insidePolygon(x: number, y: number, points: VirtualPoint[]) {
