@@ -64,13 +64,13 @@ export async function generateSpriteImage(prompt: string, model = "openai/gpt-im
 }
 
 export function writeGeneratedImageLocal(assetId: string, image: GeneratedImage) {
-  const path = join(localGeneratedAssetDirectory(), `${safeAssetId(assetId)}.png`)
+  const path = join(generatedAssetDirectory(), `${safeAssetId(assetId)}.png`)
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, image.bytes)
   return path
 }
 
-function localGeneratedAssetDirectory() {
+export function generatedAssetDirectory() {
   return process.env.OPENDUNGEON_GENERATED_ASSET_DIR || join(homedir(), ".opendungeon", "generated-assets")
 }
 

@@ -119,8 +119,8 @@
 ## Packaging
 
 - [x] Package bin entries for `opendungeon` and `opendungeon-host`.
-- [ ] First-run setup flow.
-- [ ] `opendungeon assets generate` command.
+- [x] First-run setup flow.
+- [x] `opendungeon assets generate` command.
 - [x] Terminal capability check and recommended tile scale.
 
 ## Codebase Cleanup

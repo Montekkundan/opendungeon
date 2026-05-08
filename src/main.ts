@@ -17,6 +17,7 @@ import {
 import { deleteSave, listSaves, loadSave, renameSave, saveAutosave, saveSession, type SaveSummary } from "./game/saveStore.js"
 import { handleSaveCommand, saveCommandHelp } from "./game/saveCli.js"
 import { loadSettings, saveSettings, type UserSettings } from "./game/settingsStore.js"
+import { handleAssetsCommand, assetsCommandHelp } from "./assets/assetsCli.js"
 import { diceSkinIds } from "./assets/diceSkins.js"
 import { version } from "./version.js"
 import {
@@ -35,6 +36,7 @@ import { shouldUseThreeRenderer } from "./rendering/threeAssets.js"
 import { authHelpText, handleAuthCommand } from "./cloud/authCli.js"
 import { formatTerminalCapabilityReport, terminalCapabilityReport } from "./system/terminalDoctor.js"
 import { formatServerSetupReport, serverSetupReport } from "./system/serverSetupCheck.js"
+import { handleSetupCommand } from "./system/firstRunSetup.js"
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`opendungeon ${version}
@@ -46,6 +48,8 @@ Usage:
   opendungeon login <username>  Prompt for a password and save an auth session
   opendungeon --login github    Open Supabase GitHub OAuth
   opendungeon saves list        List local saves for backup or maintenance
+  opendungeon assets generate   Generate and store a sprite asset
+  opendungeon setup             Create local first-run directories/profile
   opendungeon doctor            Check terminal size/color and recommended tile scale
   opendungeon setup-check       Check Supabase, AI Gateway, and asset storage env
   opendungeon --help            Show this help
@@ -59,6 +63,7 @@ Environment:
 
 ${authHelpText()}
 ${saveCommandHelp()}
+${assetsCommandHelp()}
 `)
   process.exit(0)
 }
@@ -72,6 +77,10 @@ const authExitCode = await handleAuthCommand(process.argv.slice(2))
 if (authExitCode !== null) process.exit(authExitCode)
 const saveExitCode = await handleSaveCommand(process.argv.slice(2))
 if (saveExitCode !== null) process.exit(saveExitCode)
+const assetsExitCode = await handleAssetsCommand(process.argv.slice(2))
+if (assetsExitCode !== null) process.exit(assetsExitCode)
+const setupExitCode = await handleSetupCommand(process.argv.slice(2))
+if (setupExitCode !== null) process.exit(setupExitCode)
 
 if (process.argv[2] === "doctor" || process.argv.includes("--doctor")) {
   console.log(formatTerminalCapabilityReport(terminalCapabilityReport()))
