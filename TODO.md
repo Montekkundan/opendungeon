@@ -2,13 +2,15 @@
 
 ## Asset System
 
-- [x] Rename internal asset paths to `.asset-cache/opendungeon-assets` and `assets/opendungeon-assets`.
+- [x] Rename old vendor asset paths to `assets/opendungeon-assets`.
+- [x] Move bundled runtime sprites into `assets/opendungeon-assets/runtime/actors`.
+- [x] Remove source-pack directory names from committed runtime asset paths.
 - [x] Replace high-res UI kit sheets with terminal-native runtime UI components.
 - [x] Remove unused generated UI component PNGs after terminal-cell sampling proved too lossy.
 - [ ] Improve 64x64 actor imports and procedural fallbacks toward richer portrait-like silhouettes.
 - [ ] Add optional larger portrait sheets for dialogs, inventory detail, boss reveals, and title screens.
 - [ ] Replace procedural d20 with a safely licensed actual animated 64px d20 sheet, or generate a better project-owned one.
-- [ ] Add a first-class reference asset downloader instead of relying on manually populated `.asset-cache/opendungeon-assets`.
+- [ ] Add a first-class reference asset importer for refreshing `assets/opendungeon-assets/runtime` with license checks.
 - [ ] Add frame tags for `windup`, `impact`, `recover`, `cast-loop`, `pickup`, `block`, and `open`.
 - [ ] Add per-character JSON metadata for hitboxes, palette notes, weapon socket positions, and dialog portrait ids.
 - [ ] Add more crawlers: duelist, cleric, engineer, witch, grave knight.

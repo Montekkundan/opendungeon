@@ -33,6 +33,13 @@ type SourceSheet = {
   frameCount?: number
 }
 
+type RuntimeActorSource = {
+  folder: string
+  frameWidth: number
+  frameHeight: number
+  files: Record<SpriteAnimationId, string>
+}
+
 type Bounds = {
   x: number
   y: number
@@ -43,6 +50,52 @@ type Bounds = {
 const spriteCache = new Map<string, PixelSprite>()
 const sheetCache = new Map<string, PNG>()
 const moduleDir = dirname(fileURLToPath(import.meta.url))
+const runtimeActorSources = {
+  "hero-soldier": actorSheet("hero-soldier", 100, 100, {
+    idle: "idle.png",
+    walk: "walk.png",
+    "attack-melee": "attack-melee.png",
+    "attack-ranged": "attack-ranged.png",
+    cast: "attack-ranged.png",
+    talk: "idle.png",
+    hurt: "hurt.png",
+    shocked: "hurt.png",
+    death: "death.png",
+  }),
+  "crypt-orc": actorSheet("crypt-orc", 100, 100, {
+    idle: "idle.png",
+    walk: "walk.png",
+    "attack-melee": "attack-melee.png",
+    "attack-ranged": "attack-ranged.png",
+    cast: "attack-ranged.png",
+    talk: "idle.png",
+    hurt: "hurt.png",
+    shocked: "hurt.png",
+    death: "death.png",
+  }),
+  "mire-slime": actorSheet("mire-slime", 80, 64, {
+    idle: "idle.png",
+    walk: "walk.png",
+    "attack-melee": "attack.png",
+    "attack-ranged": "attack.png",
+    cast: "attack.png",
+    talk: "idle.png",
+    hurt: "hurt.png",
+    shocked: "shocked.png",
+    death: "death.png",
+  }),
+  warden: actorSheet("warden", 96, 96, {
+    idle: "idle.png",
+    walk: "walk.png",
+    "attack-melee": "attack.png",
+    "attack-ranged": "attack.png",
+    cast: "attack.png",
+    talk: "idle.png",
+    hurt: "hurt.png",
+    shocked: "hurt.png",
+    death: "hurt.png",
+  }),
+} satisfies Record<string, RuntimeActorSource>
 
 export function pixelSprite(id: PixelSpriteId, width = 8, height = 4): PixelSprite {
   return animatedPixelSprite(id, "idle", 0, width, height)
@@ -72,58 +125,23 @@ function sourceActorSprite(id: AnimatedSpriteId, animation: SpriteAnimationId, f
 }
 
 function actorSource(id: AnimatedSpriteId, animation: SpriteAnimationId): SourceSheet | null {
-  if (id === "slime") return mushroomSource(animation)
-  if (id === "hero-warden") return samuraiSource(animation)
-  if (id === "ghoul" || id === "necromancer" || id.startsWith("boss-")) return zerieSource("Orc", animation)
-  return zerieSource("Soldier", animation)
+  if (id === "slime") return runtimeActorSource("mire-slime", animation)
+  if (id === "hero-warden") return runtimeActorSource("warden", animation)
+  if (id === "ghoul" || id === "necromancer" || id.startsWith("boss-")) return runtimeActorSource("crypt-orc", animation)
+  return runtimeActorSource("hero-soldier", animation)
 }
 
-function zerieSource(actor: "Soldier" | "Orc", animation: SpriteAnimationId): SourceSheet {
-  const base = assetPath("opendungeon-assets", "zerie", "tiny-rpg-free", "characters", actor.toLowerCase())
-  const attack = actor === "Soldier" ? "Attack03" : "Attack02"
-  const file =
-    animation === "walk"
-      ? `${actor}-Walk.png`
-      : animation === "attack-melee"
-        ? `${actor}-Attack01.png`
-        : animation === "attack-ranged" || animation === "cast"
-          ? `${actor}-${attack}.png`
-          : animation === "hurt" || animation === "shocked"
-            ? `${actor}-Hurt.png`
-            : animation === "death"
-              ? `${actor}-Death.png`
-              : `${actor}-Idle.png`
-  return { path: resolve(base, file), frameWidth: 100, frameHeight: 100 }
+function actorSheet(folder: string, frameWidth: number, frameHeight: number, files: RuntimeActorSource["files"]): RuntimeActorSource {
+  return { folder, frameWidth, frameHeight, files }
 }
 
-function samuraiSource(animation: SpriteAnimationId): SourceSheet {
-  const base = assetPath("opendungeon-assets", "samurai-free", "sprites")
-  const file =
-    animation === "walk"
-      ? "RUN.png"
-      : animation === "attack-melee" || animation === "attack-ranged" || animation === "cast"
-        ? "ATTACK 1.png"
-        : animation === "hurt" || animation === "shocked" || animation === "death"
-          ? "HURT.png"
-          : "IDLE.png"
-  return { path: resolve(base, file), frameWidth: 96, frameHeight: 96 }
-}
-
-function mushroomSource(animation: SpriteAnimationId): SourceSheet {
-  const base = assetPath("opendungeon-assets", "forest-monsters-free", "mushroom-without-vfx")
-  const file =
-    animation === "walk"
-      ? "Mushroom-Run.png"
-      : animation === "attack-melee" || animation === "attack-ranged" || animation === "cast"
-        ? "Mushroom-Attack.png"
-        : animation === "hurt"
-          ? "Mushroom-Hit.png"
-          : animation === "shocked"
-            ? "Mushroom-Stun.png"
-            : animation === "death"
-              ? "Mushroom-Die.png"
-              : "Mushroom-Idle.png"
-  return { path: resolve(base, file), frameWidth: 80, frameHeight: 64 }
+function runtimeActorSource(sourceId: keyof typeof runtimeActorSources, animation: SpriteAnimationId): SourceSheet {
+  const source = runtimeActorSources[sourceId]
+  return {
+    path: resolve(assetPath("opendungeon-assets", "runtime", "actors", source.folder), source.files[animation]),
+    frameWidth: source.frameWidth,
+    frameHeight: source.frameHeight,
+  }
 }
 
 function sampleSourceFrame(source: SourceSheet, frame: number, width: number, height: number): PixelSprite {

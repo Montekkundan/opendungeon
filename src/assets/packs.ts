@@ -25,9 +25,9 @@ const opendungeonPack: AssetPack = {
   mood: "custom",
   tileSize: 100,
   sourceUrl: "runtime://opendungeon-assets-and-procedural-terminal-sprites",
-  license: "Runtime renderer uses locally cached third-party sources where present; procedural terminal sprites for terrain, items, and dice.",
+  license: "Runtime renderer uses bundled role-based sprite sheets plus procedural terminal sprites for terrain, items, and dice.",
   author: "Zerie, Xzany, MonopixelArt, opendungeon",
-  previewPath: ".asset-cache/opendungeon-assets/extracted/zerie/Tiny RPG Character Asset Pack v1.03 -Free Soldier&Orc/Characters(100x100)/Soldier/Soldier/Soldier-Idle.png",
+  previewPath: "assets/opendungeon-assets/runtime/actors/hero-soldier/idle.png",
   tiles: {
     void: { glyph: " ", fg: "#05070a" },
     floor: { glyph: ".", fg: "#5b6f76" },

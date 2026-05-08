@@ -13,7 +13,7 @@ describe("opendungeon runtime sprites", () => {
     expect(activeAssetPack.tileSize).toBe(100)
     expect(activeAssetPack.sourceUrl).toContain("runtime://")
     expect(activeAssetPack.sourceUrl).toContain("opendungeon-assets")
-    expect(activeAssetPack.previewPath).toContain(".asset-cache/opendungeon-assets/")
+    expect(activeAssetPack.previewPath).toContain("assets/opendungeon-assets/runtime/actors/")
     expect(animationFrameCount).toBe(4)
     expect(d20FrameCount()).toBe(12)
     expect(generatedPngs("assets/opendungeon")).toEqual([])
@@ -47,6 +47,34 @@ describe("opendungeon runtime sprites", () => {
     expect(colorCount(d20)).toBeGreaterThan(3)
   })
 
+  test("keeps committed runtime assets to the sampler-owned set", () => {
+    expect(runtimeAssetFiles()).toEqual([
+      "assets/opendungeon-assets/licenses/warden-sprite-license.txt",
+      "assets/opendungeon-assets/runtime/actors/crypt-orc/attack-melee.png",
+      "assets/opendungeon-assets/runtime/actors/crypt-orc/attack-ranged.png",
+      "assets/opendungeon-assets/runtime/actors/crypt-orc/death.png",
+      "assets/opendungeon-assets/runtime/actors/crypt-orc/hurt.png",
+      "assets/opendungeon-assets/runtime/actors/crypt-orc/idle.png",
+      "assets/opendungeon-assets/runtime/actors/crypt-orc/walk.png",
+      "assets/opendungeon-assets/runtime/actors/hero-soldier/attack-melee.png",
+      "assets/opendungeon-assets/runtime/actors/hero-soldier/attack-ranged.png",
+      "assets/opendungeon-assets/runtime/actors/hero-soldier/death.png",
+      "assets/opendungeon-assets/runtime/actors/hero-soldier/hurt.png",
+      "assets/opendungeon-assets/runtime/actors/hero-soldier/idle.png",
+      "assets/opendungeon-assets/runtime/actors/hero-soldier/walk.png",
+      "assets/opendungeon-assets/runtime/actors/mire-slime/attack.png",
+      "assets/opendungeon-assets/runtime/actors/mire-slime/death.png",
+      "assets/opendungeon-assets/runtime/actors/mire-slime/hurt.png",
+      "assets/opendungeon-assets/runtime/actors/mire-slime/idle.png",
+      "assets/opendungeon-assets/runtime/actors/mire-slime/shocked.png",
+      "assets/opendungeon-assets/runtime/actors/mire-slime/walk.png",
+      "assets/opendungeon-assets/runtime/actors/warden/attack.png",
+      "assets/opendungeon-assets/runtime/actors/warden/hurt.png",
+      "assets/opendungeon-assets/runtime/actors/warden/idle.png",
+      "assets/opendungeon-assets/runtime/actors/warden/walk.png",
+    ])
+  })
+
   test("runtime source no longer references old generated or vendor asset directories", () => {
     const oldVendorName = ["it", "ch"].join("")
     expect(existsSync("assets/opendungeon")).toBe(false)
@@ -54,6 +82,13 @@ describe("opendungeon runtime sprites", () => {
     expect(existsSync("assets/0x72")).toBe(false)
     expect(existsSync("assets/dawngeon")).toBe(false)
     expect(existsSync("assets/opengameart-d20")).toBe(false)
+    expect(existsSync("assets/opendungeon-assets/zerie")).toBe(false)
+    expect(existsSync("assets/opendungeon-assets/samurai-free")).toBe(false)
+    expect(existsSync("assets/opendungeon-assets/forest-monsters-free")).toBe(false)
+    expect(existsSync("assets/opendungeon-assets/runtime/actors/hero-soldier/idle.png")).toBe(true)
+    expect(existsSync("assets/opendungeon-assets/runtime/actors/crypt-orc/idle.png")).toBe(true)
+    expect(existsSync("assets/opendungeon-assets/runtime/actors/mire-slime/idle.png")).toBe(true)
+    expect(existsSync("assets/opendungeon-assets/runtime/actors/warden/idle.png")).toBe(true)
 
     const forbidden = [
       "assets/" + "opendungeon/",
@@ -63,6 +98,10 @@ describe("opendungeon runtime sprites", () => {
       "assets/" + "0x72",
       "assets/" + "dawn" + "geon",
       "assets/" + "opengame" + "art",
+      "zerie",
+      "samurai-free",
+      "forest-monsters-free",
+      "tiny-rpg-free",
     ]
     const files = sourceFiles("src")
     for (const file of files) {
@@ -85,12 +124,21 @@ function colorCount(sprite: PixelSprite) {
 }
 
 function generatedPngs(dir: string): string[] {
+  return recursiveFiles(dir, (path) => path.endsWith(".png"))
+}
+
+function runtimeAssetFiles(dir = "assets/opendungeon-assets"): string[] {
+  return recursiveFiles(dir).sort()
+}
+
+function recursiveFiles(dir: string, filter: (path: string) => boolean = () => true): string[] {
   if (!existsSync(dir)) return []
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(dir, entry.name)
-    if (entry.isDirectory()) return generatedPngs(path)
-    return entry.isFile() && path.endsWith(".png") ? [path] : []
-  })
+  return readdirSync(dir, { withFileTypes: true })
+    .flatMap((entry) => {
+      const path = join(dir, entry.name)
+      if (entry.isDirectory()) return recursiveFiles(path, filter)
+      return entry.isFile() && filter(path) ? [path] : []
+    })
 }
 
 function sourceFiles(dir: string): string[] {
