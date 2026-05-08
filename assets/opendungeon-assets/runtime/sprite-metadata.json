@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "frameTags": {
+    "idle": ["idle", "idle", "idle", "idle"],
+    "walk": ["windup", "stride", "impact", "recover"],
+    "attack-melee": ["windup", "impact", "recover", "recover"],
+    "attack-ranged": ["windup", "release", "impact", "recover"],
+    "cast": ["windup", "cast-loop", "cast-loop", "recover"],
+    "talk": ["talk", "talk", "open", "recover"],
+    "shocked": ["impact", "recover", "recover", "recover"],
+    "hurt": ["block", "impact", "recover", "recover"],
+    "death": ["impact", "recover", "down", "down"]
+  },
+  "staticFrameTags": {
+    "door": ["open"],
+    "chest": ["open"],
+    "potion": ["pickup"],
+    "relic": ["pickup"],
+    "coin": ["pickup"],
+    "scroll": ["pickup"],
+    "focus-gem": ["pickup"],
+    "shield": ["block"],
+    "armor": ["block"]
+  },
+  "characters": {
+    "hero-ranger": {
+      "hitbox": { "x": 18, "y": 14, "width": 28, "height": 42 },
+      "paletteNotes": ["weathered green cloak", "brass trim", "dark leather boots"],
+      "weaponSocket": { "x": 43, "y": 34 },
+      "dialogPortraitId": "portrait.hero-ranger"
+    },
+    "hero-warden": {
+      "hitbox": { "x": 16, "y": 12, "width": 32, "height": 44 },
+      "paletteNotes": ["stone blue armor", "warm shield rim", "muted steel"],
+      "weaponSocket": { "x": 44, "y": 36 },
+      "dialogPortraitId": "portrait.hero-warden"
+    },
+    "hero-arcanist": {
+      "hitbox": { "x": 17, "y": 13, "width": 30, "height": 43 },
+      "paletteNotes": ["ash violet robe", "ember focus", "pale trim"],
+      "weaponSocket": { "x": 41, "y": 31 },
+      "dialogPortraitId": "portrait.hero-arcanist"
+    },
+    "npc-smith": {
+      "hitbox": { "x": 17, "y": 15, "width": 31, "height": 41 },
+      "paletteNotes": ["coal apron", "hot brass highlights", "workshop soot"],
+      "weaponSocket": { "x": 40, "y": 38 },
+      "dialogPortraitId": "portrait.npc-smith"
+    },
+    "npc-oracle": {
+      "hitbox": { "x": 18, "y": 12, "width": 28, "height": 44 },
+      "paletteNotes": ["pale hood", "blue shrine cloth", "gold charm"],
+      "weaponSocket": { "x": 36, "y": 35 },
+      "dialogPortraitId": "portrait.npc-oracle"
+    },
+    "slime": {
+      "hitbox": { "x": 12, "y": 29, "width": 40, "height": 26 },
+      "paletteNotes": ["toxic green body", "bright rim", "dark underside"],
+      "weaponSocket": { "x": 32, "y": 42 },
+      "dialogPortraitId": "portrait.slime"
+    },
+    "ghoul": {
+      "hitbox": { "x": 16, "y": 15, "width": 32, "height": 42 },
+      "paletteNotes": ["cold bone skin", "rust cloth", "shadow sockets"],
+      "weaponSocket": { "x": 42, "y": 36 },
+      "dialogPortraitId": "portrait.ghoul"
+    },
+    "necromancer": {
+      "hitbox": { "x": 15, "y": 10, "width": 34, "height": 48 },
+      "paletteNotes": ["violet robe", "bone mask", "green spell edge"],
+      "weaponSocket": { "x": 43, "y": 32 },
+      "dialogPortraitId": "portrait.necromancer"
+    },
+    "boss-forgemaster": {
+      "hitbox": { "x": 12, "y": 9, "width": 40, "height": 50 },
+      "paletteNotes": ["black iron bulk", "orange furnace cracks", "ash gray edge"],
+      "weaponSocket": { "x": 46, "y": 37 },
+      "dialogPortraitId": "portrait.boss-forgemaster"
+    },
+    "boss-lich": {
+      "hitbox": { "x": 14, "y": 8, "width": 36, "height": 50 },
+      "paletteNotes": ["bone crown", "cold violet robes", "cyan soul light"],
+      "weaponSocket": { "x": 43, "y": 33 },
+      "dialogPortraitId": "portrait.boss-lich"
+    },
+    "boss-minotaur": {
+      "hitbox": { "x": 10, "y": 7, "width": 44, "height": 52 },
+      "paletteNotes": ["moss brown hide", "root horns", "deep red cloth"],
+      "weaponSocket": { "x": 48, "y": 37 },
+      "dialogPortraitId": "portrait.boss-minotaur"
+    }
+  }
+}

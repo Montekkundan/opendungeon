@@ -5,6 +5,14 @@ import { d20FrameCount, d20RollSprite } from "./d20Sprites.js"
 import { defaultDiceSkin } from "./diceSkins.js"
 import { animatedSpriteIds, animationFrameCount, animationFramesForSprite, spriteAnimations, staticSpriteIds } from "./opendungeonSprites.js"
 import { animatedPixelSprite, pixelSprite, type PixelSprite } from "./pixelSprites.js"
+import {
+  characterMetadata,
+  frameTagsForAnimation,
+  frameTagsForStaticSprite,
+  loadSpriteMetadataManifest,
+  requiredSpriteFrameTagIds,
+  validateSpriteMetadataManifest,
+} from "./spriteMetadata.js"
 import { activeAssetPack } from "./packs.js"
 
 describe("opendungeon runtime sprites", () => {
@@ -28,6 +36,30 @@ describe("opendungeon runtime sprites", () => {
     expect(spriteAnimations).toContain("attack-melee")
     expect(animationFramesForSprite("slime", "walk")).toBe(4)
     expect(animationFramesForSprite("coin", "walk")).toBe(1)
+  })
+
+  test("validates frame tags and per-character metadata", () => {
+    const manifest = loadSpriteMetadataManifest()
+    const usedTags = new Set([
+      ...Object.values(manifest.frameTags).flat(),
+      ...Object.values(manifest.staticFrameTags).flat(),
+    ])
+
+    expect(validateSpriteMetadataManifest(manifest)).toEqual([])
+    for (const tag of requiredSpriteFrameTagIds) expect(usedTags.has(tag)).toBe(true)
+    expect(frameTagsForAnimation("attack-melee")).toEqual(["windup", "impact", "recover", "recover"])
+    expect(frameTagsForAnimation("cast")).toContain("cast-loop")
+    expect(frameTagsForStaticSprite("potion")).toContain("pickup")
+    expect(frameTagsForStaticSprite("shield")).toContain("block")
+    expect(frameTagsForStaticSprite("chest")).toContain("open")
+
+    for (const id of animatedSpriteIds) {
+      const metadata = characterMetadata(id)
+      expect(metadata?.hitbox.width).toBeGreaterThan(0)
+      expect(metadata?.paletteNotes.length).toBeGreaterThan(0)
+      expect(metadata?.weaponSocket.x).toBeGreaterThanOrEqual(0)
+      expect(metadata?.dialogPortraitId).toContain(`portrait.`)
+    }
   })
 
   test("samples actor, terrain, item, and d20 sprites into terminal cells", () => {
@@ -72,6 +104,7 @@ describe("opendungeon runtime sprites", () => {
       "assets/opendungeon-assets/runtime/actors/warden/hurt.png",
       "assets/opendungeon-assets/runtime/actors/warden/idle.png",
       "assets/opendungeon-assets/runtime/actors/warden/walk.png",
+      "assets/opendungeon-assets/runtime/sprite-metadata.json",
     ])
   })
 
