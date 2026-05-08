@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import { d20FrameCount, d20RollSprite } from "./d20Sprites.js"
+import { d20FrameCount, d20RollSprite, d20SourceSheetPath } from "./d20Sprites.js"
 import { defaultDiceSkin } from "./diceSkins.js"
 import { animatedSpriteIds, animationFrameCount, animationFramesForSprite, spriteAnimations, staticSpriteIds } from "./opendungeonSprites.js"
 import { animatedPixelSprite, pixelSprite, type PixelSprite } from "./pixelSprites.js"
+import { loadPortraitManifest, portraitIds, portraitSprite, validatePortraitSpriteCoverage } from "./portraitSprites.js"
 import {
   characterMetadata,
   frameTagsForAnimation,
@@ -24,6 +25,7 @@ describe("opendungeon runtime sprites", () => {
     expect(activeAssetPack.previewPath).toContain("assets/opendungeon-assets/runtime/actors/")
     expect(animationFrameCount).toBe(4)
     expect(d20FrameCount()).toBe(12)
+    expect(existsSync(d20SourceSheetPath())).toBe(true)
     expect(generatedPngs("assets/opendungeon")).toEqual([])
   })
 
@@ -46,6 +48,8 @@ describe("opendungeon runtime sprites", () => {
     ])
 
     expect(validateSpriteMetadataManifest(manifest)).toEqual([])
+    expect(validatePortraitSpriteCoverage(loadPortraitManifest())).toEqual([])
+    expect(portraitIds).toContain("portrait.boss-minotaur")
     for (const tag of requiredSpriteFrameTagIds) expect(usedTags.has(tag)).toBe(true)
     expect(frameTagsForAnimation("attack-melee")).toEqual(["windup", "impact", "recover", "recover"])
     expect(frameTagsForAnimation("cast")).toContain("cast-loop")
@@ -69,6 +73,7 @@ describe("opendungeon runtime sprites", () => {
     const wall = pixelSprite("wall-a", 16, 8)
     const sword = pixelSprite("sword", 14, 7)
     const d20 = d20RollSprite(20, 11, 16, 8, defaultDiceSkin)
+    const portrait = portraitSprite("portrait.boss-minotaur", 18, 9)
 
     expect(hasVisibleCells(hero)).toBe(true)
     expect(hasVisibleCells(walk)).toBe(true)
@@ -76,11 +81,13 @@ describe("opendungeon runtime sprites", () => {
     expect(wall.cells.flat().every((cell) => cell.bg)).toBe(true)
     expect(hasVisibleCells(sword)).toBe(true)
     expect(hasVisibleCells(d20)).toBe(true)
+    expect(hasVisibleCells(portrait)).toBe(true)
     expect(colorCount(d20)).toBeGreaterThan(3)
   })
 
   test("keeps committed runtime assets to the sampler-owned set", () => {
     expect(runtimeAssetFiles()).toEqual([
+      "assets/opendungeon-assets/licenses/project-owned-generated-assets.txt",
       "assets/opendungeon-assets/licenses/warden-sprite-license.txt",
       "assets/opendungeon-assets/runtime/actors/crypt-orc/attack-melee.png",
       "assets/opendungeon-assets/runtime/actors/crypt-orc/attack-ranged.png",
@@ -104,6 +111,9 @@ describe("opendungeon runtime sprites", () => {
       "assets/opendungeon-assets/runtime/actors/warden/hurt.png",
       "assets/opendungeon-assets/runtime/actors/warden/idle.png",
       "assets/opendungeon-assets/runtime/actors/warden/walk.png",
+      "assets/opendungeon-assets/runtime/dice/d20-project-owned.png",
+      "assets/opendungeon-assets/runtime/portraits/portrait-manifest.json",
+      "assets/opendungeon-assets/runtime/portraits/portraits-project-owned.png",
       "assets/opendungeon-assets/runtime/sprite-metadata.json",
     ])
   })
@@ -143,8 +153,8 @@ describe("opendungeon runtime sprites", () => {
     }
 
     const pixelSpriteSource = readFileSync("src/assets/pixelSprites.ts", "utf8")
-    expect(pixelSpriteSource.includes("proceduralActorSprite")).toBe(false)
-    expect(pixelSpriteSource.includes("sourceActorSprite(id, animation, frame, width, height) ?? emptySprite(width, height)")).toBe(true)
+    expect(pixelSpriteSource.includes("fallbackActorSprite")).toBe(true)
+    expect(pixelSpriteSource.includes("sourceActorSprite(id, animation, frame, width, height) ?? fallbackActorSprite")).toBe(true)
     expect(existsSync("src/assets/spriteSampler.ts")).toBe(true)
     expect(pixelSpriteSource.includes("PNG.sync.read")).toBe(false)
   })

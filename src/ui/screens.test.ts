@@ -36,7 +36,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: skillCheckModel(),
-      expectedHash: "c1d075e2",
+      expectedHash: "4122cc6d",
       requiredText: ["Talent Check", "Whispering Relic", "Roll"],
     },
     {
@@ -44,7 +44,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: combatModel(),
-      expectedHash: "50d6689f",
+      expectedHash: "e3bab913",
       requiredText: ["Turn Combat", "Order", "Shado", "Necroman"],
     },
     {
@@ -52,7 +52,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("settings", createSession(4321), { settingsTabIndex: 3 }),
-      expectedHash: "3720a229",
+      expectedHash: "d526523a",
       requiredText: ["Settings", "Visuals", "Camera FOV"],
     },
   ]

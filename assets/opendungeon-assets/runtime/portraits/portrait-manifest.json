@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "sheet": {
+    "path": "portraits-project-owned.png",
+    "frameWidth": 128,
+    "frameHeight": 128
+  },
+  "portraits": {
+    "portrait.hero-ranger": { "frame": 0, "uses": ["title", "inventory", "dialog"] },
+    "portrait.hero-warden": { "frame": 1, "uses": ["title", "inventory", "dialog"] },
+    "portrait.hero-arcanist": { "frame": 2, "uses": ["title", "inventory", "dialog"] },
+    "portrait.npc-smith": { "frame": 3, "uses": ["dialog", "merchant"] },
+    "portrait.npc-oracle": { "frame": 4, "uses": ["dialog", "quest"] },
+    "portrait.slime": { "frame": 5, "uses": ["boss-reveal", "combat"] },
+    "portrait.ghoul": { "frame": 6, "uses": ["boss-reveal", "combat"] },
+    "portrait.necromancer": { "frame": 7, "uses": ["boss-reveal", "combat"] },
+    "portrait.boss-forgemaster": { "frame": 8, "uses": ["boss-reveal", "combat"] },
+    "portrait.boss-lich": { "frame": 9, "uses": ["boss-reveal", "combat"] },
+    "portrait.boss-minotaur": { "frame": 10, "uses": ["boss-reveal", "combat"] }
+  }
+}

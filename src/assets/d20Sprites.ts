@@ -1,10 +1,17 @@
+import { existsSync } from "node:fs"
 import { defaultDiceSkin, diceSkins, type DiceSkin, type DiceSkinId, type Rgb } from "./diceSkins.js"
 import { diceFrameCount } from "./opendungeonSprites.js"
-import type { PixelSprite } from "./pixelSprites.js"
+import { assetPath, sampleSourceFrame, type PixelSprite, type SourceSheet } from "./spriteSampler.js"
 import { drawLine, fillPolygon, fillRect, makeVirtual, spriteFromVirtual } from "./virtualSprites.js"
 
 const resultCount = 20
 const cache = new Map<string, PixelSprite>()
+const projectOwnedD20Sheet: SourceSheet = {
+  path: assetPath("opendungeon-assets", "runtime", "dice", "d20-project-owned.png"),
+  frameWidth: 64,
+  frameHeight: 64,
+  frameCount: resultCount * diceFrameCount,
+}
 
 export function d20RollSprite(result: number, frame: number, width = 10, height = 5, skin: DiceSkinId = defaultDiceSkin): PixelSprite {
   const safeResult = clamp(Math.round(result), 1, resultCount)
@@ -13,13 +20,23 @@ export function d20RollSprite(result: number, frame: number, width = 10, height 
   const cached = cache.get(key)
   if (cached) return cached
 
-  const sprite = drawD20(safeResult, safeFrame, width, height, diceSkins.find((diceSkin) => diceSkin.id === skin) ?? diceSkins[0])
+  const sprite = sourceD20Sprite(safeResult, safeFrame, width, height, skin) ?? drawD20(safeResult, safeFrame, width, height, diceSkins.find((diceSkin) => diceSkin.id === skin) ?? diceSkins[0])
   cache.set(key, sprite)
   return sprite
 }
 
 export function d20FrameCount() {
   return diceFrameCount
+}
+
+export function d20SourceSheetPath() {
+  return projectOwnedD20Sheet.path
+}
+
+function sourceD20Sprite(result: number, frame: number, width: number, height: number, skin: DiceSkinId) {
+  if (skin !== defaultDiceSkin || !existsSync(projectOwnedD20Sheet.path)) return null
+  const sheetFrame = (result - 1) * diceFrameCount + frame
+  return sampleSourceFrame(projectOwnedD20Sheet, sheetFrame, width, height)
 }
 
 function drawD20(result: number, frame: number, width: number, height: number, skin: DiceSkin): PixelSprite {

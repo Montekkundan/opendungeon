@@ -1,0 +1,8 @@
+OpenDungeon project-owned generated runtime assets
+
+Files:
+- assets/opendungeon-assets/runtime/dice/d20-project-owned.png
+- assets/opendungeon-assets/runtime/portraits/portraits-project-owned.png
+
+License:
+These assets were generated for OpenDungeon and are distributed under the repository MIT license.

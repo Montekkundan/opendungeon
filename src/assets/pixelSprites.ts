@@ -83,7 +83,7 @@ export function animatedPixelSprite(
   const cached = spriteCache.get(key)
   if (cached) return cached
 
-  const sprite = isAnimatedSprite(id) ? sourceActorSprite(id, animation, frame, width, height) ?? emptySprite(width, height) : staticSprite(id, width, height)
+  const sprite = isAnimatedSprite(id) ? sourceActorSprite(id, animation, frame, width, height) ?? fallbackActorSprite(id, animation, frame, width, height) : staticSprite(id, width, height)
 
   spriteCache.set(key, sprite)
   return sprite
@@ -113,6 +113,54 @@ function runtimeActorSource(sourceId: keyof typeof runtimeActorSources, animatio
     frameWidth: source.frameWidth,
     frameHeight: source.frameHeight,
   }
+}
+
+function fallbackActorSprite(id: AnimatedSpriteId, animation: SpriteAnimationId, frame: number, width: number, height: number): PixelSprite {
+  const virtualWidth = Math.max(1, width)
+  const virtualHeight = Math.max(1, height * 2)
+  const pixels = makeVirtual(virtualWidth, virtualHeight)
+  const palette = actorPalette(id)
+  const boss = id.startsWith("boss-")
+  const slime = id === "slime"
+  const cx = virtualWidth / 2
+  const floor = virtualHeight - 2
+  const stride = animation === "walk" ? Math.sin(frame * 1.7) * Math.max(1, virtualWidth * 0.05) : 0
+  const lean = animation === "attack-melee" || animation === "attack-ranged" || animation === "cast" ? Math.max(1, virtualWidth * 0.08) : 0
+  const hurt = animation === "hurt" || animation === "shocked"
+
+  if (slime) {
+    fillEllipse(pixels, virtualWidth, virtualHeight, cx, floor - virtualHeight * 0.18, virtualWidth * 0.34, virtualHeight * 0.22, palette.base)
+    fillEllipse(pixels, virtualWidth, virtualHeight, cx - virtualWidth * 0.1, floor - virtualHeight * 0.26, virtualWidth * 0.1, virtualHeight * 0.08, palette.light)
+    fillRect(pixels, virtualWidth, virtualHeight, cx - virtualWidth * 0.13, floor - virtualHeight * 0.17, Math.max(1, virtualWidth * 0.06), 1, palette.shadow)
+    fillRect(pixels, virtualWidth, virtualHeight, cx + virtualWidth * 0.09, floor - virtualHeight * 0.17, Math.max(1, virtualWidth * 0.06), 1, palette.shadow)
+    return spriteFromVirtual(pixels, virtualWidth, height)
+  }
+
+  const bodyWidth = virtualWidth * (boss ? 0.42 : 0.32)
+  const bodyHeight = virtualHeight * (boss ? 0.46 : 0.38)
+  const headY = virtualHeight * (boss ? 0.2 : 0.24)
+  fillEllipse(pixels, virtualWidth, virtualHeight, cx, floor, bodyWidth * 0.9, Math.max(1, virtualHeight * 0.08), palette.shadow)
+  fillRect(pixels, virtualWidth, virtualHeight, cx - bodyWidth / 2 + stride, floor - bodyHeight, bodyWidth, bodyHeight, hurt ? palette.dark : palette.base)
+  fillPolygon(pixels, virtualWidth, virtualHeight, [[cx - bodyWidth * 0.58 + stride, floor - bodyHeight], [cx + bodyWidth * 0.58 + stride, floor - bodyHeight], [cx + bodyWidth * 0.36, floor - bodyHeight - virtualHeight * 0.12], [cx - bodyWidth * 0.36, floor - bodyHeight - virtualHeight * 0.12]], palette.trim)
+  fillEllipse(pixels, virtualWidth, virtualHeight, cx + stride * 0.4, headY, virtualWidth * (boss ? 0.17 : 0.14), virtualHeight * (boss ? 0.13 : 0.11), palette.skin)
+  fillPolygon(pixels, virtualWidth, virtualHeight, [[cx - bodyWidth * 0.45, headY - virtualHeight * 0.03], [cx + bodyWidth * 0.45, headY - virtualHeight * 0.03], [cx + bodyWidth * 0.22, headY + virtualHeight * 0.17], [cx - bodyWidth * 0.22, headY + virtualHeight * 0.17]], palette.dark)
+  fillRect(pixels, virtualWidth, virtualHeight, cx - virtualWidth * 0.09, headY, Math.max(1, virtualWidth * 0.04), Math.max(1, virtualHeight * 0.03), palette.light)
+  fillRect(pixels, virtualWidth, virtualHeight, cx + virtualWidth * 0.05, headY, Math.max(1, virtualWidth * 0.04), Math.max(1, virtualHeight * 0.03), palette.light)
+  drawLine(pixels, virtualWidth, virtualHeight, cx + bodyWidth * 0.3, floor - bodyHeight * 0.68, cx + bodyWidth * 0.68 + lean, floor - bodyHeight * 0.2, palette.weapon)
+  drawLine(pixels, virtualWidth, virtualHeight, cx - bodyWidth * 0.25, floor - bodyHeight * 0.6, cx - bodyWidth * 0.55, floor - bodyHeight * 0.25, palette.trim)
+
+  return spriteFromVirtual(pixels, virtualWidth, height)
+}
+
+function actorPalette(id: AnimatedSpriteId) {
+  if (id === "hero-warden") return { base: "#506b7d", dark: "#263744", trim: "#b7c7d5", skin: "#d5b58f", light: "#e8eef4", shadow: "#091015", weapon: "#d8dee9" }
+  if (id === "hero-arcanist" || id === "necromancer" || id === "boss-lich") return { base: "#6c4a8f", dark: "#271c35", trim: "#d65cff", skin: "#c9b8d8", light: "#a9fff4", shadow: "#080811", weapon: "#d65cff" }
+  if (id === "npc-smith" || id === "boss-forgemaster") return { base: "#6d4a37", dark: "#271b17", trim: "#ff8f4a", skin: "#d1a47d", light: "#ffd68b", shadow: "#080605", weapon: "#d8dee9" }
+  if (id === "npc-oracle") return { base: "#d7d2bf", dark: "#324057", trim: "#6db7ff", skin: "#e0c19a", light: "#fff0a6", shadow: "#0a0d14", weapon: "#f4d06f" }
+  if (id === "slime") return { base: "#62c26f", dark: "#16351e", trim: "#9cff9f", skin: "#62c26f", light: "#d8ff9e", shadow: "#06140a", weapon: "#9cff9f" }
+  if (id === "ghoul") return { base: "#8a8f83", dark: "#252822", trim: "#9a6041", skin: "#c5ccb6", light: "#e8f0dc", shadow: "#080a08", weapon: "#b88a5b" }
+  if (id === "boss-minotaur") return { base: "#75543d", dark: "#211713", trim: "#a33b46", skin: "#a48763", light: "#d6b77d", shadow: "#080504", weapon: "#d8dee9" }
+  return { base: "#4d725b", dark: "#18261c", trim: "#d6a85c", skin: "#d8b48e", light: "#f4d06f", shadow: "#07100a", weapon: "#d8dee9" }
 }
 
 function staticSprite(id: StaticSpriteId, width: number, height: number): PixelSprite {
@@ -148,14 +196,6 @@ function solidSprite(width: number, height: number, color: string): PixelSprite 
     width,
     height,
     cells: Array.from({ length: height }, () => Array.from({ length: width }, () => ({ ch: " ", fg: color, bg: color }))),
-  }
-}
-
-function emptySprite(width: number, height: number): PixelSprite {
-  return {
-    width,
-    height,
-    cells: Array.from({ length: height }, () => Array.from({ length: width }, () => ({ ch: " ", fg: "#000000" }))),
   }
 }
 

@@ -29,6 +29,20 @@ export function fillPolygon(pixels: Array<string | undefined>, width: number, he
   }
 }
 
+export function fillEllipse(pixels: Array<string | undefined>, width: number, height: number, cx: number, cy: number, rx: number, ry: number, color: string) {
+  const minX = Math.floor(cx - rx)
+  const maxX = Math.ceil(cx + rx)
+  const minY = Math.floor(cy - ry)
+  const maxY = Math.ceil(cy + ry)
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      const dx = (x - cx) / Math.max(1, rx)
+      const dy = (y - cy) / Math.max(1, ry)
+      if (dx * dx + dy * dy <= 1) setVirtual(pixels, width, height, x, y, color)
+    }
+  }
+}
+
 export function drawLine(pixels: Array<string | undefined>, width: number, height: number, x0: number, y0: number, x1: number, y1: number, color: string) {
   const steps = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0)))
   for (let step = 0; step <= steps; step++) {

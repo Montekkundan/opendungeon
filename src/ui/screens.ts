@@ -3,6 +3,7 @@ import { activeAssetPack } from "../assets/packs.js"
 import { d20FrameCount, d20RollSprite } from "../assets/d20Sprites.js"
 import { defaultDiceSkin, diceSkinIds, diceSkinName, type DiceSkinId } from "../assets/diceSkins.js"
 import { animatedPixelSprite, pixelSprite, type PixelSprite, type PixelSpriteId, type SpriteAnimationId } from "../assets/pixelSprites.js"
+import { portraitIdForSprite, portraitSprite } from "../assets/portraitSprites.js"
 import { authStatusReport, formatAuthStatus } from "../cloud/authStatus.js"
 import {
   actorAt,
@@ -1024,7 +1025,9 @@ function drawConversationPanel(canvas: Canvas, session: GameSession) {
   const accent = trade && trade.purchased ? UI.focus : trade ? UI.gold : UI.edge
 
   drawPanel(canvas, x, y, width, height, title, accent)
-  drawMiniIcon(canvas, x + 3, y + 2, actorSpriteId(conversation.kind), 8, 2)
+  const portraitId = portraitIdForSprite(actorSpriteId(conversation.kind))
+  if (portraitId) drawPixelBlock(canvas, x + 3, y + 2, portraitSprite(portraitId, 9, 4), 1)
+  else drawMiniIcon(canvas, x + 3, y + 2, actorSpriteId(conversation.kind), 8, 2)
   canvas.write(x + 14, y + 2, trim(conversation.speaker, width - 18), UI.gold, UI.panel)
   writeWrapped(canvas, x + 14, y + 4, width - 18, [conversation.text], 2, UI.ink, UI.panel)
   if (trade) {
@@ -1569,7 +1572,14 @@ function drawInventoryDialog(canvas: Canvas, model: AppModel) {
   const selectedItem = selectedInventoryItem(model)
 
   drawPanel(canvas, layout.character.x, layout.character.y, layout.character.width, layout.character.height, "Crawler", UI.edge)
-  drawPixelBlock(canvas, layout.character.x + 3, layout.character.y + 3, animatedPixelSprite(classSprite(model.session.hero.classId), "idle", model.session.turn, 12, 5), 1)
+  const heroPortrait = portraitIdForSprite(classSprite(model.session.hero.classId))
+  drawPixelBlock(
+    canvas,
+    layout.character.x + 3,
+    layout.character.y + 3,
+    heroPortrait ? portraitSprite(heroPortrait, 12, 5) : animatedPixelSprite(classSprite(model.session.hero.classId), "idle", model.session.turn, 12, 5),
+    1,
+  )
   canvas.write(layout.character.x + 17, layout.character.y + 3, trim(model.session.hero.name, layout.character.width - 20), UI.ink, UI.panel)
   canvas.write(layout.character.x + 17, layout.character.y + 4, trim(model.session.hero.title, layout.character.width - 20), UI.soft, UI.panel)
   if (layout.character.height > 11) canvas.write(layout.character.x + 3, layout.character.y + 10, `Level ${model.session.level}`, UI.gold, UI.panel)

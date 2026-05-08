@@ -7,10 +7,10 @@
 - [x] Remove source-pack directory names from committed runtime asset paths.
 - [x] Replace high-res UI kit sheets with terminal-native runtime UI components.
 - [x] Remove unused generated UI component PNGs after terminal-cell sampling proved too lossy.
-- [ ] Improve 64x64 actor imports and procedural fallbacks toward richer portrait-like silhouettes.
-- [ ] Add optional larger portrait sheets for dialogs, inventory detail, boss reveals, and title screens.
-- [ ] Replace procedural d20 with a safely licensed actual animated 64px d20 sheet, or generate a better project-owned one.
-- [ ] Add a first-class reference asset importer for refreshing `assets/opendungeon-assets/runtime` with license checks.
+- [x] Improve 64x64 actor imports and procedural fallbacks toward richer portrait-like silhouettes.
+- [x] Add optional larger portrait sheets for dialogs, inventory detail, boss reveals, and title screens.
+- [x] Replace procedural d20 with a safely licensed actual animated 64px d20 sheet, or generate a better project-owned one.
+- [x] Add a first-class reference asset importer for refreshing `assets/opendungeon-assets/runtime` with license checks.
 - [x] Add frame tags for `windup`, `impact`, `recover`, `cast-loop`, `pickup`, `block`, and `open`.
 - [x] Add per-character JSON metadata for hitboxes, palette notes, weapon socket positions, and dialog portrait ids.
 - [x] Add more crawlers: duelist, cleric, engineer, witch, grave knight.
@@ -129,5 +129,5 @@
 - [ ] Split tests into session, save store, assets, d20, and UI suites only where it reduces maintenance.
 - [x] Add renderer screenshot/snapshot smoke tests.
 - [ ] Add debug overlays behind explicit flags only.
-- [ ] Move reference asset/cache import code out of `generate-opendungeon-assets.ts` once the asset manifest stabilizes.
+- [x] Move reference asset/cache import code out of `generate-opendungeon-assets.ts` once the asset manifest stabilizes.
 - [ ] Remove unnecessary test-case bloat.
