@@ -34,6 +34,7 @@ import {
 import { shouldUseThreeRenderer } from "./rendering/threeAssets.js"
 import { authHelpText, handleAuthCommand } from "./cloud/authCli.js"
 import { formatTerminalCapabilityReport, terminalCapabilityReport } from "./system/terminalDoctor.js"
+import { formatServerSetupReport, serverSetupReport } from "./system/serverSetupCheck.js"
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`opendungeon ${version}
@@ -46,6 +47,7 @@ Usage:
   opendungeon --login github    Open Supabase GitHub OAuth
   opendungeon saves list        List local saves for backup or maintenance
   opendungeon doctor            Check terminal size/color and recommended tile scale
+  opendungeon setup-check       Check Supabase, AI Gateway, and asset storage env
   opendungeon --help            Show this help
   opendungeon --version         Show the version
 
@@ -74,6 +76,12 @@ if (saveExitCode !== null) process.exit(saveExitCode)
 if (process.argv[2] === "doctor" || process.argv.includes("--doctor")) {
   console.log(formatTerminalCapabilityReport(terminalCapabilityReport()))
   process.exit(0)
+}
+
+if (process.argv[2] === "setup-check") {
+  const report = serverSetupReport()
+  console.log(formatServerSetupReport(report))
+  process.exit(report.ready ? 0 : 1)
 }
 
 const initialSaves = listSaves()
