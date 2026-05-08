@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs"
+import type { Actor } from "../game/dungeon.js"
 import { type TileId } from "../game/domainTypes.js"
 import { HeadlessGameEnv, type HeadlessActionInput, type HeadlessEnvOptions } from "./env.js"
 
@@ -31,7 +32,7 @@ export type ScenarioLine = {
   dy?: number
   tile?: TileId
   id?: string
-  kind?: "slime" | "ghoul" | "necromancer"
+  kind?: Actor["kind"]
   hp?: number
   damage?: number
   item?: string
@@ -325,6 +326,34 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
       { action: "move-east" },
       { action: "resolve-skill-check" },
       { assert: { path: "session.worldLog.length", min: 2 } },
+      { command: "check-invariants" },
+    ]
+  }
+
+  if (name === "npc-conversation") {
+    return [
+      { command: "set-relative-tile", dx: 1, dy: 0, tile: "floor" },
+      { command: "place-relative-actor", id: "script-cartographer", kind: "cartographer", dx: 1, dy: 0, hp: 1, damage: 0 },
+      { action: "move-east" },
+      { assert: { path: "session.combat.active", equals: false } },
+      { assert: { path: "session.conversation.kind", equals: "cartographer" } },
+      { assert: { path: "session.conversation.speaker", contains: "Cartographer" } },
+      { assert: { path: "session.worldLog.length", min: 2 } },
+      { command: "check-invariants" },
+    ]
+  }
+
+  if (name === "merchant") {
+    return [
+      { command: "set-gold", value: 20 },
+      { command: "set-relative-tile", dx: 1, dy: 0, tile: "floor" },
+      { command: "place-relative-actor", id: "script-merchant", kind: "merchant", dx: 1, dy: 0, hp: 1, damage: 0 },
+      { action: "move-east" },
+      { assert: { path: "session.conversation.trade.item", equals: "Merchant salve" } },
+      { action: "interact" },
+      { assert: { path: "session.gold", equals: 8 } },
+      { assert: { path: "session.inventory", contains: "Merchant salve" } },
+      { assert: { path: "session.conversation.trade.purchased", equals: true } },
       { command: "check-invariants" },
     ]
   }

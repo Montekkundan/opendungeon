@@ -1,4 +1,5 @@
 import { createDungeon, enemyAi, setTile, tileAt, type Actor, type Dungeon, type EnemyAi, type Point } from "./dungeon.js"
+import { isBossActorId, isEnemyActorId, isNpcActorId, type NpcActorId } from "./domainTypes.js"
 import {
   applyLevelGrowth,
   derivedMaxFocus,
@@ -136,6 +137,22 @@ export type SkillCheckState = {
   roll?: SkillCheckRoll
 }
 
+export type MerchantTrade = {
+  item: string
+  price: number
+  purchased: boolean
+}
+
+export type ConversationState = {
+  id: string
+  actorId: string
+  kind: NpcActorId
+  speaker: string
+  text: string
+  status: "open" | "completed"
+  trade?: MerchantTrade
+}
+
 export type GameSession = {
   mode: MultiplayerMode
   hero: Hero
@@ -162,6 +179,7 @@ export type GameSession = {
   seen: Set<string>
   combat: CombatState
   skillCheck: SkillCheckState | null
+  conversation: ConversationState | null
   statusEffects: StatusEffect[]
   world: WorldConfig
   worldLog: WorldLogEntry[]
@@ -369,6 +387,7 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
       message: "",
     },
     skillCheck: null,
+    conversation: null,
     statusEffects: [],
     world,
     worldLog: [
@@ -395,12 +414,14 @@ export function tryMove(session: GameSession, dx: number, dy: number) {
     trimLog(session)
     return
   }
+  if (session.conversation) session.conversation = null
 
   const next = { x: session.player.x + dx, y: session.player.y + dy }
   const actor = actorAt(session.dungeon.actors, next)
 
   if (actor) {
-    startCombat(session, [actor])
+    if (isNpcActorId(actor.kind)) startConversation(session, actor)
+    else if (isEnemyActorId(actor.kind)) startCombat(session, [actor])
     return
   }
 
@@ -477,6 +498,30 @@ export function usePotion(session: GameSession) {
   else trimLog(session)
 }
 
+export function interactWithWorld(session: GameSession): ConversationState | null {
+  if (session.status !== "running") return null
+  if (session.skillCheck?.status === "pending") {
+    resolveSkillCheck(session)
+    return null
+  }
+  if (session.skillCheck?.status === "resolved") {
+    dismissSkillCheck(session)
+    return null
+  }
+  if (session.combat.active) {
+    performCombatAction(session)
+    return null
+  }
+  if (session.conversation) return continueConversation(session)
+
+  const actor = adjacentNpc(session)
+  if (actor) return startConversation(session, actor)
+
+  session.log.unshift("Nothing answers here yet.")
+  trimLog(session)
+  return null
+}
+
 export function resolveSkillCheck(session: GameSession): SkillCheckRoll | null {
   const check = session.skillCheck
   if (!check || check.status !== "pending" || session.status !== "running") return null
@@ -550,6 +595,7 @@ export function normalizeSessionAfterLoad(session: GameSession): GameSession {
   }
   session.combat.initiative = session.combat.active ? normalizeCombatInitiative(session, session.combat.initiative) : []
   session.combat.round = session.combat.active ? Math.max(1, Math.floor(session.combat.round || 1)) : 0
+  session.conversation = normalizeConversation(session.conversation)
   session.statusEffects = normalizeStatusEffects(session.statusEffects)
   session.world ??= createWorldForSeed(session.seed, session.finalFloor || 5)
   session.worldLog ??= []
@@ -557,7 +603,8 @@ export function normalizeSessionAfterLoad(session: GameSession): GameSession {
   session.dungeon.actors.forEach((actor, index) => {
     actor.maxHp = Math.max(actor.maxHp ?? actor.hp, actor.hp)
     actor.phase = Math.max(1, Math.floor(actor.phase ?? 1))
-    ensureEnemyAi(actor, index, session.floor)
+    if (isEnemyActorId(actor.kind)) ensureEnemyAi(actor, index, session.floor)
+    else actor.ai = undefined
   })
   session.dungeon.secrets ??= []
   pruneStatusEffects(session)
@@ -759,6 +806,7 @@ function removeActor(actors: Actor[], actor: Actor) {
 function startCombat(session: GameSession, actors: Actor[]) {
   const nearby = nearbyHostiles(session)
   const actorIds = [...actors, ...nearby]
+    .filter((actor) => isEnemyActorId(actor.kind))
     .filter((actor, index, list) => list.findIndex((candidate) => candidate.id === actor.id) === index)
     .map((actor) => actor.id)
 
@@ -796,12 +844,17 @@ function defeatActor(session: GameSession, actor: Actor) {
   session.xp += xpFor(actor.kind)
   session.log.unshift(defeatMessage(actor.kind))
   maybeLevelUp(session)
-  completeWorldProgress(session, actor.kind === "necromancer" ? "boss" : "enemy", position, defeatMessage(actor.kind))
+  completeWorldProgress(session, isBossActorId(actor.kind) ? "boss" : "enemy", position, defeatMessage(actor.kind))
 }
 
 function defeatMessage(kind: Actor["kind"]) {
   if (kind === "slime") return "Slime dissolved. Cache warmed."
   if (kind === "ghoul") return "Ghoul banished. Ticket closed."
+  if (kind === "gallows-wisp") return "Gallows wisp snuffed. The rope goes slack."
+  if (kind === "rust-squire") return "Rust squire collapses. Armor flakes to dust."
+  if (kind === "carrion-moth") return "Carrion moth scattered. The air clears."
+  if (kind === "crypt-mimic") return "Crypt mimic cracked. False wood stops breathing."
+  if (kind === "grave-root-boss") return "Grave-root boss severed. The dungeon root recoils."
   return "Necromancer silenced. Dead branch pruned."
 }
 
@@ -922,13 +975,97 @@ function unlockDoor(session: GameSession, point: Point) {
   completeWorldProgress(session, "interaction", point, "Locked door opened.")
 }
 
+const npcDialog: Record<NpcActorId, { speaker: string; text: string }> = {
+  cartographer: {
+    speaker: "Cartographer Venn",
+    text: "The stairs stay honest, but rooms shift by seed. Mark the anchor before you chase noise.",
+  },
+  "wound-surgeon": {
+    speaker: "Wound Surgeon Iri",
+    text: "Keep pressure on the bright cuts. I can stitch pride later; health comes first.",
+  },
+  "shrine-keeper": {
+    speaker: "Shrine Keeper Sol",
+    text: "Every relic asks for a stat. Answer with your best talent, not your loudest one.",
+  },
+  jailer: {
+    speaker: "Jailer Maro",
+    text: "Mimics wake slowly. If a cache watches back, make the first roll count.",
+  },
+  merchant: {
+    speaker: "Ash Merchant Pell",
+    text: "Twelve gold buys a salve. No haggling in rooms that can hear us.",
+  },
+}
+
+function startConversation(session: GameSession, actor: Actor): ConversationState {
+  const kind = isNpcActorId(actor.kind) ? actor.kind : "cartographer"
+  const dialog = npcDialog[kind]
+  const conversation: ConversationState = {
+    id: `${actor.id}-${session.turn}`,
+    actorId: actor.id,
+    kind,
+    speaker: dialog.speaker,
+    text: dialog.text,
+    status: "open",
+    trade: kind === "merchant" ? { item: "Merchant salve", price: 12, purchased: false } : undefined,
+  }
+
+  session.conversation = conversation
+  session.log.unshift(`${conversation.speaker}: ${conversation.text}`)
+  completeWorldProgress(session, kind === "merchant" ? "interaction" : "quest", actor.position, `${conversation.speaker} shared a lead.`)
+  trimLog(session)
+  return conversation
+}
+
+function continueConversation(session: GameSession): ConversationState | null {
+  const conversation = session.conversation
+  if (!conversation) return null
+
+  if (conversation.trade && !conversation.trade.purchased) {
+    if (session.gold >= conversation.trade.price) {
+      session.gold -= conversation.trade.price
+      session.inventory.unshift(conversation.trade.item)
+      conversation.trade.purchased = true
+      conversation.status = "completed"
+      conversation.text = `${conversation.trade.item} purchased for ${conversation.trade.price} gold.`
+      session.log.unshift(`${conversation.speaker}: ${conversation.text}`)
+      const actor = session.dungeon.actors.find((candidate) => candidate.id === conversation.actorId)
+      completeWorldProgress(session, "loot", actor?.position ?? session.player, `${conversation.speaker} completed a merchant trade.`)
+      trimLog(session)
+      return conversation
+    }
+
+    conversation.status = "completed"
+    conversation.text = `${conversation.trade.price} gold needed for ${conversation.trade.item}.`
+    session.log.unshift(`${conversation.speaker}: ${conversation.text}`)
+    trimLog(session)
+    return conversation
+  }
+
+  session.conversation = null
+  session.log.unshift(`${conversation.speaker} returns to the dark.`)
+  trimLog(session)
+  return null
+}
+
+function adjacentNpc(session: GameSession) {
+  return cardinalNeighbors(session.player)
+    .map((point) => actorAt(session.dungeon.actors, point))
+    .find((actor): actor is Actor => Boolean(actor && isNpcActorId(actor.kind))) ?? null
+}
+
 function isSkillCheckSource(tile: string): tile is SkillCheckSource {
   return tile === "potion" || tile === "relic" || tile === "chest"
 }
 
 function xpFor(kind: Actor["kind"]) {
+  if (kind === "grave-root-boss") return 12
   if (kind === "necromancer") return 7
+  if (kind === "crypt-mimic") return 6
   if (kind === "ghoul") return 4
+  if (kind === "rust-squire" || kind === "gallows-wisp") return 3
+  if (kind === "carrion-moth") return 2
   return 2
 }
 
@@ -979,6 +1116,7 @@ function advanceTurn(session: GameSession) {
 
 function moveEnemies(session: GameSession) {
   for (const [index, actor] of [...session.dungeon.actors].entries()) {
+    if (!isEnemyActorId(actor.kind)) continue
     const ai = ensureEnemyAi(actor, index, session.floor)
     const distance = manhattan(actor.position, session.player)
     if (distance === 1) {
@@ -1151,7 +1289,7 @@ function applyCombatSkillEffect(session: GameSession, skill: CombatSkill, target
 }
 
 function maybeAdvanceBossPhase(session: GameSession, actor: Actor) {
-  if (actor.kind !== "necromancer" || actor.hp <= 0 || (actor.phase ?? 1) >= 2) return null
+  if (!isBossActorId(actor.kind) || actor.hp <= 0 || (actor.phase ?? 1) >= 2) return null
   const maxHp = actor.maxHp ?? Math.max(actor.hp, 1)
   if (actor.hp > Math.floor(maxHp / 2)) return null
   actor.phase = 2
@@ -1210,6 +1348,30 @@ function normalizeStatusEffect(effect: Partial<StatusEffect> | undefined): Statu
   }
 }
 
+function normalizeConversation(conversation: Partial<ConversationState> | null | undefined): ConversationState | null {
+  const kind = String(conversation?.kind ?? "")
+  if (!conversation || typeof conversation.actorId !== "string" || !isNpcActorId(kind)) return null
+  const trade = conversation.trade
+  const normalizedTrade =
+    trade && typeof trade === "object"
+      ? {
+          item: cleanConversationText(trade.item || "Merchant salve", 40),
+          price: Math.max(1, Math.floor(Number(trade.price) || 12)),
+          purchased: Boolean(trade.purchased),
+        }
+      : undefined
+
+  return {
+    id: cleanConversationText(conversation.id || `${conversation.actorId}-loaded`, 48),
+    actorId: cleanConversationText(conversation.actorId, 48),
+    kind,
+    speaker: cleanConversationText(conversation.speaker || npcDialog[kind].speaker, 48),
+    text: cleanConversationText(conversation.text || npcDialog[kind].text, 180),
+    status: conversation.status === "completed" ? "completed" : "open",
+    trade: normalizedTrade,
+  }
+}
+
 function pruneStatusEffects(session: GameSession) {
   const actorIds = new Set(session.dungeon.actors.map((actor) => actor.id))
   session.statusEffects = session.statusEffects.filter((effect) => effect.remainingTurns > 0 && (effect.targetId === "player" || actorIds.has(effect.targetId)))
@@ -1231,6 +1393,10 @@ function statusEffectLabel(id: StatusEffectId) {
 
 function cleanStatusLabel(text: string) {
   return text.replace(/[^\w .:/'()-]/g, "").trim().slice(0, 40) || "Status"
+}
+
+function cleanConversationText(text: string, maxLength: number) {
+  return text.replace(/[^\w .:/'(),;-]/g, "").trim().slice(0, maxLength) || "Conversation"
 }
 
 function cleanHeroName(text: string) {
@@ -1330,6 +1496,7 @@ function manhattan(a: Point, b: Point) {
 
 function nearbyHostiles(session: GameSession) {
   return session.dungeon.actors.filter((actor) => {
+    if (!isEnemyActorId(actor.kind)) return false
     const ai = ensureEnemyAi(actor, 0, session.floor)
     const key = pointKey(actor.position)
     return session.visible.has(key) && manhattan(actor.position, session.player) <= Math.max(6, ai.aggroRadius)
@@ -1349,8 +1516,11 @@ export function enemyBehaviorText(actor: Actor) {
 }
 
 function enemyDefenseBonus(kind: Actor["kind"] | undefined) {
+  if (kind === "grave-root-boss") return 5
   if (kind === "necromancer") return 4
+  if (kind === "crypt-mimic") return 3
   if (kind === "ghoul") return 2
+  if (kind === "rust-squire" || kind === "gallows-wisp") return 1
   return 0
 }
 
@@ -1394,6 +1564,16 @@ function formatSigned(value: number) {
 function label(kind: Actor["kind"]) {
   if (kind === "slime") return "Slime"
   if (kind === "ghoul") return "Ghoul"
+  if (kind === "gallows-wisp") return "Gallows Wisp"
+  if (kind === "rust-squire") return "Rust Squire"
+  if (kind === "carrion-moth") return "Carrion Moth"
+  if (kind === "crypt-mimic") return "Crypt Mimic"
+  if (kind === "grave-root-boss") return "Grave-root Boss"
+  if (kind === "merchant") return "Merchant"
+  if (kind === "cartographer") return "Cartographer"
+  if (kind === "wound-surgeon") return "Wound Surgeon"
+  if (kind === "shrine-keeper") return "Shrine Keeper"
+  if (kind === "jailer") return "Jailer"
   return "Necromancer"
 }
 

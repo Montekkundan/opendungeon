@@ -44,6 +44,16 @@ const opendungeonPack: AssetPack = {
     slime: { glyph: "s", fg: "#7dffb2" },
     ghoul: { glyph: "g", fg: "#b5bec6" },
     necromancer: { glyph: "n", fg: "#b48ead" },
+    "gallows-wisp": { glyph: "w", fg: "#a7d8ff" },
+    "rust-squire": { glyph: "r", fg: "#c8915d" },
+    "carrion-moth": { glyph: "m", fg: "#d8c69a" },
+    "crypt-mimic": { glyph: "c", fg: "#b87958" },
+    "grave-root-boss": { glyph: "b", fg: "#8fb66f" },
+    cartographer: { glyph: "c", fg: "#7fd1cf" },
+    "wound-surgeon": { glyph: "s", fg: "#f0a8b8" },
+    "shrine-keeper": { glyph: "k", fg: "#f4d06f" },
+    jailer: { glyph: "j", fg: "#9aa7b1" },
+    merchant: { glyph: "m", fg: "#d6a85c" },
   },
 }
 

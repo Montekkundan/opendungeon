@@ -10,6 +10,7 @@ import {
   createSession,
   currentBiome,
   floorModifierFor,
+  interactWithWorld,
   performCombatAction,
   rest,
   resolveSkillCheck,
@@ -21,7 +22,7 @@ import {
   usePotion,
 } from "./session.js"
 import type { GameSession } from "./session.js"
-import { setTile, tileAt } from "./dungeon.js"
+import { createDungeon, setTile, tileAt } from "./dungeon.js"
 import type { ActorId } from "./domainTypes.js"
 import { listSaves, loadSave, saveSession } from "./saveStore.js"
 import { defaultSettings, loadSettings, profilePath, saveSettings } from "./settingsStore.js"
@@ -137,6 +138,42 @@ describe("game session", () => {
     expect(session.combat.active).toBe(true)
     expect(session.combat.actorIds).toContain("test-slime")
     expect(session.log[0]).toContain("Combat starts")
+  })
+
+  test("spawns merchants, NPCs, and expanded enemies on legal dungeon tiles", () => {
+    const dungeon = createDungeon(1234, 4)
+    const kinds = new Set(dungeon.actors.map((actor) => actor.kind))
+
+    expect(kinds).toContain("merchant")
+    expect(["cartographer", "wound-surgeon", "shrine-keeper", "jailer"].some((kind) => kinds.has(kind as ActorId))).toBe(true)
+    expect(["gallows-wisp", "rust-squire", "carrion-moth", "crypt-mimic"].some((kind) => kinds.has(kind as ActorId))).toBe(true)
+    expect(dungeon.actors.every((actor) => tileAt(dungeon, actor.position) !== "wall")).toBe(true)
+  })
+
+  test("bumping a friendly NPC opens conversation instead of combat", () => {
+    const session = createSession(1234)
+    addEnemyBesidePlayer(session, "test-cartographer", "cartographer", 1, 0)
+
+    tryMove(session, 1, 0)
+
+    expect(session.combat.active).toBe(false)
+    expect(session.conversation?.kind).toBe("cartographer")
+    expect(session.conversation?.speaker).toContain("Cartographer")
+    expect(session.worldLog.length).toBeGreaterThan(1)
+  })
+
+  test("merchant interaction purchases a deterministic trade item", () => {
+    const session = createSession(1234)
+    session.gold = 20
+    addEnemyBesidePlayer(session, "test-merchant", "merchant", 1, 0)
+
+    tryMove(session, 1, 0)
+    const conversation = interactWithWorld(session)
+
+    expect(conversation?.trade?.purchased).toBe(true)
+    expect(session.gold).toBe(8)
+    expect(session.inventory[0]).toBe("Merchant salve")
+    expect(session.log[0]).toContain("purchased")
   })
 
   test("rolls deterministic initiative order on combat start", () => {

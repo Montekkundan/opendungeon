@@ -548,6 +548,7 @@ function drawGame(canvas: Canvas, model: AppModel) {
     drawHud(canvas, session)
     if (!model.debugView) drawQuickbar(canvas, session, model.diceRollAnimation, model.settings)
     if (session.combat.active) drawCombatPanel(canvas, session, model.diceRollAnimation, model.settings)
+    if (session.conversation && !session.combat.active && !session.skillCheck) drawConversationPanel(canvas, session)
   }
   if (session.status !== "running") drawRunEnd(canvas, session)
   if (session.skillCheck) drawSkillCheckModal(canvas, session, model.diceRollAnimation, model.settings)
@@ -587,7 +588,7 @@ function drawMap(canvas: Canvas, session: GameSession, debugView: boolean, setti
         drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, classSprite(session.hero.classId), debugView, playerAnimation(session), session.turn)
       }
       else if (actor) {
-        drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, actor.kind, debugView, actorAnimation(actor.id === selectedTargetId, session), session.turn + sx + sy)
+        drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, actorSpriteId(actor.kind), debugView, actorAnimation(actor.id === selectedTargetId, session), session.turn + sx + sy)
         if (actor.id === selectedTargetId) drawTargetFrame(canvas, screenX, screenY, tileWidth, tileHeight, debugView)
       }
     }
@@ -999,6 +1000,28 @@ function formatBiome(biome: string) {
     .split(/\s+/)
     .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
     .join(" ")
+}
+
+function drawConversationPanel(canvas: Canvas, session: GameSession) {
+  const conversation = session.conversation
+  if (!conversation) return
+
+  const width = Math.min(78, canvas.width - 6)
+  const height = 9
+  const x = Math.floor((canvas.width - width) / 2)
+  const y = Math.max(1, canvas.height - gameQuickbarHeight(canvas) - height - 2)
+  const trade = conversation.trade
+  const title = trade ? "Merchant" : "Conversation"
+  const accent = trade && trade.purchased ? UI.focus : trade ? UI.gold : UI.edge
+
+  drawPanel(canvas, x, y, width, height, title, accent)
+  drawMiniIcon(canvas, x + 3, y + 2, actorSpriteId(conversation.kind), 8, 2)
+  canvas.write(x + 14, y + 2, trim(conversation.speaker, width - 18), UI.gold, UI.panel)
+  writeWrapped(canvas, x + 14, y + 4, width - 18, [conversation.text], 2, UI.ink, UI.panel)
+  if (trade) {
+    const tradeText = trade.purchased ? `${trade.item} in pack` : `${trade.item}  ${trade.price}g`
+    canvas.write(x + 14, y + height - 2, trim(tradeText, width - 26), trade.purchased ? UI.focus : UI.brass, UI.panel)
+  }
 }
 
 function drawSkillCheckModal(canvas: Canvas, session: GameSession, animation: DiceRollAnimation | null | undefined, settings: UserSettings) {
@@ -1677,14 +1700,21 @@ function classSprite(classId: HeroClass): PixelSpriteId {
 }
 
 function actorSpriteId(kind: string): PixelSpriteId {
-  if (kind === "ghoul") return "ghoul"
+  if (kind === "merchant" || kind === "wound-surgeon") return "npc-smith"
+  if (kind === "cartographer" || kind === "shrine-keeper" || kind === "jailer") return "npc-oracle"
+  if (kind === "grave-root-boss") return "boss-minotaur"
   if (kind === "necromancer") return "necromancer"
+  if (kind === "ghoul" || kind === "rust-squire" || kind === "crypt-mimic") return "ghoul"
+  if (kind === "gallows-wisp" || kind === "carrion-moth") return "slime"
   return "slime"
 }
 
 function targetDefenseBonus(kind: string | undefined) {
+  if (kind === "grave-root-boss") return 5
   if (kind === "necromancer") return 4
+  if (kind === "crypt-mimic") return 3
   if (kind === "ghoul") return 2
+  if (kind === "rust-squire" || kind === "gallows-wisp") return 1
   return 0
 }
 
@@ -1826,6 +1856,11 @@ function statusColor(status: string) {
 function label(kind: string) {
   if (kind === "slime") return "Slime"
   if (kind === "ghoul") return "Ghoul"
+  if (kind === "gallows-wisp") return "Gallows Wisp"
+  if (kind === "rust-squire") return "Rust Squire"
+  if (kind === "carrion-moth") return "Carrion Moth"
+  if (kind === "crypt-mimic") return "Crypt Mimic"
+  if (kind === "grave-root-boss") return "Grave-root Boss"
   return "Necromancer"
 }
 

@@ -4,7 +4,7 @@ import { join } from "node:path"
 import { authStatusReport } from "../cloud/authStatus.js"
 import { loadAuthSession, saveAuthSession, type AuthSession } from "../cloud/authStore.js"
 import { setTile, tileAt, type Actor, type Point } from "../game/dungeon.js"
-import { type TileId } from "../game/domainTypes.js"
+import { isNpcActorId, type TileId } from "../game/domainTypes.js"
 import {
   attemptFlee,
   combatSkills,
@@ -12,6 +12,7 @@ import {
   currentBiome,
   cycleTarget,
   dismissSkillCheck,
+  interactWithWorld,
   performCombatAction,
   resolveSkillCheck,
   rest,
@@ -154,7 +155,7 @@ export type TestObservation = ReturnType<HeadlessGameEnv["observeTest"]>
 
 export const agentViewRadius = 5
 export const maxObservedActors = 8
-export const agentObservationSize = (agentViewRadius * 2 + 1) ** 2 + 16 + 12 + maxObservedActors * 6 + 21
+export const agentObservationSize = (agentViewRadius * 2 + 1) ** 2 + 16 + 12 + maxObservedActors * 6 + 23
 
 const movement: Partial<Record<HeadlessActionId, Point>> = {
   "move-north": { x: 0, y: -1 },
@@ -364,6 +365,8 @@ export class HeadlessGameEnv {
       selectedTargetId ? bounded(statusEffectMagnitude(this.session, selectedTargetId, "weakened") / 5) : 0,
       selectedTargetId ? bounded(statusEffectMagnitude(this.session, selectedTargetId, "burning") / 5) : 0,
       bounded(statusEffectsFor(this.session, "player").reduce((highest, effect) => Math.max(highest, effect.remainingTurns), 0) / 5),
+      this.session.conversation ? 1 : 0,
+      this.session.conversation?.trade ? 1 : 0,
       floorModifierCode(this.session.floorModifier.id),
     )
 
@@ -447,7 +450,7 @@ export class HeadlessGameEnv {
         const point = { x, y }
         const actor = this.session.dungeon.actors.find((candidate) => samePoint(candidate.position, point))
         if (samePoint(this.session.player, point)) row += "@"
-        else if (actor) row += actor.kind === "slime" ? "s" : actor.kind === "ghoul" ? "g" : "n"
+        else if (actor) row += actorGlyph(actor.kind)
         else row += tileGlyph(tileAt(this.session.dungeon, point))
       }
       rows.push(row)
@@ -654,12 +657,8 @@ export class HeadlessGameEnv {
       return { message: "Skill check dismissed." }
     }
     if (action === "interact") {
-      if (this.session.skillCheck?.status === "pending") return this.applyAction("resolve-skill-check")
-      if (this.session.skillCheck?.status === "resolved") return this.applyAction("dismiss-skill-check")
-      if (this.session.combat.active) return this.applyAction("combat-roll")
-      this.session.log.unshift("Nothing answers here yet.")
-      while (this.session.log.length > 8) this.session.log.pop()
-      return { message: "Nothing answers here yet." }
+      const conversation = interactWithWorld(this.session)
+      return { message: conversation ? `${conversation.speaker}: ${conversation.text}` : this.session.log[0] }
     }
     if (action === "target-prev") {
       cycleTarget(this.session, -1)
@@ -998,7 +997,25 @@ function visibleActors(session: GameSession) {
 function actorKindCode(kind: Actor["kind"]) {
   if (kind === "slime") return 0.25
   if (kind === "ghoul") return 0.5
-  return 1
+  if (kind === "necromancer") return 0.75
+  if (kind === "gallows-wisp") return 1
+  if (kind === "rust-squire") return 1.25
+  if (kind === "carrion-moth") return 1.5
+  if (kind === "crypt-mimic") return 1.75
+  if (kind === "grave-root-boss") return 2
+  return isNpcActorId(kind) ? -0.5 : 0
+}
+
+function actorGlyph(kind: Actor["kind"]) {
+  if (kind === "slime") return "s"
+  if (kind === "ghoul") return "g"
+  if (kind === "necromancer") return "n"
+  if (kind === "gallows-wisp") return "w"
+  if (kind === "rust-squire") return "r"
+  if (kind === "carrion-moth") return "m"
+  if (kind === "crypt-mimic") return "c"
+  if (kind === "grave-root-boss") return "b"
+  return isNpcActorId(kind) ? "?" : "a"
 }
 
 function statCode(stat: string | undefined) {

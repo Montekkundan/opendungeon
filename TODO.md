@@ -14,8 +14,8 @@
 - [ ] Add frame tags for `windup`, `impact`, `recover`, `cast-loop`, `pickup`, `block`, and `open`.
 - [ ] Add per-character JSON metadata for hitboxes, palette notes, weapon socket positions, and dialog portrait ids.
 - [ ] Add more crawlers: duelist, cleric, engineer, witch, grave knight.
-- [ ] Add more NPCs: cartographer, wound surgeon, shrine keeper, jailer, merchant.
-- [ ] Add more enemies: gallows wisp, rust squire, carrion moth, crypt mimic, grave-root boss.
+- [x] Add more NPCs: cartographer, wound surgeon, shrine keeper, jailer, merchant.
+- [x] Add more enemies: gallows wisp, rust squire, carrion moth, crypt mimic, grave-root boss.
 
 ## Terminal UI
 
@@ -111,10 +111,10 @@
 - [x] Biome labels in world anchors.
 - [x] Gameplay-visible biomes.
 - [x] Traps.
-- [ ] Merchants.
+- [x] Merchants.
 - [x] Floor modifiers.
 - [x] Secret rooms and locked doors.
-- [ ] NPC conversations.
+- [x] NPC conversations.
 
 ## Packaging
 

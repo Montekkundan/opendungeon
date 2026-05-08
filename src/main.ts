@@ -4,6 +4,7 @@ import {
   cycleTarget,
   attemptFlee,
   dismissSkillCheck,
+  interactWithWorld,
   performCombatAction,
   rest,
   resolveSkillCheck,
@@ -484,6 +485,10 @@ function handleGameKey(key: KeyEvent) {
   }
   if (key.name === "?" || (key.shift && key.name === "/")) {
     model.dialog = "help"
+    return
+  }
+  if (key.name === "e" || isConfirmKey(key)) {
+    interactWithWorld(model.session)
     return
   }
   if (key.name === "u") {

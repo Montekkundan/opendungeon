@@ -1,5 +1,5 @@
 import { createRng, type Rng } from "./rng.js"
-import type { ActorId, TileId } from "./domainTypes.js"
+import { isEnemyActorId, type ActorId, type EnemyActorId, type NpcActorId, type TileId } from "./domainTypes.js"
 
 export type Point = {
   x: number
@@ -87,7 +87,7 @@ export function createDungeon(seed: number, floor: number, width = 96, height = 
   scatterFeatures(tiles, rooms, rng)
   const secrets = placeSecretRooms(tiles, rooms, rng, floor)
 
-  const actors = spawnActors(tiles, rooms.slice(1), rng, floor)
+  const actors = spawnActors(tiles, rooms, rng, floor)
   if (floor >= 5) actors.push(finalGuardian(center(lastRoom), floor))
 
   return {
@@ -232,12 +232,13 @@ function cardinalNeighbors(point: Point): Point[] {
 
 function spawnActors(tiles: TileId[][], rooms: Room[], rng: Rng, floor: number): Actor[] {
   const actors: Actor[] = []
-  const enemyKinds: ActorId[] = floor > 2 ? ["slime", "ghoul", "necromancer"] : ["slime", "ghoul"]
+  spawnFriendlyActors(actors, tiles, rooms, rng, floor)
+  const enemyKinds = enemyKindsForFloor(floor)
 
-  for (const room of rooms.slice(0, 18)) {
+  for (const room of rooms.slice(2, 20)) {
     if (rng.next() < 0.35) continue
-    const position = randomInteriorPoint(room, rng)
-    if (tiles[position.y][position.x] !== "floor") continue
+    const position = freeInteriorPoint(tiles, room, rng, actors)
+    if (!position) continue
     const kind = rng.pick(enemyKinds)
     actors.push({ id: `enemy-${actors.length}`, kind, position, ...enemyStats(kind, floor), phase: 1, ai: enemyAi(kind, position, actors.length, floor) })
   }
@@ -245,24 +246,88 @@ function spawnActors(tiles: TileId[][], rooms: Room[], rng: Rng, floor: number):
   return actors
 }
 
+function spawnFriendlyActors(actors: Actor[], tiles: TileId[][], rooms: Room[], rng: Rng, floor: number) {
+  const merchantRoom = rooms[Math.min(1, rooms.length - 1)]
+  if (merchantRoom) placeFriendlyActor(actors, tiles, merchantRoom, rng, "merchant", `merchant-${floor}`)
+
+  const npcKinds: NpcActorId[] = ["cartographer", "wound-surgeon", "shrine-keeper", "jailer"]
+  const npcRoom = rooms[Math.min(2 + (floor % 4), rooms.length - 1)]
+  if (npcRoom) placeFriendlyActor(actors, tiles, npcRoom, rng, npcKinds[(floor - 1) % npcKinds.length], `npc-${floor}`)
+}
+
+function placeFriendlyActor(actors: Actor[], tiles: TileId[][], room: Room, rng: Rng, kind: NpcActorId, id: string) {
+  const position = freeInteriorPoint(tiles, room, rng, actors)
+  if (!position) return
+  actors.push({ id, kind, position, hp: 1, maxHp: 1, damage: 0 })
+}
+
+function freeInteriorPoint(tiles: TileId[][], room: Room, rng: Rng, actors: Actor[]): Point | null {
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const position = randomInteriorPoint(room, rng)
+    if (tiles[position.y][position.x] !== "floor") continue
+    if (actors.some((actor) => actor.position.x === position.x && actor.position.y === position.y)) continue
+    return position
+  }
+  return null
+}
+
+function enemyKindsForFloor(floor: number): EnemyActorId[] {
+  if (floor >= 4) return ["ghoul", "necromancer", "gallows-wisp", "rust-squire", "carrion-moth", "crypt-mimic"]
+  if (floor >= 2) return ["slime", "ghoul", "gallows-wisp", "rust-squire", "carrion-moth"]
+  return ["slime", "ghoul", "rust-squire", "gallows-wisp"]
+}
+
 export function enemyAi(kind: ActorId, origin: Point, index = 0, floor = 1): EnemyAi {
-  if (kind === "necromancer") {
+  if (!isEnemyActorId(kind)) {
     return {
       pattern: "sentinel",
       origin: { ...origin },
-      aggroRadius: 7 + Math.floor(floor / 3),
-      leashRadius: 11,
+      aggroRadius: 0,
+      leashRadius: 0,
       direction: 1,
       alerted: false,
     }
   }
 
-  if (kind === "ghoul") {
+  if (kind === "necromancer" || kind === "grave-root-boss") {
+    return {
+      pattern: "sentinel",
+      origin: { ...origin },
+      aggroRadius: kind === "grave-root-boss" ? 10 : 7 + Math.floor(floor / 3),
+      leashRadius: kind === "grave-root-boss" ? 15 : 11,
+      direction: 1,
+      alerted: false,
+    }
+  }
+
+  if (kind === "ghoul" || kind === "rust-squire") {
     return {
       pattern: index % 2 === 0 ? "patrol-horizontal" : "patrol-vertical",
       origin: { ...origin },
-      aggroRadius: 6,
-      leashRadius: 9,
+      aggroRadius: kind === "rust-squire" ? 5 : 6,
+      leashRadius: kind === "rust-squire" ? 8 : 9,
+      direction: index % 2 === 0 ? 1 : -1,
+      alerted: false,
+    }
+  }
+
+  if (kind === "crypt-mimic") {
+    return {
+      pattern: "sentinel",
+      origin: { ...origin },
+      aggroRadius: 5 + Math.floor(floor / 3),
+      leashRadius: 8,
+      direction: 1,
+      alerted: false,
+    }
+  }
+
+  if (kind === "gallows-wisp" || kind === "carrion-moth") {
+    return {
+      pattern: kind === "gallows-wisp" ? "stalker" : "wander",
+      origin: { ...origin },
+      aggroRadius: kind === "gallows-wisp" ? 7 : 5,
+      leashRadius: kind === "gallows-wisp" ? 10 : 7,
       direction: index % 2 === 0 ? 1 : -1,
       alerted: false,
     }
@@ -278,8 +343,13 @@ export function enemyAi(kind: ActorId, origin: Point, index = 0, floor = 1): Ene
   }
 }
 
-function enemyStats(kind: ActorId, floor: number) {
+function enemyStats(kind: EnemyActorId, floor: number) {
+  if (kind === "grave-root-boss") return withMaxHp(12 + floor, 4)
   if (kind === "necromancer") return withMaxHp(4 + floor, 3)
+  if (kind === "crypt-mimic") return withMaxHp(5 + floor, 3)
+  if (kind === "rust-squire") return withMaxHp(3 + floor, 2)
+  if (kind === "gallows-wisp") return withMaxHp(2 + floor, 2)
+  if (kind === "carrion-moth") return withMaxHp(2 + Math.floor(floor / 2), 1)
   if (kind === "ghoul") return withMaxHp(3 + floor, 2)
   return withMaxHp(2 + floor, 1)
 }
@@ -291,14 +361,14 @@ function withMaxHp(hp: number, damage: number) {
 function finalGuardian(position: Point, floor: number): Actor {
   return {
     id: "final-guardian",
-    kind: "necromancer",
+    kind: "grave-root-boss",
     position,
     hp: 12 + floor,
     maxHp: 12 + floor,
     damage: 4,
     phase: 1,
     ai: {
-      ...enemyAi("necromancer", position, 0, floor),
+      ...enemyAi("grave-root-boss", position, 0, floor),
       aggroRadius: 9,
       leashRadius: 14,
     },
