@@ -2,7 +2,20 @@ import { describe, expect, test } from "bun:test"
 import { existsSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { attemptFlee, combatModifier, combatSkills, createSession, performCombatAction, resolveSkillCheck, selectSkill, tryMove, usePotion } from "./session.js"
+import {
+  applyStatusEffect,
+  attemptFlee,
+  combatModifier,
+  combatSkills,
+  createSession,
+  performCombatAction,
+  resolveSkillCheck,
+  selectSkill,
+  statusEffectMagnitude,
+  statusEffectsFor,
+  tryMove,
+  usePotion,
+} from "./session.js"
 import type { GameSession } from "./session.js"
 import { setTile } from "./dungeon.js"
 import type { ActorId } from "./domainTypes.js"
@@ -101,6 +114,53 @@ describe("game session", () => {
     expect(combatSkills.length).toBeGreaterThanOrEqual(6)
     expect(session.combat.lastRoll?.skill).toBe("Smite")
     expect(session.combat.lastRoll?.modifier).toBe(combatModifier(session, "faith"))
+  })
+
+  test("applies combat status effects, damage reduction, and expiry", () => {
+    const session = createSession(1234)
+    const target = addEnemyBesidePlayer(session, "test-necromancer", "necromancer", 80, 5)
+    session.stats.mind = 60
+    session.focus = session.maxFocus
+
+    tryMove(session, 1, 0)
+    selectSkill(session, 4)
+    performCombatAction(session)
+
+    expect(session.combat.lastRoll?.skill).toBe("Shadow Hex")
+    expect(statusEffectMagnitude(session, "test-necromancer", "weakened")).toBe(2)
+    expect(statusEffectsFor(session, "test-necromancer")[0]?.remainingTurns).toBe(1)
+    expect(session.hp).toBe(session.maxHp - 3)
+
+    setTile(session.dungeon, target, "floor")
+    selectSkill(session, 0)
+    performCombatAction(session)
+
+    expect(statusEffectMagnitude(session, "test-necromancer", "weakened")).toBe(0)
+    expect(session.hp).toBe(session.maxHp - 6)
+  })
+
+  test("refreshes same-target status effect stacks without duplicating them", () => {
+    const session = createSession(1234)
+
+    applyStatusEffect(session, {
+      id: "guarded",
+      targetId: "player",
+      label: "Guarded",
+      remainingTurns: 1,
+      magnitude: 1,
+      source: "test",
+    })
+    applyStatusEffect(session, {
+      id: "guarded",
+      targetId: "player",
+      label: "Guarded",
+      remainingTurns: 3,
+      magnitude: 2,
+      source: "test",
+    })
+
+    expect(statusEffectsFor(session, "player")).toHaveLength(1)
+    expect(statusEffectsFor(session, "player")[0]).toMatchObject({ remainingTurns: 3, magnitude: 2 })
   })
 
   test("enemies patrol until the player enters their aggro radius", () => {

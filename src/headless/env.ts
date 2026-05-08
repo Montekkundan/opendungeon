@@ -14,6 +14,8 @@ import {
   resolveSkillCheck,
   rest,
   selectSkill,
+  statusEffectMagnitude,
+  statusEffectsFor,
   tryMove,
   usePotion,
   type GameSession,
@@ -147,7 +149,7 @@ export type TestObservation = ReturnType<HeadlessGameEnv["observeTest"]>
 
 export const agentViewRadius = 5
 export const maxObservedActors = 8
-export const agentObservationSize = (agentViewRadius * 2 + 1) ** 2 + 16 + 8 + maxObservedActors * 6 + 16
+export const agentObservationSize = (agentViewRadius * 2 + 1) ** 2 + 16 + 12 + maxObservedActors * 6 + 20
 
 const movement: Partial<Record<HeadlessActionId, Point>> = {
   "move-north": { x: 0, y: -1 },
@@ -257,7 +259,7 @@ export class HeadlessGameEnv {
       saves,
       auth,
       settings: safeLoadSettings(),
-      statusEffects: [],
+      statusEffects: this.session.statusEffects.map((effect) => ({ ...effect })),
       worldValidationErrors: validateWorldConfig(this.session.world),
       snapshot: this.snapshot(),
       session: serializeSessionForObservation(this.session),
@@ -294,6 +296,7 @@ export class HeadlessGameEnv {
     )
 
     const inventory = this.session.inventory
+    const visibleActorIds = new Set(visibleActors(this.session).map((actor) => actor.id))
     values.push(
       inventory.some((item) => /Deploy nerve potion/i.test(item)) ? 1 : 0,
       bounded(inventory.filter((item) => /potion|vial/i.test(item)).length / 5),
@@ -301,6 +304,10 @@ export class HeadlessGameEnv {
       bounded(inventory.filter((item) => /scroll/i.test(item)).length / 5),
       bounded(inventory.filter((item) => /blade|sword|lockpick/i.test(item)).length / 5),
       bounded(inventory.length / 20),
+      bounded(statusEffectMagnitude(this.session, "player", "guarded") / 5),
+      bounded(statusEffectsFor(this.session, "player").length / 5),
+      bounded(this.session.statusEffects.filter((effect) => effect.id === "weakened" && visibleActorIds.has(effect.targetId)).length / 5),
+      bounded(this.session.statusEffects.filter((effect) => effect.id === "burning" && visibleActorIds.has(effect.targetId)).length / 5),
       safeListSaves().length > 0 ? 1 : 0,
       safeAuthSummary().loggedIn ? 1 : 0,
     )
@@ -326,6 +333,9 @@ export class HeadlessGameEnv {
 
     const skillCheck = this.session.skillCheck
     const completedEvents = this.session.world.events.filter((event) => event.status === "completed").length
+    const selectedTargetId = this.session.combat.active
+      ? this.session.combat.actorIds[this.session.combat.selectedTarget]
+      : undefined
     values.push(
       this.session.combat.active ? 1 : 0,
       bounded(this.session.combat.actorIds.length / 8),
@@ -343,6 +353,10 @@ export class HeadlessGameEnv {
       bounded(this.session.kills / 50),
       bounded(this.session.finalFloor / 20),
       bounded(completedEvents / Math.max(1, this.session.world.events.length)),
+      bounded(this.session.statusEffects.length / 10),
+      selectedTargetId ? bounded(statusEffectMagnitude(this.session, selectedTargetId, "weakened") / 5) : 0,
+      selectedTargetId ? bounded(statusEffectMagnitude(this.session, selectedTargetId, "burning") / 5) : 0,
+      bounded(statusEffectsFor(this.session, "player").reduce((highest, effect) => Math.max(highest, effect.remainingTurns), 0) / 5),
     )
 
     while (values.length < agentObservationSize) values.push(0)
@@ -469,6 +483,7 @@ export class HeadlessGameEnv {
           }
         : null,
       combat: this.session.combat,
+      statusEffects: this.session.statusEffects,
       world: {
         worldId: this.session.world.worldId,
         generation: this.session.world.generation,
@@ -913,12 +928,13 @@ function actorKindCode(kind: Actor["kind"]) {
 }
 
 function statCode(stat: string | undefined) {
-  if (stat === "strength") return 0.15
-  if (stat === "dexterity") return 0.3
-  if (stat === "endurance") return 0.45
-  if (stat === "intelligence") return 0.6
-  if (stat === "wisdom") return 0.75
-  if (stat === "charisma") return 0.9
+  if (stat === "vigor") return 0.125
+  if (stat === "mind") return 0.25
+  if (stat === "endurance") return 0.375
+  if (stat === "strength") return 0.5
+  if (stat === "dexterity") return 0.625
+  if (stat === "intelligence") return 0.75
+  if (stat === "faith") return 0.875
   if (stat === "luck") return 1
   return 0
 }

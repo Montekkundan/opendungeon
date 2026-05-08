@@ -33,6 +33,24 @@ export type Hero = {
 }
 
 export type CombatSkillId = "strike" | "aimed-shot" | "arcane-burst" | "smite" | "shadow-hex" | "lucky-riposte"
+export type StatusEffectId = "guarded" | "weakened" | "burning"
+
+export type StatusEffect = {
+  id: StatusEffectId
+  targetId: "player" | string
+  label: string
+  remainingTurns: number
+  magnitude: number
+  source: string
+}
+
+export type CombatSkillEffect = {
+  id: StatusEffectId
+  target: "self" | "target"
+  duration: number
+  magnitude: number
+  label: string
+}
 
 export type CombatSkill = {
   id: CombatSkillId
@@ -42,6 +60,7 @@ export type CombatSkill = {
   dc: number
   damage: number
   text: string
+  effect?: CombatSkillEffect
 }
 
 export type CombatRoll = {
@@ -119,6 +138,7 @@ export type GameSession = {
   seen: Set<string>
   combat: CombatState
   skillCheck: SkillCheckState | null
+  statusEffects: StatusEffect[]
   world: WorldConfig
   worldLog: WorldLogEntry[]
   pendingWorldGeneration: boolean
@@ -156,7 +176,14 @@ export const combatSkills: CombatSkill[] = [
     cost: 2,
     dc: 15,
     damage: 8,
-    text: "High-risk focus spender.",
+    text: "High-risk focus spender that leaves surviving targets burning.",
+    effect: {
+      id: "burning",
+      target: "target",
+      duration: 2,
+      magnitude: 1,
+      label: "Burning",
+    },
   },
   {
     id: "smite",
@@ -165,7 +192,14 @@ export const combatSkills: CombatSkill[] = [
     cost: 1,
     dc: 12,
     damage: 4,
-    text: "Faith-driven strike with steady damage.",
+    text: "Faith-driven strike that briefly guards the crawler.",
+    effect: {
+      id: "guarded",
+      target: "self",
+      duration: 1,
+      magnitude: 1,
+      label: "Guarded",
+    },
   },
   {
     id: "shadow-hex",
@@ -174,7 +208,14 @@ export const combatSkills: CombatSkill[] = [
     cost: 1,
     dc: 12,
     damage: 3,
-    text: "Careful occult pressure for high-mind crawlers.",
+    text: "Careful occult pressure that weakens surviving targets.",
+    effect: {
+      id: "weakened",
+      target: "target",
+      duration: 2,
+      magnitude: 2,
+      label: "Weakened",
+    },
   },
   {
     id: "lucky-riposte",
@@ -183,7 +224,14 @@ export const combatSkills: CombatSkill[] = [
     cost: 1,
     dc: 14,
     damage: 6,
-    text: "Swingy counterattack that rewards lucky builds.",
+    text: "Swingy counterattack that rewards lucky builds with a stronger guard.",
+    effect: {
+      id: "guarded",
+      target: "self",
+      duration: 2,
+      magnitude: 2,
+      label: "Guarded",
+    },
   },
 ]
 
@@ -229,6 +277,7 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
       message: "",
     },
     skillCheck: null,
+    statusEffects: [],
     world,
     worldLog: [
       createWorldLogEntry(world.worldId, 0, {
@@ -389,10 +438,12 @@ export function normalizeSessionAfterLoad(session: GameSession): GameSession {
     selectedSkill: 0,
     message: "",
   }
+  session.statusEffects = normalizeStatusEffects(session.statusEffects)
   session.world ??= createWorldForSeed(session.seed, session.finalFloor || 5)
   session.worldLog ??= []
   session.pendingWorldGeneration = Boolean(session.pendingWorldGeneration)
   session.dungeon.actors.forEach((actor, index) => ensureEnemyAi(actor, index, session.floor))
+  pruneStatusEffects(session)
   return session
 }
 
@@ -427,6 +478,32 @@ export function selectSkill(session: GameSession, index: number) {
   const skill = combatSkills[session.combat.selectedSkill]
   const modifier = combatModifier(session, skill.stat)
   session.combat.message = `${skill.name}: d20 ${formatSigned(modifier)} ${statAbbreviations[skill.stat]} vs DC ${skill.dc + enemyDefenseBonus(combatTargets(session)[session.combat.selectedTarget]?.kind)}.`
+}
+
+export function statusEffectsFor(session: GameSession, targetId: StatusEffect["targetId"]) {
+  return (session.statusEffects ?? []).filter((effect) => effect.targetId === targetId)
+}
+
+export function statusEffectMagnitude(session: GameSession, targetId: StatusEffect["targetId"], id: StatusEffectId) {
+  return statusEffectsFor(session, targetId)
+    .filter((effect) => effect.id === id)
+    .reduce((total, effect) => total + effect.magnitude, 0)
+}
+
+export function applyStatusEffect(session: GameSession, effect: StatusEffect) {
+  const next = normalizeStatusEffect(effect)
+  if (!next) return null
+  session.statusEffects ??= []
+  const existing = session.statusEffects.find((candidate) => candidate.id === next.id && candidate.targetId === next.targetId)
+  if (existing) {
+    existing.remainingTurns = Math.max(existing.remainingTurns, next.remainingTurns)
+    existing.magnitude = Math.max(existing.magnitude, next.magnitude)
+    existing.label = next.label
+    existing.source = next.source
+    return existing
+  }
+  session.statusEffects.push(next)
+  return next
 }
 
 export function fleeModifier(session: GameSession) {
@@ -526,7 +603,9 @@ export function performCombatAction(session: GameSession) {
 
   if (hit) {
     target.hp -= damage
-    session.combat.message = `${skill.name} hits ${label(target.kind)} for ${damage}.`
+    const appliedEffect = applyCombatSkillEffect(session, skill, target)
+    const effectText = appliedEffect ? ` ${appliedEffect.label} applied.` : ""
+    session.combat.message = `${skill.name} hits ${label(target.kind)} for ${damage}.${effectText}`
     session.log.unshift(`d20 ${d20}${formatSigned(modifier)} vs DC ${dc}: hit.`)
     if (target.hp <= 0) defeatActor(session, target)
   } else {
@@ -577,6 +656,7 @@ function endCombat(session: GameSession, message: string) {
 function defeatActor(session: GameSession, actor: Actor) {
   const position = { ...actor.position }
   removeActor(session.dungeon.actors, actor)
+  removeStatusEffectsFor(session, actor.id)
   session.kills += 1
   session.xp += xpFor(actor.kind)
   session.log.unshift(defeatMessage(actor.kind))
@@ -725,6 +805,7 @@ function descend(session: GameSession) {
 
 function advanceTurn(session: GameSession) {
   session.turn += 1
+  tickStatusEffects(session)
   if (!session.combat.active) moveEnemies(session)
   revealAroundPlayer(session)
   if (session.hp <= 0) {
@@ -760,6 +841,7 @@ function moveEnemies(session: GameSession) {
 
 function finishCombatRound(session: GameSession, enemiesAct: boolean) {
   if (enemiesAct) combatEnemyTurn(session)
+  tickStatusEffects(session)
   session.turn += 1
   revealAroundPlayer(session)
   if (session.hp <= 0) {
@@ -776,14 +858,100 @@ function combatEnemyTurn(session: GameSession) {
   for (const actor of combatTargets(session)) {
     ensureEnemyAi(actor, 0, session.floor).alerted = true
     if (manhattan(actor.position, session.player) === 1) {
-      session.hp -= actor.damage
-      session.log.unshift(`${label(actor.kind)} hits for ${actor.damage}.`)
+      const weakened = statusEffectMagnitude(session, actor.id, "weakened")
+      const guarded = statusEffectMagnitude(session, "player", "guarded")
+      const damage = Math.max(0, actor.damage - weakened - guarded)
+      session.hp -= damage
+      const reduction = actor.damage === damage ? "" : ` (${actor.damage - damage} blocked by status)`
+      session.log.unshift(`${label(actor.kind)} hits for ${damage}${reduction}.`)
       continue
     }
 
     const step = chaseStep(session, actor)
     if (step) actor.position = step
   }
+}
+
+function applyCombatSkillEffect(session: GameSession, skill: CombatSkill, target: Actor) {
+  if (!skill.effect) return null
+  if (skill.effect.target === "target" && target.hp <= 0) return null
+  const targetId = skill.effect.target === "self" ? "player" : target.id
+  return applyStatusEffect(session, {
+    id: skill.effect.id,
+    targetId,
+    label: skill.effect.label,
+    remainingTurns: skill.effect.duration,
+    magnitude: skill.effect.magnitude,
+    source: skill.name,
+  })
+}
+
+function tickStatusEffects(session: GameSession) {
+  if (!session.statusEffects?.length) return
+
+  for (const effect of [...session.statusEffects]) {
+    if (effect.id !== "burning") continue
+    if (effect.targetId === "player") {
+      session.hp -= effect.magnitude
+      session.log.unshift(`Burning deals ${effect.magnitude}.`)
+      continue
+    }
+
+    const actor = session.dungeon.actors.find((candidate) => candidate.id === effect.targetId)
+    if (!actor) continue
+    actor.hp -= effect.magnitude
+    session.log.unshift(`${label(actor.kind)} burns for ${effect.magnitude}.`)
+    if (actor.hp <= 0) defeatActor(session, actor)
+  }
+
+  for (const effect of session.statusEffects) effect.remainingTurns -= 1
+  pruneStatusEffects(session)
+}
+
+function normalizeStatusEffects(effects: StatusEffect[] | undefined): StatusEffect[] {
+  if (!Array.isArray(effects)) return []
+  return effects.flatMap((effect) => {
+    const next = normalizeStatusEffect(effect)
+    return next ? [next] : []
+  })
+}
+
+function normalizeStatusEffect(effect: Partial<StatusEffect> | undefined): StatusEffect | null {
+  if (!effect || !isStatusEffectId(effect.id) || typeof effect.targetId !== "string") return null
+  const remainingTurns = Math.max(1, Math.floor(Number(effect.remainingTurns)))
+  const magnitude = Math.max(1, Math.floor(Number(effect.magnitude)))
+  if (!Number.isFinite(remainingTurns) || !Number.isFinite(magnitude)) return null
+  return {
+    id: effect.id,
+    targetId: effect.targetId === "player" ? "player" : effect.targetId,
+    label: cleanStatusLabel(effect.label || statusEffectLabel(effect.id)),
+    remainingTurns,
+    magnitude,
+    source: cleanStatusLabel(effect.source || "Unknown"),
+  }
+}
+
+function pruneStatusEffects(session: GameSession) {
+  const actorIds = new Set(session.dungeon.actors.map((actor) => actor.id))
+  session.statusEffects = session.statusEffects.filter((effect) => effect.remainingTurns > 0 && (effect.targetId === "player" || actorIds.has(effect.targetId)))
+}
+
+function removeStatusEffectsFor(session: GameSession, targetId: StatusEffect["targetId"]) {
+  session.statusEffects = session.statusEffects.filter((effect) => effect.targetId !== targetId)
+}
+
+function isStatusEffectId(value: unknown): value is StatusEffectId {
+  return value === "guarded" || value === "weakened" || value === "burning"
+}
+
+function statusEffectLabel(id: StatusEffectId) {
+  if (id === "guarded") return "Guarded"
+  if (id === "weakened") return "Weakened"
+  return "Burning"
+}
+
+function cleanStatusLabel(text: string) {
+  return text.replace(/[^\w .:/'()-]/g, "").trim().slice(0, 40) || "Status"
 }
 
 function stepToward(from: Point, to: Point): Point {

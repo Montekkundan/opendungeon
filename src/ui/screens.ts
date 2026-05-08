@@ -13,6 +13,7 @@ import {
   fleeModifier,
   pointKey,
   skillCheckModifier,
+  statusEffectsFor,
   type GameSession,
   type HeroClass,
   type MultiplayerMode,
@@ -895,6 +896,7 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
   const targets = combatTargets(session)
   const selectedSkill = combatSkills[session.combat.selectedSkill]
   const roll = session.combat.lastRoll
+  const playerStatus = formatStatusEffects(statusEffectsFor(session, "player"))
   const targetW = Math.max(26, Math.floor(width * 0.43))
   const actionX = x + targetW + 3
   const actionW = width - targetW - 5
@@ -917,7 +919,8 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
     if (selected) canvas.fill(x + 3, cardY + 1, 1, 1, " ", UI.gold, UI.gold)
     drawMiniIcon(canvas, x + 5, cardY + 1, actorSpriteId(target.kind), 7, 1, selected ? 1 : 0.75)
     canvas.write(x + 13, cardY + 1, trim(`${selected ? ">" : " "} ${label(target.kind)}  HP ${target.hp}`, targetW - 15), selected ? UI.gold : UI.ink, bg)
-    canvas.write(x + 13, cardY + 2, trim(enemyBehaviorText(target), targetW - 15), target.ai?.alerted ? UI.hp : UI.muted, bg)
+    const targetStatus = formatStatusEffects(statusEffectsFor(session, target.id))
+    canvas.write(x + 13, cardY + 2, trim(targetStatus || enemyBehaviorText(target), targetW - 15), targetStatus ? UI.focus : target.ai?.alerted ? UI.hp : UI.muted, bg)
   })
 
   canvas.write(actionX, y + 4, "Actions", UI.brass, UI.panel)
@@ -949,7 +952,8 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
   canvas.fill(x + 2, detailY, detailW, 4, " ", UI.panel2, UI.panel2)
   canvas.border(x + 2, detailY, detailW, 4, UI.edgeDim)
   const detail = roll?.skill === "Flee" ? "Escape check uses Dexterity, Luck, Endurance, and level." : selectedSkill.text
-  writeWrapped(canvas, x + 4, detailY + 1, detailW - 4, [detail, session.combat.message], 2, UI.ink, UI.panel2)
+  const statusLine = playerStatus ? `You: ${playerStatus}` : session.combat.message
+  writeWrapped(canvas, x + 4, detailY + 1, detailW - 4, [detail, statusLine], 2, UI.ink, UI.panel2)
 
   const diceX = x + width - diceW - 3
   const diceY = detailY
@@ -962,6 +966,10 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
 
   const footer = roll ? `${roll.skill} ${roll.hit ? (roll.skill === "Flee" ? "success" : "hit") : roll.skill === "Flee" ? "failed" : "miss"} ${roll.target}` : "Enter rolls selected skill. F attempts escape."
   canvas.write(x + 2, y + height - 2, trim(footer, width - 4), UI.muted, UI.panel)
+}
+
+function formatStatusEffects(effects: ReturnType<typeof statusEffectsFor>) {
+  return effects.map((effect) => `${effect.label} ${effect.remainingTurns}`).join("  ")
 }
 
 function drawSkillCheckModal(canvas: Canvas, session: GameSession, animation: DiceRollAnimation | null | undefined, settings: UserSettings) {

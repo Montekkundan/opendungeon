@@ -121,6 +121,22 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
     ]
   }
 
+  if (name === "status-effects") {
+    return [
+      { command: "set-relative-tile", dx: 1, dy: 0, tile: "floor" },
+      { command: "place-relative-actor", id: "script-necromancer", kind: "necromancer", dx: 1, dy: 0, hp: 80, damage: 5 },
+      { command: "set-stat", stat: "mind", value: 60 },
+      { action: "move-east" },
+      { action: "select-skill-4" },
+      { action: "combat-roll" },
+      { assert: { path: "session.combat.lastRoll.skill", equals: "Shadow Hex" } },
+      { assert: { path: "statusEffects.0.id", equals: "weakened" } },
+      { assert: { path: "statusEffects.0.remainingTurns", equals: 1 } },
+      { assert: { path: "session.hp", equals: 22 } },
+      { command: "check-invariants" },
+    ]
+  }
+
   if (name === "skill-check") {
     return [
       { command: "set-relative-tile", dx: 1, dy: 0, tile: "potion" },
