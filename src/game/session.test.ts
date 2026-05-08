@@ -167,6 +167,27 @@ describe("game session", () => {
     expect(session.combat.lastRoll?.modifier).toBe(combatModifier(session, "faith"))
   })
 
+  test("uses area combat skills against all active targets", () => {
+    const session = createSession(1234)
+    addEnemyBesidePlayer(session, "aoe-ghoul", "ghoul", 10, 0)
+    const second = { x: session.player.x, y: session.player.y + 1 }
+    setTile(session.dungeon, second, "floor")
+    session.dungeon.actors.push({ id: "aoe-slime", kind: "slime", position: second, hp: 5, damage: 0 })
+    session.stats.intelligence = 60
+    session.focus = session.maxFocus
+
+    tryMove(session, 1, 0)
+    expect(session.combat.actorIds).toContain("aoe-ghoul")
+    expect(session.combat.actorIds).toContain("aoe-slime")
+
+    selectSkill(session, 2)
+    performCombatAction(session)
+
+    expect(session.combat.lastRoll?.skill).toBe("Arcane Burst")
+    expect(session.kills).toBeGreaterThanOrEqual(2)
+    expect(session.dungeon.actors.some((actor) => actor.id === "aoe-ghoul" || actor.id === "aoe-slime")).toBe(false)
+  })
+
   test("applies combat status effects, damage reduction, and expiry", () => {
     const session = createSession(1234)
     const target = addEnemyBesidePlayer(session, "test-necromancer", "necromancer", 80, 5)

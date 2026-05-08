@@ -123,6 +123,22 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
     ]
   }
 
+  if (name === "area-combat") {
+    return [
+      { command: "set-relative-tile", dx: 1, dy: 0, tile: "floor" },
+      { command: "set-relative-tile", dx: 0, dy: 1, tile: "floor" },
+      { command: "place-relative-actor", id: "script-ghoul", kind: "ghoul", dx: 1, dy: 0, hp: 10, damage: 0 },
+      { command: "place-relative-actor", id: "script-slime", kind: "slime", dx: 0, dy: 1, hp: 5, damage: 0 },
+      { command: "set-stat", stat: "intelligence", value: 60 },
+      { action: "move-east" },
+      { action: "select-skill-2" },
+      { action: "combat-roll" },
+      { assert: { path: "session.combat.lastRoll.skill", equals: "Arcane Burst" } },
+      { assert: { path: "session.kills", min: 2 } },
+      { command: "check-invariants" },
+    ]
+  }
+
   if (name === "status-effects") {
     return [
       { command: "set-relative-tile", dx: 1, dy: 0, tile: "floor" },

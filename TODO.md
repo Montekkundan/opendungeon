@@ -100,7 +100,7 @@
 - [x] Status effects.
 - [ ] Initiative order.
 - [ ] Reactions and blocks.
-- [ ] Area-of-effect targeting.
+- [x] Area-of-effect targeting.
 - [ ] Boss phase transitions.
 
 ## Dungeon Content

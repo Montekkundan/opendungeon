@@ -72,6 +72,7 @@ export type CombatSkill = {
   dc: number
   damage: number
   text: string
+  area?: "single" | "all"
   effect?: CombatSkillEffect
 }
 
@@ -253,6 +254,7 @@ export const combatSkills: CombatSkill[] = [
     dc: 15,
     damage: 8,
     text: "High-risk focus spender that leaves surviving targets burning.",
+    area: "all",
     effect: {
       id: "burning",
       target: "target",
@@ -694,12 +696,21 @@ export function performCombatAction(session: GameSession) {
   }
 
   if (hit) {
-    target.hp -= damage
-    const appliedEffect = applyCombatSkillEffect(session, skill, target)
-    const effectText = appliedEffect ? ` ${appliedEffect.label} applied.` : ""
-    session.combat.message = `${skill.name} hits ${label(target.kind)} for ${damage}.${effectText}`
+    const affectedTargets = skill.area === "all" ? [...targets] : [target]
+    const appliedEffects: StatusEffect[] = []
+    for (const affected of affectedTargets) {
+      const nextDamage = affected.id === target.id ? damage : Math.max(1, Math.floor(damage / 2))
+      affected.hp -= nextDamage
+      const appliedEffect = applyCombatSkillEffect(session, skill, affected)
+      if (appliedEffect) appliedEffects.push(appliedEffect)
+    }
+    const targetText = affectedTargets.length > 1 ? `${affectedTargets.length} targets` : label(target.kind)
+    const effectText = appliedEffects.length ? ` ${appliedEffects[0].label} applied.` : ""
+    session.combat.message = `${skill.name} hits ${targetText} for ${damage}.${effectText}`
     session.log.unshift(`d20 ${d20}${formatSigned(modifier)} vs DC ${dc}: hit.`)
-    if (target.hp <= 0) defeatActor(session, target)
+    for (const affected of affectedTargets) {
+      if (affected.hp <= 0 && session.dungeon.actors.includes(affected)) defeatActor(session, affected)
+    }
   } else {
     session.combat.message = `${skill.name} misses ${label(target.kind)}.`
     session.log.unshift(`d20 ${d20}${formatSigned(modifier)} vs DC ${dc}: miss.`)
