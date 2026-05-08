@@ -22,6 +22,7 @@ import {
   type HeroClass,
   type MultiplayerMode,
 } from "../game/session.js"
+import { appearanceLabel, heroSpriteForAppearance, normalizeHeroAppearance, weaponSpriteForAppearance, type HeroAppearance } from "../game/appearance.js"
 import { saveDirectory, type SaveSummary } from "../game/saveStore.js"
 import { profilePath, type UserSettings } from "../game/settingsStore.js"
 import { formatModifier, statAbbreviations, statLabels, statLine, statsForClass } from "../game/stats.js"
@@ -289,6 +290,8 @@ function drawCharacter(canvas: Canvas, model: AppModel) {
   const editingName = model.inputMode?.field === "characterName"
   const shownName = editingName ? `${model.inputMode?.draft ?? ""}_` : model.session.hero.name
   drawInputField(canvas, x + 4, y + 3, width - 8, "Name", shownName, editingName)
+  const selectedAppearance = normalizeHeroAppearance(currentClass(model).id, model.session.hero.appearance)
+  canvas.write(x + 4, y + 5, trim(appearanceLabel(selectedAppearance), width - 8), UI.soft, UI.panel)
 
   const listY = y + 7
   const visibleRows = clamp(Math.floor((height - 10) / 4), 3, classOptions.length)
@@ -315,6 +318,10 @@ function drawCharacter(canvas: Canvas, model: AppModel) {
 
   drawFooter(canvas, [
     ["n", "name"],
+    ["[ ]", "palette"],
+    ["p", "portrait"],
+    ["w", "weapon"],
+    ["a", "motion"],
     ["Enter", "confirm"],
     ["Esc", "title"],
   ])
@@ -595,7 +602,7 @@ function drawMap(canvas: Canvas, session: GameSession, debugView: boolean, setti
       }
 
       if (session.player.x === x && session.player.y === y) {
-        drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, classSprite(session.hero.classId), debugView, playerAnimation(session), session.turn)
+        drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, classSprite(session.hero.classId, session.hero.appearance), debugView, playerAnimation(session), session.turn)
       }
       else if (actor) {
         drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, actorSpriteId(actor.kind), debugView, actorAnimation(actor.id === selectedTargetId, session), session.turn + sx + sy)
@@ -798,7 +805,7 @@ function drawHud(canvas: Canvas, session: GameSession) {
   const width = Math.min(canvas.width - 2, 112)
   const x = Math.floor((canvas.width - width) / 2)
   drawPanel(canvas, x, 0, width, height, "Crawler", UI.brass)
-  drawPixelBlock(canvas, x + 2, 1, animatedPixelSprite(classSprite(session.hero.classId), "idle", session.turn, 10, 3), 1)
+  drawPixelBlock(canvas, x + 2, 1, animatedPixelSprite(classSprite(session.hero.classId, session.hero.appearance), "idle", session.turn, 10, 3), 1)
 
   const infoX = x + 14
   const contentW = width - 17
@@ -1073,7 +1080,7 @@ function drawSkillCheckModal(canvas: Canvas, session: GameSession, animation: Di
   writeCentered(canvas, infoX, diceY + 1, infoW, trim(check.title, infoW - 4), UI.ink, UI.panel2)
   canvas.fill(infoX, diceY + 4, infoW, 3, " ", UI.panel2, UI.panel2)
   canvas.border(infoX, diceY + 4, infoW, 3, UI.edge)
-  drawPixelBlock(canvas, infoX + infoW - 10, diceY + 4, pixelSprite(classSprite(session.hero.classId), 8, 3), 0.85)
+  drawPixelBlock(canvas, infoX + infoW - 10, diceY + 4, pixelSprite(classSprite(session.hero.classId, session.hero.appearance), 8, 3), 0.85)
   canvas.write(infoX + 2, diceY + 5, trim(check.actor, infoW - 14), UI.gold, UI.panel2)
 
   canvas.write(x + 4, y + height - 5, trim(check.prompt, width - 8), UI.soft, UI.panel)
@@ -1572,12 +1579,12 @@ function drawInventoryDialog(canvas: Canvas, model: AppModel) {
   const selectedItem = selectedInventoryItem(model)
 
   drawPanel(canvas, layout.character.x, layout.character.y, layout.character.width, layout.character.height, "Crawler", UI.edge)
-  const heroPortrait = portraitIdForSprite(classSprite(model.session.hero.classId))
+  const heroPortrait = portraitIdForSprite(classSprite(model.session.hero.classId, model.session.hero.appearance))
   drawPixelBlock(
     canvas,
     layout.character.x + 3,
     layout.character.y + 3,
-    heroPortrait ? portraitSprite(heroPortrait, 12, 5) : animatedPixelSprite(classSprite(model.session.hero.classId), "idle", model.session.turn, 12, 5),
+    heroPortrait ? portraitSprite(heroPortrait, 12, 5) : animatedPixelSprite(classSprite(model.session.hero.classId, model.session.hero.appearance), "idle", model.session.turn, 12, 5),
     1,
   )
   canvas.write(layout.character.x + 17, layout.character.y + 3, trim(model.session.hero.name, layout.character.width - 20), UI.ink, UI.panel)
@@ -1585,6 +1592,7 @@ function drawInventoryDialog(canvas: Canvas, model: AppModel) {
   if (layout.character.height > 11) canvas.write(layout.character.x + 3, layout.character.y + 10, `Level ${model.session.level}`, UI.gold, UI.panel)
   if (layout.character.height > 13) canvas.write(layout.character.x + 3, layout.character.y + 12, trim(statLine(model.session.stats), layout.character.width - 6), UI.soft, UI.panel)
   if (layout.character.height > 16) drawEquipmentLine(canvas, layout.character.x + 3, layout.character.y + 15, layout.character.width - 6, "Weapon", findInventoryByKind(model.session.inventory, "weapon"))
+  if (layout.character.height > 17) drawMiniIcon(canvas, layout.character.x + layout.character.width - 9, layout.character.y + 15, weaponSpriteForAppearance(model.session.hero.classId, model.session.hero.appearance), 5, 1)
   if (layout.character.height > 18) drawEquipmentLine(canvas, layout.character.x + 3, layout.character.y + 17, layout.character.width - 6, "Relic", findInventoryByKind(model.session.inventory, "relic"))
   if (layout.character.height > 20) drawEquipmentLine(canvas, layout.character.x + 3, layout.character.y + 19, layout.character.width - 6, "Consumable", findInventoryByKind(model.session.inventory, "consumable"))
 
@@ -1712,10 +1720,8 @@ function actorAnimation(selected: boolean, session: GameSession): SpriteAnimatio
   return "walk"
 }
 
-function classSprite(classId: HeroClass): PixelSpriteId {
-  if (classId === "arcanist" || classId === "witch") return "hero-arcanist"
-  if (classId === "warden" || classId === "cleric" || classId === "grave-knight") return "hero-warden"
-  return "hero-ranger"
+function classSprite(classId: HeroClass, appearance?: HeroAppearance): PixelSpriteId {
+  return heroSpriteForAppearance(classId, appearance) as PixelSpriteId
 }
 
 function actorSpriteId(kind: string): PixelSpriteId {
@@ -1789,7 +1795,7 @@ function drawDialog(canvas: Canvas, model: AppModel) {
   }
 
   if (model.dialog === "pause") {
-    drawPixelBlock(canvas, x + 5, y + 5, animatedPixelSprite(classSprite(model.session.hero.classId), "idle", model.session.turn, 14, 6), 0.9)
+    drawPixelBlock(canvas, x + 5, y + 5, animatedPixelSprite(classSprite(model.session.hero.classId, model.session.hero.appearance), "idle", model.session.turn, 14, 6), 0.9)
     canvas.write(x + 24, y + 4, "The dungeon holds your place.", UI.ink, UI.panel)
     drawPauseAction(canvas, x + 24, y + 6, width - 31, "Esc", "Resume", UI.focus)
     drawPauseAction(canvas, x + 24, y + 8, width - 31, "S", "Settings", UI.cyan)

@@ -11,6 +11,7 @@ import {
   currentBiome,
   floorModifierFor,
   interactWithWorld,
+  normalizeSessionAfterLoad,
   performCombatAction,
   rest,
   resolveSkillCheck,
@@ -81,6 +82,25 @@ describe("game session", () => {
 
     warden.inventory.push("Changed")
     expect(startingLoadout("warden")).not.toContain("Changed")
+  })
+
+  test("keeps class appearance variants normalized and save-ready", () => {
+    const session = createSession(1234, "solo", "duelist", "Nyx", {
+      portraitVariantId: "scarred",
+      cosmeticPaletteId: "moonlit",
+      weaponSpriteId: "staff",
+      animationSetId: "warden",
+    })
+
+    expect(session.hero.appearance).toEqual({
+      portraitVariantId: "scarred",
+      cosmeticPaletteId: "moonlit",
+      weaponSpriteId: "staff",
+      animationSetId: "warden",
+    })
+
+    session.hero.appearance.weaponSpriteId = "bad" as never
+    expect(normalizeSessionAfterLoad(session).hero.appearance.weaponSpriteId).toBe("dagger")
   })
 
   test("exposes the biome nearest to the current room as gameplay state", () => {

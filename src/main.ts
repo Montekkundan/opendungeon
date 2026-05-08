@@ -20,6 +20,7 @@ import {
 import { deleteSave, listSaves, loadSave, renameSave, saveAutosave, saveSession, type SaveSummary } from "./game/saveStore.js"
 import { handleSaveCommand, saveCommandHelp } from "./game/saveCli.js"
 import { loadSettings, saveSettings, type UserSettings } from "./game/settingsStore.js"
+import { appearanceLabel, cycleCosmeticPalette, cycleHeroAnimationSet, cycleHeroWeaponSprite, cyclePortraitVariant, normalizeHeroAppearance } from "./game/appearance.js"
 import { handleAssetsCommand, assetsCommandHelp } from "./assets/assetsCli.js"
 import { diceSkinIds } from "./assets/diceSkins.js"
 import { version } from "./version.js"
@@ -433,9 +434,31 @@ function handleMenuKey(key: KeyEvent) {
     return
   }
 
-  if (model.screen === "character" && key.name === "n") {
-    startInput("characterName")
-    return
+  if (model.screen === "character") {
+    if (key.name === "n") {
+      startInput("characterName")
+      return
+    }
+    if (key.name === "[" || key.name === "]") {
+      model.session.hero.appearance = cycleCosmeticPalette(currentClass(model).id, model.session.hero.appearance, key.name === "[" ? -1 : 1)
+      model.saveStatus = appearanceLabel(model.session.hero.appearance)
+      return
+    }
+    if (key.name === "p") {
+      model.session.hero.appearance = cyclePortraitVariant(currentClass(model).id, model.session.hero.appearance, 1)
+      model.saveStatus = appearanceLabel(model.session.hero.appearance)
+      return
+    }
+    if (key.name === "w") {
+      model.session.hero.appearance = cycleHeroWeaponSprite(currentClass(model).id, model.session.hero.appearance, 1)
+      model.saveStatus = appearanceLabel(model.session.hero.appearance)
+      return
+    }
+    if (key.name === "a") {
+      model.session.hero.appearance = cycleHeroAnimationSet(currentClass(model).id, model.session.hero.appearance, 1)
+      model.saveStatus = appearanceLabel(model.session.hero.appearance)
+      return
+    }
   }
 
   if (isUpKey(key)) moveSelection(model, -1)
@@ -573,6 +596,7 @@ function confirmMenu() {
 
   if (model.screen === "character") {
     model.classIndex = model.menuIndex
+    model.session.hero.appearance = normalizeHeroAppearance(currentClass(model).id, model.session.hero.appearance)
     model.screen = "start"
     model.menuIndex = 0
     return
@@ -586,7 +610,7 @@ function confirmMenu() {
 }
 
 function startRun() {
-  model.session = createSession(model.seed, currentMode(model).id, currentClass(model).id, model.session.hero.name)
+  model.session = createSession(model.seed, currentMode(model).id, currentClass(model).id, model.session.hero.name, model.session.hero.appearance)
   submittedSession = null
   model.screen = "game"
   model.dialog = null

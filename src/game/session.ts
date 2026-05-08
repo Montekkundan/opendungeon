@@ -23,6 +23,7 @@ import {
   type WorldLogEntry,
 } from "../world/worldConfig.js"
 import { clamp, wrap } from "../shared/numeric.js"
+import { normalizeHeroAppearance, type HeroAppearance } from "./appearance.js"
 
 export type MultiplayerMode = "solo" | "coop" | "race"
 export const heroClassIds = ["warden", "arcanist", "ranger", "duelist", "cleric", "engineer", "witch", "grave-knight"] as const
@@ -32,6 +33,7 @@ export type Hero = {
   name: string
   classId: HeroClass
   title: string
+  appearance: HeroAppearance
 }
 
 export type FloorModifierId = "steady" | "gloom" | "rich-veins" | "unstable-ground" | "focus-draft"
@@ -356,7 +358,7 @@ export const combatSkills: CombatSkill[] = [
   },
 ]
 
-export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", classId: HeroClass = "ranger", heroName = "Mira"): GameSession {
+export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", classId: HeroClass = "ranger", heroName = "Mira", appearance?: Partial<HeroAppearance> | null): GameSession {
   const dungeon = createDungeon(seed, 1)
   const stats = statsForClass(classId)
   const maxHp = derivedMaxHp(stats)
@@ -370,6 +372,7 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
       name: cleanHeroName(heroName),
       classId,
       title: heroTitles[classId],
+      appearance: normalizeHeroAppearance(classId, appearance),
     },
     stats,
     seed,
@@ -593,6 +596,7 @@ export function biomeAt(session: GameSession, point: Point) {
 
 export function normalizeSessionAfterLoad(session: GameSession): GameSession {
   session.stats = normalizeStats(session.hero.classId, session.stats)
+  session.hero.appearance = normalizeHeroAppearance(session.hero.classId, session.hero.appearance)
   session.maxHp = Math.max(derivedMaxHp(session.stats), session.maxHp || 0)
   session.maxFocus = Math.max(derivedMaxFocus(session.stats), session.maxFocus || 0)
   session.hp = clamp(session.hp, 0, session.maxHp)
