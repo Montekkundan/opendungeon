@@ -536,7 +536,11 @@ export function normalizeSessionAfterLoad(session: GameSession): GameSession {
   session.world ??= createWorldForSeed(session.seed, session.finalFloor || 5)
   session.worldLog ??= []
   session.pendingWorldGeneration = Boolean(session.pendingWorldGeneration)
-  session.dungeon.actors.forEach((actor, index) => ensureEnemyAi(actor, index, session.floor))
+  session.dungeon.actors.forEach((actor, index) => {
+    actor.maxHp = Math.max(actor.maxHp ?? actor.hp, actor.hp)
+    actor.phase = Math.max(1, Math.floor(actor.phase ?? 1))
+    ensureEnemyAi(actor, index, session.floor)
+  })
   pruneStatusEffects(session)
   return session
 }
@@ -698,15 +702,19 @@ export function performCombatAction(session: GameSession) {
   if (hit) {
     const affectedTargets = skill.area === "all" ? [...targets] : [target]
     const appliedEffects: StatusEffect[] = []
+    const phaseMessages: string[] = []
     for (const affected of affectedTargets) {
       const nextDamage = affected.id === target.id ? damage : Math.max(1, Math.floor(damage / 2))
       affected.hp -= nextDamage
       const appliedEffect = applyCombatSkillEffect(session, skill, affected)
       if (appliedEffect) appliedEffects.push(appliedEffect)
+      const phaseMessage = maybeAdvanceBossPhase(session, affected)
+      if (phaseMessage) phaseMessages.push(phaseMessage)
     }
     const targetText = affectedTargets.length > 1 ? `${affectedTargets.length} targets` : label(target.kind)
     const effectText = appliedEffects.length ? ` ${appliedEffects[0].label} applied.` : ""
-    session.combat.message = `${skill.name} hits ${targetText} for ${damage}.${effectText}`
+    const phaseText = phaseMessages.length ? ` ${phaseMessages[0]}` : ""
+    session.combat.message = `${skill.name} hits ${targetText} for ${damage}.${effectText}${phaseText}`
     session.log.unshift(`d20 ${d20}${formatSigned(modifier)} vs DC ${dc}: hit.`)
     for (const affected of affectedTargets) {
       if (affected.hp <= 0 && session.dungeon.actors.includes(affected)) defeatActor(session, affected)
@@ -1001,6 +1009,21 @@ function applyCombatSkillEffect(session: GameSession, skill: CombatSkill, target
   })
 }
 
+function maybeAdvanceBossPhase(session: GameSession, actor: Actor) {
+  if (actor.kind !== "necromancer" || actor.hp <= 0 || (actor.phase ?? 1) >= 2) return null
+  const maxHp = actor.maxHp ?? Math.max(actor.hp, 1)
+  if (actor.hp > Math.floor(maxHp / 2)) return null
+  actor.phase = 2
+  actor.damage += 2
+  const ai = ensureEnemyAi(actor, 0, session.floor)
+  ai.alerted = true
+  ai.aggroRadius += 2
+  ai.leashRadius += 2
+  const message = `${label(actor.kind)} enters phase 2.`
+  session.log.unshift(message)
+  return message
+}
+
 function tickStatusEffects(session: GameSession) {
   if (!session.statusEffects?.length) return
 
@@ -1174,13 +1197,14 @@ function nearbyHostiles(session: GameSession) {
 
 export function enemyBehaviorText(actor: Actor) {
   const ai = actor.ai
+  const phase = actor.phase && actor.phase > 1 ? ` P${actor.phase}` : ""
   if (!ai) return "Watching"
-  if (ai.alerted) return `Chasing R${ai.aggroRadius}`
-  if (ai.pattern === "patrol-horizontal") return `Patrol east/west R${ai.aggroRadius}`
-  if (ai.pattern === "patrol-vertical") return `Patrol north/south R${ai.aggroRadius}`
-  if (ai.pattern === "stalker") return `Stalker R${ai.aggroRadius}`
-  if (ai.pattern === "wander") return `Wander R${ai.aggroRadius}`
-  return `Guard R${ai.aggroRadius}`
+  if (ai.alerted) return `Chasing R${ai.aggroRadius}${phase}`
+  if (ai.pattern === "patrol-horizontal") return `Patrol east/west R${ai.aggroRadius}${phase}`
+  if (ai.pattern === "patrol-vertical") return `Patrol north/south R${ai.aggroRadius}${phase}`
+  if (ai.pattern === "stalker") return `Stalker R${ai.aggroRadius}${phase}`
+  if (ai.pattern === "wander") return `Wander R${ai.aggroRadius}${phase}`
+  return `Guard R${ai.aggroRadius}${phase}`
 }
 
 function enemyDefenseBonus(kind: Actor["kind"] | undefined) {

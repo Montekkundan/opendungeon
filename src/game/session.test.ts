@@ -188,6 +188,23 @@ describe("game session", () => {
     expect(session.dungeon.actors.some((actor) => actor.id === "aoe-ghoul" || actor.id === "aoe-slime")).toBe(false)
   })
 
+  test("advances necromancer bosses into a stronger second phase", () => {
+    const session = createSession(1234)
+    addEnemyBesidePlayer(session, "phase-necromancer", "necromancer", 30, 3)
+    const boss = session.dungeon.actors.find((actor) => actor.id === "phase-necromancer")!
+    boss.maxHp = 30
+    session.stats.strength = 60
+
+    tryMove(session, 1, 0)
+    selectSkill(session, 0)
+    performCombatAction(session)
+
+    expect(boss.phase).toBe(2)
+    expect(boss.damage).toBe(5)
+    expect(session.hp).toBe(session.maxHp - 5)
+    expect(session.log.some((entry) => entry.includes("phase 2"))).toBe(true)
+  })
+
   test("applies combat status effects, damage reduction, and expiry", () => {
     const session = createSession(1234)
     const target = addEnemyBesidePlayer(session, "test-necromancer", "necromancer", 80, 5)

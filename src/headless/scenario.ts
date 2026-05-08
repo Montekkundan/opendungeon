@@ -139,6 +139,20 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
     ]
   }
 
+  if (name === "boss-phase") {
+    return [
+      { command: "set-relative-tile", dx: 1, dy: 0, tile: "floor" },
+      { command: "place-relative-actor", id: "script-boss", kind: "necromancer", dx: 1, dy: 0, hp: 30, damage: 3 },
+      { command: "set-stat", stat: "strength", value: 60 },
+      { action: "move-east" },
+      { action: "select-skill-0" },
+      { action: "combat-roll" },
+      { assert: { path: "session.combat.message", contains: "phase 2" } },
+      { assert: { path: "session.hp", equals: 20 } },
+      { command: "check-invariants" },
+    ]
+  }
+
   if (name === "status-effects") {
     return [
       { command: "set-relative-tile", dx: 1, dy: 0, tile: "floor" },

@@ -101,7 +101,7 @@
 - [ ] Initiative order.
 - [ ] Reactions and blocks.
 - [x] Area-of-effect targeting.
-- [ ] Boss phase transitions.
+- [x] Boss phase transitions.
 
 ## Dungeon Content
 

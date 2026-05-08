@@ -475,7 +475,9 @@ export class HeadlessGameEnv {
         id: actor.id,
         kind: actor.kind,
         hp: actor.hp,
+        maxHp: actor.maxHp,
         damage: actor.damage,
+        phase: actor.phase,
         position: actor.position,
         ai: actor.ai,
       })),
@@ -540,7 +542,9 @@ export class HeadlessGameEnv {
       kind: options.kind,
       position,
       hp: options.hp ?? 3,
+      maxHp: options.hp ?? 3,
       damage: options.damage ?? 0,
+      phase: 1,
     })
   }
 

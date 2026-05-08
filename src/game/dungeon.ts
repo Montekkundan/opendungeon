@@ -11,7 +11,9 @@ export type Actor = {
   kind: ActorId
   position: Point
   hp: number
+  maxHp?: number
   damage: number
+  phase?: number
   ai?: EnemyAi
 }
 
@@ -172,7 +174,7 @@ function spawnActors(tiles: TileId[][], rooms: Room[], rng: Rng, floor: number):
     const position = randomInteriorPoint(room, rng)
     if (tiles[position.y][position.x] !== "floor") continue
     const kind = rng.pick(enemyKinds)
-    actors.push({ id: `enemy-${actors.length}`, kind, position, ...enemyStats(kind, floor), ai: enemyAi(kind, position, actors.length, floor) })
+    actors.push({ id: `enemy-${actors.length}`, kind, position, ...enemyStats(kind, floor), phase: 1, ai: enemyAi(kind, position, actors.length, floor) })
   }
 
   return actors
@@ -212,9 +214,13 @@ export function enemyAi(kind: ActorId, origin: Point, index = 0, floor = 1): Ene
 }
 
 function enemyStats(kind: ActorId, floor: number) {
-  if (kind === "necromancer") return { hp: 4 + floor, damage: 3 }
-  if (kind === "ghoul") return { hp: 3 + floor, damage: 2 }
-  return { hp: 2 + floor, damage: 1 }
+  if (kind === "necromancer") return withMaxHp(4 + floor, 3)
+  if (kind === "ghoul") return withMaxHp(3 + floor, 2)
+  return withMaxHp(2 + floor, 1)
+}
+
+function withMaxHp(hp: number, damage: number) {
+  return { hp, maxHp: hp, damage }
 }
 
 function finalGuardian(position: Point, floor: number): Actor {
@@ -223,7 +229,9 @@ function finalGuardian(position: Point, floor: number): Actor {
     kind: "necromancer",
     position,
     hp: 12 + floor,
+    maxHp: 12 + floor,
     damage: 4,
+    phase: 1,
     ai: {
       ...enemyAi("necromancer", position, 0, floor),
       aggroRadius: 9,
