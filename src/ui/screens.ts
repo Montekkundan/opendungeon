@@ -5,6 +5,7 @@ import { defaultDiceSkin, diceSkinIds, diceSkinName, type DiceSkinId } from "../
 import { animatedPixelSprite, pixelSprite, type PixelSprite, type PixelSpriteId, type SpriteAnimationId } from "../assets/pixelSprites.js"
 import { portraitIdForSprite, portraitSprite } from "../assets/portraitSprites.js"
 import { authStatusReport, formatAuthStatus } from "../cloud/authStatus.js"
+import { buildCloudSaveBrowserState } from "../cloud/cloudSaves.js"
 import {
   actorAt,
   combatModifier,
@@ -435,6 +436,7 @@ function drawCloud(canvas: Canvas, model: AppModel) {
   const githubName = editing ? model.inputMode?.draft ?? "" : model.settings.githubUsername
   const shownName = githubName || "github username"
   const auth = authStatusReport()
+  const cloudBrowser = buildCloudSaveBrowserState(model.saves, [], auth)
 
   drawCommandBox(canvas, x, inputY, width, shownName, "GitHub cloud identity")
   canvas.write(x + 3, inputY + 1, editing ? ">" : " ", editing ? UI.gold : UI.muted, UI.panel2)
@@ -449,9 +451,11 @@ function drawCloud(canvas: Canvas, model: AppModel) {
   drawPlainSelectRow(canvas, x, rowY + 4, width, "Back to title", model.menuIndex === 2, "return without syncing")
 
   if (!compact) {
-    const warning = auth.warnings[0] ?? "Cloud sync will use encrypted save envelopes and conflict prompts."
+    const warning = cloudBrowser.errors[0] ?? "Cloud sync will use encrypted save envelopes and conflict prompts."
+    const saveRows = cloudBrowser.rows.length ? `${cloudBrowser.rows.length} save${cloudBrowser.rows.length === 1 ? "" : "s"} ready for encrypted sync` : "No local saves to sync yet"
     canvas.center(rowY + 8, trim(warning, width), auth.warnings.length ? UI.gold : UI.soft, UI.bg)
-    canvas.center(rowY + 10, trim(`Local profile: ${profilePath()}`, width), UI.muted, UI.bg)
+    canvas.center(rowY + 10, trim(`${cloudBrowser.accountStatus}: ${saveRows}`, width), UI.soft, UI.bg)
+    canvas.center(rowY + 12, trim(`Local profile: ${profilePath()}`, width), UI.muted, UI.bg)
   }
   drawFooter(canvas, [
     ["Enter", "confirm"],

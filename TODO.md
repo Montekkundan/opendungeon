@@ -43,9 +43,9 @@
 - [x] Add local test account: `test` / `opendungeon`.
 - [x] Finish automatic callback capture for Supabase GitHub OAuth.
 - [x] Add account status and token refresh checks to the terminal UI.
-- [ ] Encrypted save upload/download.
-- [ ] Conflict handling between local and cloud saves.
-- [ ] Cloud save browser with account status and sync errors.
+- [x] Encrypted save upload/download.
+- [x] Conflict handling between local and cloud saves.
+- [x] Cloud save browser with account status and sync errors.
 - [x] Manual export/import for offline backup.
 
 ## AI Admin
