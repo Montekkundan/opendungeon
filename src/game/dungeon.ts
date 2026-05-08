@@ -156,7 +156,7 @@ function randomInteriorPoint(room: Room, rng: Rng): Point {
 }
 
 function scatterFeatures(tiles: TileId[][], rooms: Room[], rng: Rng) {
-  const featureTiles: TileId[] = ["potion", "relic", "chest"]
+  const featureTiles: TileId[] = ["potion", "relic", "chest", "trap"]
   for (const room of rooms.slice(1, 18)) {
     const point = randomInteriorPoint(room, rng)
     if (tiles[point.y][point.x] === "floor") tiles[point.y][point.x] = rng.pick(featureTiles)

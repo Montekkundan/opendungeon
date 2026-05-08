@@ -37,6 +37,7 @@ const opendungeonPack: AssetPack = {
     potion: { glyph: "!", fg: "#d56b8c" },
     relic: { glyph: "$", fg: "#d6a85c" },
     chest: { glyph: "=", fg: "#c38b6a" },
+    trap: { glyph: "^", fg: "#ff5e86" },
   },
   actors: {
     player: { glyph: "@", fg: "#f4d06f" },

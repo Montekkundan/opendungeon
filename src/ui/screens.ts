@@ -636,6 +636,7 @@ function drawAssetTile(
   if (tile === "potion") drawPixelBlock(canvas, screenX, screenY, pixelSprite("potion", tileWidth, tileHeight), 1)
   if (tile === "relic") drawPixelBlock(canvas, screenX, screenY, pixelSprite("relic", tileWidth, tileHeight), 1)
   if (tile === "chest") drawPixelBlock(canvas, screenX, screenY, pixelSprite("chest", tileWidth, tileHeight), 1)
+  if (tile === "trap") canvas.write(screenX + Math.floor(tileWidth / 2), screenY + Math.floor(tileHeight / 2), "^", UI.ruby)
 }
 
 function tileStyle(session: GameSession, x: number, y: number, debugView: boolean, visible: boolean, seen: boolean): TileRenderStyle {
@@ -648,6 +649,7 @@ function tileStyle(session: GameSession, x: number, y: number, debugView: boolea
   if (tile === "potion") return visible ? { pattern: ["        ", "        ", "   ●    ", "        "], fg: "#f4a6b8", bg: textureColor(x, y) } : floorStyle(x, y, false)
   if (tile === "relic") return visible ? { pattern: ["        ", "        ", "   ◆    ", "        "], fg: "#f4d06f", bg: textureColor(x, y) } : floorStyle(x, y, false)
   if (tile === "chest") return visible ? { pattern: ["        ", "        ", "  [▤]   ", "        "], fg: "#f4d06f", bg: "#9a6c4e" } : floorStyle(x, y, false)
+  if (tile === "trap") return visible ? { pattern: ["        ", "        ", "   ^    ", "        "], fg: "#ff5e86", bg: textureColor(x, y) } : floorStyle(x, y, false)
   return { pattern: ["        ", "        ", "        ", "        "], fg: "#05070a", bg: "#05070a" }
 }
 
@@ -659,6 +661,7 @@ function debugTileStyle(session: GameSession, x: number, y: number): TileRenderS
   if (tile === "potion") return { pattern: ["!!"], fg: "#d56b8c" }
   if (tile === "relic") return { pattern: ["$$"], fg: "#d6a85c" }
   if (tile === "chest") return { pattern: ["[]"], fg: "#c38b6a" }
+  if (tile === "trap") return { pattern: ["^^"], fg: "#ff5e86" }
   return { pattern: ["  "], fg: "#05070a" }
 }
 

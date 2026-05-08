@@ -266,6 +266,20 @@ describe("game session", () => {
     expect(session.turn).toBe(1)
   })
 
+  test("trap tiles damage the player and become safe floor", () => {
+    const session = createSession(1234)
+    const target = { x: session.player.x + 1, y: session.player.y }
+    setTile(session.dungeon, target, "trap")
+
+    tryMove(session, 1, 0)
+
+    expect(session.player).toEqual(target)
+    expect(session.hp).toBe(session.maxHp - 2)
+    expect(session.dungeon.tiles[target.y][target.x]).toBe("floor")
+    expect(session.log[0]).toContain("Trap sprung")
+    expect(session.turn).toBe(1)
+  })
+
   test("locks final stairs until the guardian is defeated", () => {
     const session = createSession(1234)
     session.floor = session.finalFloor

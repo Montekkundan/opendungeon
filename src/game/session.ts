@@ -345,6 +345,8 @@ export function tryMove(session: GameSession, dx: number, dy: number) {
     startSkillCheck(session, tile, next)
     revealAroundPlayer(session)
     return
+  } else if (tile === "trap") {
+    triggerTrap(session, next)
   } else {
     session.log.unshift("You move through the dark.")
   }
@@ -780,6 +782,14 @@ function applySkillCheckFailure(session: GameSession, check: SkillCheckState) {
     session.hp -= 2
     session.inventory.unshift("Cracked dew vial")
   }
+}
+
+function triggerTrap(session: GameSession, point: Point) {
+  setTile(session.dungeon, point, "floor")
+  const damage = 2 + Math.floor(session.floor / 2)
+  session.hp -= damage
+  session.log.unshift(`Trap sprung for ${damage}. The room remembers your step.`)
+  completeWorldProgress(session, "interaction", point, `Trap sprung on floor ${session.floor}.`)
 }
 
 function isSkillCheckSource(tile: string): tile is SkillCheckSource {

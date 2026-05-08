@@ -168,6 +168,16 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
     ]
   }
 
+  if (name === "trap") {
+    return [
+      { command: "set-relative-tile", dx: 1, dy: 0, tile: "trap" },
+      { action: "move-east" },
+      { assert: { path: "session.hp", equals: 23 } },
+      { assert: { path: "session.log.0", contains: "Trap sprung" } },
+      { command: "check-invariants" },
+    ]
+  }
+
   if (name === "skill-check") {
     return [
       { command: "set-relative-tile", dx: 1, dy: 0, tile: "potion" },

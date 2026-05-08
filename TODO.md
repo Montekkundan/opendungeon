@@ -110,7 +110,7 @@
 - [x] Generated quest hooks.
 - [x] Biome labels in world anchors.
 - [x] Gameplay-visible biomes.
-- [ ] Traps.
+- [x] Traps.
 - [ ] Merchants.
 - [ ] Floor modifiers.
 - [ ] Secret rooms and locked doors.

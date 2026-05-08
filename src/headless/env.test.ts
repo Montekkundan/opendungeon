@@ -68,7 +68,7 @@ describe("headless game env", () => {
   })
 
   test("runs built-in and file-backed scenarios", () => {
-    for (const name of ["smoke", "combat", "combat-skills", "status-effects", "character-name", "starting-loadout", "biome", "skill-check", "save-load", "save-management", "auth-local", "map-generation", "npc-event", "full-run"]) {
+    for (const name of ["smoke", "combat", "combat-skills", "status-effects", "character-name", "starting-loadout", "biome", "trap", "skill-check", "save-load", "save-management", "auth-local", "map-generation", "npc-event", "full-run"]) {
       const scenario = builtinScenario(name)
       expect(scenario).not.toBeNull()
       const result = runScenario(name, scenario!, { seed: 1234 })

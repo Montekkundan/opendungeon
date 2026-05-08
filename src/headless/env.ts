@@ -161,7 +161,7 @@ const movement: Partial<Record<HeadlessActionId, Point>> = {
   "move-east": { x: 1, y: 0 },
 }
 
-const passableTiles = new Set<TileId>(["floor", "stairs", "potion", "relic", "chest"])
+const passableTiles = new Set<TileId>(["floor", "stairs", "potion", "relic", "chest", "trap"])
 
 export class HeadlessGameEnv {
   session: GameSession
@@ -914,6 +914,7 @@ function tileCode(session: GameSession, point: Point) {
   if (tile === "potion") return 4
   if (tile === "relic") return 5
   if (tile === "chest") return 6
+  if (tile === "trap") return 10
   return 0
 }
 
@@ -923,6 +924,7 @@ function tileGlyph(tile: TileId) {
   if (tile === "potion") return "!"
   if (tile === "relic") return "*"
   if (tile === "chest") return "$"
+  if (tile === "trap") return "^"
   if (tile === "void") return " "
   return "."
 }

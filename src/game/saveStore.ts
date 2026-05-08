@@ -292,6 +292,7 @@ function tileGlyph(tile: string) {
   if (tile === "potion") return "!"
   if (tile === "relic") return "*"
   if (tile === "chest") return "$"
+  if (tile === "trap") return "^"
   if (tile === "floor") return "."
   return " "
 }

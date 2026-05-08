@@ -1,0 +1,5 @@
+{"command":"set-relative-tile","dx":1,"dy":0,"tile":"trap"}
+{"action":"move-east"}
+{"assert":{"path":"session.hp","equals":23}}
+{"assert":{"path":"session.log.0","contains":"Trap sprung"}}
+{"command":"check-invariants"}
