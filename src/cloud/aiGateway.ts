@@ -15,6 +15,14 @@ export type GeneratedImage = {
   bytes: Uint8Array
 }
 
+export type GatewayJsonRequest = {
+  model?: string
+  system: string
+  prompt: string
+  temperature?: number
+  maxTokens?: number
+}
+
 const gatewayBaseUrl = "https://ai-gateway.vercel.sh/v1"
 
 export async function checkAiGatewayImageModel(model = "openai/gpt-image-2"): Promise<GatewayStatus> {
@@ -63,6 +71,39 @@ export async function generateSpriteImage(prompt: string, model = "openai/gpt-im
   return { model, mimeType: "image/png", bytes: Uint8Array.from(Buffer.from(b64, "base64")) }
 }
 
+export async function generateGatewayJson<T = unknown>(request: GatewayJsonRequest): Promise<T> {
+  const token = gatewayToken()
+  if (!token) throw new Error("AI Gateway token is not configured.")
+  const response = await fetch(`${gatewayBaseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: request.model || process.env.OPENDUNGEON_AI_ADMIN_MODEL || "openai/gpt-5.4",
+      messages: [
+        { role: "system", content: request.system },
+        { role: "user", content: request.prompt },
+      ],
+      temperature: request.temperature ?? 0.2,
+      max_tokens: request.maxTokens ?? 6000,
+      response_format: { type: "json_object" },
+      stream: false,
+    }),
+  })
+  if (!response.ok) throw new Error(`AI Gateway JSON generation failed with HTTP ${response.status}.`)
+  const parsed = (await response.json()) as unknown
+  const text = chatCompletionText(parsed)
+  if (!text) throw new Error("AI Gateway JSON generation did not return message content.")
+  try {
+    return JSON.parse(text) as T
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "invalid JSON"
+    throw new Error(`AI Gateway JSON generation returned invalid JSON: ${message}`)
+  }
+}
+
 export function writeGeneratedImageLocal(assetId: string, image: GeneratedImage) {
   const path = join(generatedAssetDirectory(), `${safeAssetId(assetId)}.png`)
   mkdirSync(dirname(path), { recursive: true })
@@ -83,6 +124,23 @@ function modelIds(body: unknown): string[] {
   const data = (body as { data?: unknown }).data
   if (!Array.isArray(data)) return []
   return data.flatMap((entry) => (entry && typeof entry === "object" && typeof (entry as { id?: unknown }).id === "string" ? [(entry as { id: string }).id] : []))
+}
+
+function chatCompletionText(body: unknown): string {
+  if (!body || typeof body !== "object") return ""
+  const choices = (body as { choices?: unknown }).choices
+  if (!Array.isArray(choices)) return ""
+  const message = choices.find((choice) => choice && typeof choice === "object") as { message?: { content?: unknown } } | undefined
+  const content = message?.message?.content
+  if (typeof content === "string") return content
+  if (!Array.isArray(content)) return ""
+  return content
+    .map((part) => {
+      if (!part || typeof part !== "object") return ""
+      const record = part as { text?: unknown; type?: unknown }
+      return typeof record.text === "string" ? record.text : ""
+    })
+    .join("")
 }
 
 function safeAssetId(id: string) {

@@ -4,8 +4,8 @@ import { storeGeneratedSpriteAsset } from "../cloud/generatedAssets.js"
 import { supabaseConfig } from "../cloud/supabase.js"
 import { createDungeon } from "../game/dungeon.js"
 import { createInitialWorldConfig, createWorldLogEntry, validateWorldConfig, worldAnchorsFromDungeonAnchors, writeWorldConfig } from "../world/worldConfig.js"
-import { createAdminGenerationRequest, createProceduralAdminPatch } from "../world/adminGenerator.js"
-import { aiAdminWorkflow } from "./workflows/aiAdminWorkflow.js"
+import { createAdminGenerationRequest } from "../world/adminGenerator.js"
+import { aiAdminWorkflow, generateAdminPatchWithModel } from "./workflows/aiAdminWorkflow.js"
 import { persistGeneratedWorldForUser } from "../cloud/worldPersistence.js"
 
 const app = new Hono()
@@ -43,8 +43,12 @@ app.post("/worlds/:worldId/admin-patch", async (c) => {
   const errors = validateWorldConfig(world)
   if (errors.length) return c.json({ errors }, 400)
   const request = createAdminGenerationRequest(world as Parameters<typeof createAdminGenerationRequest>[0], String(body.playerSummary || ""))
-  const patch = createProceduralAdminPatch(world as Parameters<typeof createAdminGenerationRequest>[0], request)
-  return c.json({ patch })
+  try {
+    const patch = await generateAdminPatchWithModel(world as Parameters<typeof createAdminGenerationRequest>[0], request)
+    return c.json({ patch })
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "AI admin model patch generation failed." }, 503)
+  }
 })
 
 app.post("/worlds/:worldId/admin-workflow", async (c) => {
