@@ -41,7 +41,7 @@
 - [x] Add GitHub login command path: `opendungeon --login github`.
 - [x] Store local auth sessions separately from saves.
 - [x] Add local test account: `test` / `opendungeon`.
-- [ ] Finish automatic callback capture for Supabase GitHub OAuth.
+- [x] Finish automatic callback capture for Supabase GitHub OAuth.
 - [x] Add account status and token refresh checks to the terminal UI.
 - [ ] Encrypted save upload/download.
 - [ ] Conflict handling between local and cloud saves.
