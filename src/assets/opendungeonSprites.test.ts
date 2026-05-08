@@ -12,6 +12,8 @@ describe("opendungeon runtime sprites", () => {
     expect(activeAssetPack.id).toBe("opendungeon")
     expect(activeAssetPack.tileSize).toBe(100)
     expect(activeAssetPack.sourceUrl).toContain("runtime://")
+    expect(activeAssetPack.sourceUrl).toContain("opendungeon-assets")
+    expect(activeAssetPack.previewPath).toContain(".asset-cache/opendungeon-assets/")
     expect(animationFrameCount).toBe(4)
     expect(d20FrameCount()).toBe(12)
     expect(generatedPngs("assets/opendungeon")).toEqual([])
@@ -46,12 +48,22 @@ describe("opendungeon runtime sprites", () => {
   })
 
   test("runtime source no longer references old generated or vendor asset directories", () => {
+    const oldVendorName = ["it", "ch"].join("")
     expect(existsSync("assets/opendungeon")).toBe(false)
+    expect(existsSync(`assets/${oldVendorName}`)).toBe(false)
     expect(existsSync("assets/0x72")).toBe(false)
     expect(existsSync("assets/dawngeon")).toBe(false)
     expect(existsSync("assets/opengameart-d20")).toBe(false)
 
-    const forbidden = ["assets/" + "opendungeon/", "assets/" + "0x72", "assets/" + "dawn" + "geon", "assets/" + "opengame" + "art"]
+    const forbidden = [
+      "assets/" + "opendungeon/",
+      "assets/" + oldVendorName + "/",
+      ".asset-cache/" + oldVendorName + "/",
+      "assetPath(" + JSON.stringify(oldVendorName),
+      "assets/" + "0x72",
+      "assets/" + "dawn" + "geon",
+      "assets/" + "opengame" + "art",
+    ]
     const files = sourceFiles("src")
     for (const file of files) {
       const text = readFileSync(file, "utf8")
