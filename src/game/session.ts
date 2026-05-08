@@ -434,6 +434,16 @@ export function skillCheckModifier(session: GameSession, stat: StatId) {
   return Math.floor(session.level / 2) + primary + luck
 }
 
+export function currentBiome(session: GameSession) {
+  return biomeAt(session, session.player)
+}
+
+export function biomeAt(session: GameSession, point: Point) {
+  const anchorId = nearestWorldAnchorId(session, point)
+  const anchor = anchorId ? session.world.anchors.find((candidate) => candidate.id === anchorId) : null
+  return anchor?.biome ?? session.world.anchors.find((candidate) => candidate.floor === session.floor)?.biome ?? "crypt"
+}
+
 export function normalizeSessionAfterLoad(session: GameSession): GameSession {
   session.stats = normalizeStats(session.hero.classId, session.stats)
   session.maxHp = Math.max(derivedMaxHp(session.stats), session.maxHp || 0)

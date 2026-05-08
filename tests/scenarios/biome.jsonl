@@ -1,0 +1,4 @@
+{"assert":{"path":"biome","truthy":true}}
+{"assert":{"path":"snapshot.biome","truthy":true}}
+{"command":"render"}
+{"command":"check-invariants"}

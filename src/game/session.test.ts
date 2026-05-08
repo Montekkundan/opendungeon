@@ -8,6 +8,7 @@ import {
   combatModifier,
   combatSkills,
   createSession,
+  currentBiome,
   performCombatAction,
   resolveSkillCheck,
   selectSkill,
@@ -57,6 +58,20 @@ describe("game session", () => {
 
     warden.inventory.push("Changed")
     expect(startingLoadout("warden")).not.toContain("Changed")
+  })
+
+  test("exposes the biome nearest to the current room as gameplay state", () => {
+    const session = createSession(1234)
+    const nearestStartAnchor = session.world.anchors.find((anchor) => anchor.floor === session.floor && anchor.roomIndex === 0)
+
+    expect(nearestStartAnchor).toBeTruthy()
+    expect(currentBiome(session)).toBe(nearestStartAnchor!.biome)
+
+    const roomAnchor = session.world.anchors.find((anchor) => anchor.floor === session.floor && anchor.kind === "room")
+    expect(roomAnchor).toBeTruthy()
+    session.player = { ...roomAnchor!.position }
+
+    expect(currentBiome(session)).toBe(roomAnchor!.biome)
   })
 
   test("resolves loot checks into inventory consequences", () => {

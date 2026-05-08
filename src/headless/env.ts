@@ -8,6 +8,7 @@ import {
   attemptFlee,
   combatSkills,
   createSession,
+  currentBiome,
   cycleTarget,
   dismissSkillCheck,
   performCombatAction,
@@ -126,6 +127,7 @@ export type HeadlessSnapshot = {
   floor: number
   turn: number
   status: GameSession["status"]
+  biome: string
   player: Point
   hp: number
   focus: number
@@ -261,6 +263,7 @@ export class HeadlessGameEnv {
       auth,
       settings: safeLoadSettings(),
       statusEffects: this.session.statusEffects.map((effect) => ({ ...effect })),
+      biome: currentBiome(this.session),
       worldValidationErrors: validateWorldConfig(this.session.world),
       snapshot: this.snapshot(),
       session: serializeSessionForObservation(this.session),
@@ -431,7 +434,7 @@ export class HeadlessGameEnv {
   renderText(radius = agentViewRadius) {
     const rows: string[] = []
     rows.push(
-      `opendungeon headless seed=${this.session.seed} floor=${this.session.floor}/${this.session.finalFloor} turn=${this.session.turn} status=${this.session.status}`,
+      `opendungeon headless seed=${this.session.seed} floor=${this.session.floor}/${this.session.finalFloor} turn=${this.session.turn} status=${this.session.status} biome=${currentBiome(this.session)}`,
     )
     rows.push(`hp=${this.session.hp}/${this.session.maxHp} focus=${this.session.focus}/${this.session.maxFocus} gold=${this.session.gold} kills=${this.session.kills}`)
     for (let y = this.session.player.y - radius; y <= this.session.player.y + radius; y++) {
@@ -456,6 +459,7 @@ export class HeadlessGameEnv {
       floor: this.session.floor,
       turn: this.session.turn,
       status: this.session.status,
+      biome: currentBiome(this.session),
       player: this.session.player,
       hp: this.session.hp,
       focus: this.session.focus,
@@ -499,6 +503,7 @@ export class HeadlessGameEnv {
       floor: this.session.floor,
       turn: this.session.turn,
       status: this.session.status,
+      biome: currentBiome(this.session),
       player: { ...this.session.player },
       hp: this.session.hp,
       focus: this.session.focus,

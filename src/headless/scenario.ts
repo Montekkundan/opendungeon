@@ -159,6 +159,15 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
     ]
   }
 
+  if (name === "biome") {
+    return [
+      { assert: { path: "biome", truthy: true } },
+      { assert: { path: "snapshot.biome", truthy: true } },
+      { command: "render" },
+      { command: "check-invariants" },
+    ]
+  }
+
   if (name === "skill-check") {
     return [
       { command: "set-relative-tile", dx: 1, dy: 0, tile: "potion" },

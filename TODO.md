@@ -109,7 +109,7 @@
 - [x] Generated event definitions.
 - [x] Generated quest hooks.
 - [x] Biome labels in world anchors.
-- [ ] Gameplay-visible biomes.
+- [x] Gameplay-visible biomes.
 - [ ] Traps.
 - [ ] Merchants.
 - [ ] Floor modifiers.
