@@ -33,6 +33,7 @@ import {
 } from "./ui/screens.js"
 import { shouldUseThreeRenderer } from "./rendering/threeAssets.js"
 import { authHelpText, handleAuthCommand } from "./cloud/authCli.js"
+import { formatTerminalCapabilityReport, terminalCapabilityReport } from "./system/terminalDoctor.js"
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`opendungeon ${version}
@@ -44,6 +45,7 @@ Usage:
   opendungeon login <username>  Prompt for a password and save an auth session
   opendungeon --login github    Open Supabase GitHub OAuth
   opendungeon saves list        List local saves for backup or maintenance
+  opendungeon doctor            Check terminal size/color and recommended tile scale
   opendungeon --help            Show this help
   opendungeon --version         Show the version
 
@@ -68,6 +70,11 @@ const authExitCode = await handleAuthCommand(process.argv.slice(2))
 if (authExitCode !== null) process.exit(authExitCode)
 const saveExitCode = await handleSaveCommand(process.argv.slice(2))
 if (saveExitCode !== null) process.exit(saveExitCode)
+
+if (process.argv[2] === "doctor" || process.argv.includes("--doctor")) {
+  console.log(formatTerminalCapabilityReport(terminalCapabilityReport()))
+  process.exit(0)
+}
 
 const initialSaves = listSaves()
 const initialSettings = loadSettings()
