@@ -66,12 +66,12 @@
 
 ## Multiplayer
 
-- [ ] Live co-op state sync.
-- [ ] Friend join flow.
-- [ ] Combat turn coordination.
-- [ ] Hosted lobby with invite code.
-- [ ] Race mode leaderboard persistence.
-- [ ] Spectator view for work friends.
+- [x] Live co-op state sync.
+- [x] Friend join flow.
+- [x] Combat turn coordination.
+- [x] Hosted lobby with invite code.
+- [x] Race mode leaderboard persistence.
+- [x] Spectator view for work friends.
 
 ## Save Management
 
