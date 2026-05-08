@@ -36,7 +36,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: skillCheckModel(),
-      expectedHash: "e2df5607",
+      expectedHash: "c1d075e2",
       requiredText: ["Talent Check", "Whispering Relic", "Roll"],
     },
     {
@@ -44,7 +44,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: combatModel(),
-      expectedHash: "6d2af9bb",
+      expectedHash: "e5c4f390",
       requiredText: ["Turn Combat", "Shado", "Necroman"],
     },
     {

@@ -32,6 +32,18 @@ export type Hero = {
   title: string
 }
 
+export type FloorModifierId = "steady" | "gloom" | "rich-veins" | "unstable-ground" | "focus-draft"
+
+export type FloorModifier = {
+  id: FloorModifierId
+  name: string
+  text: string
+  visionBonus: number
+  restFocusBonus: number
+  trapDamageBonus: number
+  goldBonus: number
+}
+
 export type CombatSkillId = "strike" | "aimed-shot" | "arcane-burst" | "smite" | "shadow-hex" | "lucky-riposte"
 export type StatusEffectId = "guarded" | "weakened" | "burning"
 
@@ -119,6 +131,7 @@ export type GameSession = {
   stats: HeroStats
   seed: number
   floor: number
+  floorModifier: FloorModifier
   player: Point
   hp: number
   maxHp: number
@@ -156,8 +169,61 @@ const startingLoadouts: Record<HeroClass, string[]> = {
   ranger: ["Rusty blade", "Dew vial", "Rope arrow"],
 }
 
+const floorModifiers: FloorModifier[] = [
+  {
+    id: "steady",
+    name: "Steady Stone",
+    text: "No unusual floor pressure.",
+    visionBonus: 0,
+    restFocusBonus: 0,
+    trapDamageBonus: 0,
+    goldBonus: 0,
+  },
+  {
+    id: "gloom",
+    name: "Gloom",
+    text: "Sight lines tighten around the crawler.",
+    visionBonus: -2,
+    restFocusBonus: 0,
+    trapDamageBonus: 0,
+    goldBonus: 0,
+  },
+  {
+    id: "rich-veins",
+    name: "Rich Veins",
+    text: "Caches and relics carry extra gold.",
+    visionBonus: 0,
+    restFocusBonus: 0,
+    trapDamageBonus: 0,
+    goldBonus: 5,
+  },
+  {
+    id: "unstable-ground",
+    name: "Unstable Ground",
+    text: "Trap plates hit harder.",
+    visionBonus: 0,
+    restFocusBonus: 0,
+    trapDamageBonus: 1,
+    goldBonus: 0,
+  },
+  {
+    id: "focus-draft",
+    name: "Focus Draft",
+    text: "Resting restores more focus.",
+    visionBonus: 1,
+    restFocusBonus: 1,
+    trapDamageBonus: 0,
+    goldBonus: 0,
+  },
+]
+
 export function startingLoadout(classId: HeroClass) {
   return [...startingLoadouts[classId]]
+}
+
+export function floorModifierFor(seed: number, floor: number): FloorModifier {
+  const index = Math.abs(seed * 31 + floor * 17) % floorModifiers.length
+  return { ...floorModifiers[index] }
 }
 
 export const combatSkills: CombatSkill[] = [
@@ -251,6 +317,7 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
   const maxHp = derivedMaxHp(stats)
   const maxFocus = derivedMaxFocus(stats)
   const finalFloor = 5
+  const floorModifier = floorModifierFor(seed, 1)
   const world = createWorldForSeed(seed, finalFloor)
   const session: GameSession = {
     mode,
@@ -262,6 +329,7 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
     stats,
     seed,
     floor: 1,
+    floorModifier,
     player: { ...dungeon.playerStart },
     hp: maxHp,
     maxHp,
@@ -366,8 +434,9 @@ export function rest(session: GameSession) {
     trimLog(session)
     return
   }
-  session.focus = Math.min(session.maxFocus, session.focus + 1)
-  session.log.unshift("You steady your breath. Focus returns.")
+  const focusGain = 1 + Math.max(0, session.floorModifier.restFocusBonus)
+  session.focus = Math.min(session.maxFocus, session.focus + focusGain)
+  session.log.unshift(focusGain > 1 ? `${session.floorModifier.name} carries your breath. Focus returns.` : "You steady your breath. Focus returns.")
   advanceTurn(session)
 }
 
@@ -452,6 +521,7 @@ export function normalizeSessionAfterLoad(session: GameSession): GameSession {
   session.maxFocus = Math.max(derivedMaxFocus(session.stats), session.maxFocus || 0)
   session.hp = clamp(session.hp, 0, session.maxHp)
   session.focus = clamp(session.focus, 0, session.maxFocus)
+  session.floorModifier = normalizeFloorModifier(session.floorModifier, session.seed, session.floor)
   session.skillCheck ??= null
   session.combat ??= {
     active: false,
@@ -753,15 +823,18 @@ function applySkillCheckConsequence(session: GameSession, check: SkillCheckState
 function applySkillCheckSuccess(session: GameSession, check: SkillCheckState) {
   if (check.source === "chest") {
     session.gold += 28 + session.floor * 3
+    session.gold += session.floorModifier.goldBonus
     session.inventory.unshift("Rollback scroll")
     session.xp += 2
   } else if (check.source === "relic") {
     session.gold += 14 + session.floor * 2
+    session.gold += session.floorModifier.goldBonus
     session.inventory.unshift("Bound relic")
     session.focus = Math.min(session.maxFocus, session.focus + 3)
     session.xp += 3
   } else {
     session.gold += 5
+    session.gold += Math.floor(session.floorModifier.goldBonus / 2)
     session.inventory.unshift("Deploy nerve potion")
     session.hp = Math.min(session.maxHp, session.hp + 2)
     session.xp += 1
@@ -786,7 +859,7 @@ function applySkillCheckFailure(session: GameSession, check: SkillCheckState) {
 
 function triggerTrap(session: GameSession, point: Point) {
   setTile(session.dungeon, point, "floor")
-  const damage = 2 + Math.floor(session.floor / 2)
+  const damage = 2 + Math.floor(session.floor / 2) + Math.max(0, session.floorModifier.trapDamageBonus)
   session.hp -= damage
   session.log.unshift(`Trap sprung for ${damage}. The room remembers your step.`)
   completeWorldProgress(session, "interaction", point, `Trap sprung on floor ${session.floor}.`)
@@ -823,6 +896,7 @@ function descend(session: GameSession) {
   }
   session.floor += 1
   session.dungeon = createDungeon(session.seed, session.floor)
+  session.floorModifier = floorModifierFor(session.seed, session.floor)
   session.player = { ...session.dungeon.playerStart }
   session.visible = new Set()
   session.seen = new Set()
@@ -830,7 +904,7 @@ function descend(session: GameSession) {
   session.focus = Math.min(session.maxFocus, session.focus + 2)
   revealAroundPlayer(session)
   completeWorldProgress(session, "biome", session.player, `Reached floor ${session.floor}.`)
-  session.log.unshift(`Floor ${session.floor}. Same seed, darker shape.`)
+  session.log.unshift(`Floor ${session.floor}. ${session.floorModifier.name}. Same seed, darker shape.`)
 }
 
 function advanceTurn(session: GameSession) {
@@ -986,6 +1060,13 @@ function cleanStatusLabel(text: string) {
 
 function cleanHeroName(text: string) {
   return text.replace(/[^\w .'-]/g, "").trim().slice(0, 24) || "Mira"
+}
+
+function normalizeFloorModifier(modifier: FloorModifier | undefined, seed: number, floor: number): FloorModifier {
+  const fallback = floorModifierFor(seed, floor)
+  if (!modifier || !floorModifiers.some((candidate) => candidate.id === modifier.id)) return fallback
+  const source = floorModifiers.find((candidate) => candidate.id === modifier.id) ?? fallback
+  return { ...source }
 }
 
 function stepToward(from: Point, to: Point): Point {
@@ -1208,7 +1289,7 @@ function trimLog(session: GameSession) {
 
 function revealAroundPlayer(session: GameSession) {
   const nextVisible = new Set<string>()
-  const radius = 10 + Math.floor(session.focus / 2)
+  const radius = Math.max(4, 10 + Math.floor(session.focus / 2) + session.floorModifier.visionBonus)
   for (let y = session.player.y - radius; y <= session.player.y + radius; y++) {
     for (let x = session.player.x - radius; x <= session.player.x + radius; x++) {
       if (x < 0 || y < 0 || x >= session.dungeon.width || y >= session.dungeon.height) continue

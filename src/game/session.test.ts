@@ -9,7 +9,9 @@ import {
   combatSkills,
   createSession,
   currentBiome,
+  floorModifierFor,
   performCombatAction,
+  rest,
   resolveSkillCheck,
   selectSkill,
   statusEffectMagnitude,
@@ -72,6 +74,24 @@ describe("game session", () => {
     session.player = { ...roomAnchor!.position }
 
     expect(currentBiome(session)).toBe(roomAnchor!.biome)
+  })
+
+  test("applies deterministic floor modifiers to rules", () => {
+    const focusDraft = createSession(1237)
+    focusDraft.focus = 0
+    rest(focusDraft)
+
+    expect(focusDraft.floorModifier).toMatchObject(floorModifierFor(1237, 1))
+    expect(focusDraft.floorModifier.id).toBe("focus-draft")
+    expect(focusDraft.focus).toBe(2)
+
+    const unstable = createSession(1236)
+    const target = { x: unstable.player.x + 1, y: unstable.player.y }
+    setTile(unstable.dungeon, target, "trap")
+    tryMove(unstable, 1, 0)
+
+    expect(unstable.floorModifier.id).toBe("unstable-ground")
+    expect(unstable.hp).toBe(unstable.maxHp - 3)
   })
 
   test("resolves loot checks into inventory consequences", () => {

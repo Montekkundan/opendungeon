@@ -112,7 +112,7 @@
 - [x] Gameplay-visible biomes.
 - [x] Traps.
 - [ ] Merchants.
-- [ ] Floor modifiers.
+- [x] Floor modifiers.
 - [ ] Secret rooms and locked doors.
 - [ ] NPC conversations.
 

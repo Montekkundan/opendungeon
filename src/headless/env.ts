@@ -128,6 +128,7 @@ export type HeadlessSnapshot = {
   turn: number
   status: GameSession["status"]
   biome: string
+  floorModifier: string
   player: Point
   hp: number
   focus: number
@@ -152,7 +153,7 @@ export type TestObservation = ReturnType<HeadlessGameEnv["observeTest"]>
 
 export const agentViewRadius = 5
 export const maxObservedActors = 8
-export const agentObservationSize = (agentViewRadius * 2 + 1) ** 2 + 16 + 12 + maxObservedActors * 6 + 20
+export const agentObservationSize = (agentViewRadius * 2 + 1) ** 2 + 16 + 12 + maxObservedActors * 6 + 21
 
 const movement: Partial<Record<HeadlessActionId, Point>> = {
   "move-north": { x: 0, y: -1 },
@@ -264,6 +265,7 @@ export class HeadlessGameEnv {
       settings: safeLoadSettings(),
       statusEffects: this.session.statusEffects.map((effect) => ({ ...effect })),
       biome: currentBiome(this.session),
+      floorModifier: this.session.floorModifier,
       worldValidationErrors: validateWorldConfig(this.session.world),
       snapshot: this.snapshot(),
       session: serializeSessionForObservation(this.session),
@@ -361,6 +363,7 @@ export class HeadlessGameEnv {
       selectedTargetId ? bounded(statusEffectMagnitude(this.session, selectedTargetId, "weakened") / 5) : 0,
       selectedTargetId ? bounded(statusEffectMagnitude(this.session, selectedTargetId, "burning") / 5) : 0,
       bounded(statusEffectsFor(this.session, "player").reduce((highest, effect) => Math.max(highest, effect.remainingTurns), 0) / 5),
+      floorModifierCode(this.session.floorModifier.id),
     )
 
     while (values.length < agentObservationSize) values.push(0)
@@ -434,7 +437,7 @@ export class HeadlessGameEnv {
   renderText(radius = agentViewRadius) {
     const rows: string[] = []
     rows.push(
-      `opendungeon headless seed=${this.session.seed} floor=${this.session.floor}/${this.session.finalFloor} turn=${this.session.turn} status=${this.session.status} biome=${currentBiome(this.session)}`,
+      `opendungeon headless seed=${this.session.seed} floor=${this.session.floor}/${this.session.finalFloor} turn=${this.session.turn} status=${this.session.status} biome=${currentBiome(this.session)} modifier=${this.session.floorModifier.id}`,
     )
     rows.push(`hp=${this.session.hp}/${this.session.maxHp} focus=${this.session.focus}/${this.session.maxFocus} gold=${this.session.gold} kills=${this.session.kills}`)
     for (let y = this.session.player.y - radius; y <= this.session.player.y + radius; y++) {
@@ -460,6 +463,7 @@ export class HeadlessGameEnv {
       turn: this.session.turn,
       status: this.session.status,
       biome: currentBiome(this.session),
+      floorModifier: this.session.floorModifier.id,
       player: this.session.player,
       hp: this.session.hp,
       focus: this.session.focus,
@@ -504,6 +508,7 @@ export class HeadlessGameEnv {
       turn: this.session.turn,
       status: this.session.status,
       biome: currentBiome(this.session),
+      floorModifier: this.session.floorModifier.id,
       player: { ...this.session.player },
       hp: this.session.hp,
       focus: this.session.focus,
@@ -955,6 +960,14 @@ function sourceCode(source: string | undefined) {
   if (source === "potion") return 0.33
   if (source === "relic") return 0.66
   if (source === "chest") return 1
+  return 0
+}
+
+function floorModifierCode(id: string | undefined) {
+  if (id === "gloom") return 0.25
+  if (id === "rich-veins") return 0.5
+  if (id === "unstable-ground") return 0.75
+  if (id === "focus-draft") return 1
   return 0
 }
 

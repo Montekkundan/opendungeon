@@ -178,6 +178,16 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
     ]
   }
 
+  if (name === "floor-modifier") {
+    return [
+      { assert: { path: "floorModifier.id", truthy: true } },
+      { assert: { path: "floorModifier.name", truthy: true } },
+      { assert: { path: "snapshot.floorModifier", truthy: true } },
+      { command: "render" },
+      { command: "check-invariants" },
+    ]
+  }
+
   if (name === "skill-check") {
     return [
       { command: "set-relative-tile", dx: 1, dy: 0, tile: "potion" },

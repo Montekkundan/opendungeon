@@ -1,0 +1,5 @@
+{"assert":{"path":"floorModifier.id","truthy":true}}
+{"assert":{"path":"floorModifier.name","truthy":true}}
+{"assert":{"path":"snapshot.floorModifier","truthy":true}}
+{"command":"render"}
+{"command":"check-invariants"}

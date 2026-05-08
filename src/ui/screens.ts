@@ -767,7 +767,7 @@ function drawHud(canvas: Canvas, session: GameSession) {
   if (canvas.width < 96 || height < 5) {
     canvas.fill(0, 0, canvas.width, Math.min(4, canvas.height), " ", cleanPanel, cleanPanel)
     if (canvas.height > 4) canvas.fill(0, 4, canvas.width, 1, " ", "#0b1118", "#0b1118")
-    const hero = trim(`${session.hero.name} · ${formatBiome(currentBiome(session))}`, Math.max(16, canvas.width - 34))
+    const hero = trim(`${session.hero.name} · ${formatBiome(currentBiome(session))} · ${session.floorModifier.name}`, Math.max(16, canvas.width - 34))
     canvas.write(1, 0, hero, UI.ink, cleanPanel)
     drawHudBar(canvas, 1, 1, Math.max(12, Math.floor(canvas.width * 0.32)), "HP", session.hp, session.maxHp, UI.hp, UI.hpBack)
     drawHudBar(canvas, Math.floor(canvas.width * 0.43), 1, Math.max(10, Math.floor(canvas.width * 0.25)), "FOCUS", session.focus, session.maxFocus, UI.focus, UI.focusBack)
@@ -783,7 +783,7 @@ function drawHud(canvas: Canvas, session: GameSession) {
   const infoX = x + 14
   const contentW = width - 17
   canvas.write(infoX, 1, trim(`${session.hero.name}  LV ${session.level}  XP ${session.xp}/${session.level * 10}`, Math.floor(contentW * 0.48)), UI.gold, UI.panel)
-  canvas.write(infoX + Math.floor(contentW * 0.5), 1, trim(`${session.hero.title} · ${formatBiome(currentBiome(session))}`, Math.floor(contentW * 0.48)), UI.soft, UI.panel)
+  canvas.write(infoX + Math.floor(contentW * 0.5), 1, trim(`${session.hero.title} · ${formatBiome(currentBiome(session))} · ${session.floorModifier.name}`, Math.floor(contentW * 0.48)), UI.soft, UI.panel)
   drawHudBar(canvas, infoX, 2, Math.max(20, Math.floor(contentW * 0.42)), "HP", session.hp, session.maxHp, UI.hp, UI.hpBack)
   drawHudBar(canvas, infoX + Math.floor(contentW * 0.48), 2, Math.max(20, Math.floor(contentW * 0.42)), "FOCUS", session.focus, session.maxFocus, UI.focus, UI.focusBack)
 
