@@ -253,6 +253,29 @@ describe("game session", () => {
     expect(session.hp).toBe(session.maxHp - 6)
   })
 
+  test("blocks enemy damage and triggers riposte reactions", () => {
+    const session = createSession(1234)
+    addEnemyBesidePlayer(session, "riposte-ghoul", "ghoul", 20, 5)
+    applyStatusEffect(session, {
+      id: "guarded",
+      targetId: "player",
+      label: "Guarded",
+      remainingTurns: 2,
+      magnitude: 2,
+      source: "Lucky Riposte",
+    })
+    session.inventory.unshift("Deploy nerve potion")
+    const actor = session.dungeon.actors.find((candidate) => candidate.id === "riposte-ghoul")!
+
+    tryMove(session, 1, 0)
+    usePotion(session)
+
+    expect(session.hp).toBe(session.maxHp - 3)
+    expect(actor.hp).toBe(19)
+    expect(session.log.some((entry) => entry.includes("Block reaction absorbs 2"))).toBe(true)
+    expect(session.log.some((entry) => entry.includes("Riposte reaction"))).toBe(true)
+  })
+
   test("refreshes same-target status effect stacks without duplicating them", () => {
     const session = createSession(1234)
 

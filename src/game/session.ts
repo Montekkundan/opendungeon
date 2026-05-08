@@ -1004,11 +1004,19 @@ function combatEnemyTurn(session: GameSession) {
     ensureEnemyAi(actor, 0, session.floor).alerted = true
     if (manhattan(actor.position, session.player) === 1) {
       const weakened = statusEffectMagnitude(session, actor.id, "weakened")
-      const guarded = statusEffectMagnitude(session, "player", "guarded")
+      const guardEffects = statusEffectsFor(session, "player").filter((effect) => effect.id === "guarded")
+      const guarded = guardEffects.reduce((total, effect) => total + effect.magnitude, 0)
       const damage = Math.max(0, actor.damage - weakened - guarded)
+      const blocked = Math.max(0, actor.damage - weakened - damage)
       session.hp -= damage
       const reduction = actor.damage === damage ? "" : ` (${actor.damage - damage} blocked by status)`
       session.log.unshift(`${label(actor.kind)} hits for ${damage}${reduction}.`)
+      if (blocked > 0) session.log.unshift(`Block reaction absorbs ${blocked}.`)
+      if (guardEffects.some((effect) => effect.source === "Lucky Riposte")) {
+        actor.hp -= 1
+        session.log.unshift(`Riposte reaction clips ${label(actor.kind)} for 1.`)
+        if (actor.hp <= 0 && session.dungeon.actors.includes(actor)) defeatActor(session, actor)
+      }
       continue
     }
 

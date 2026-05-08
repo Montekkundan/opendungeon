@@ -172,6 +172,21 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
     ]
   }
 
+  if (name === "reaction-block") {
+    return [
+      { command: "set-relative-tile", dx: 1, dy: 0, tile: "floor" },
+      { command: "place-relative-actor", id: "script-ghoul", kind: "ghoul", dx: 1, dy: 0, hp: 80, damage: 5 },
+      { command: "set-stat", stat: "luck", value: 80 },
+      { action: "move-east" },
+      { action: "select-skill-5" },
+      { action: "combat-roll" },
+      { assert: { path: "session.combat.lastRoll.skill", equals: "Lucky Riposte" } },
+      { assert: { path: "session.hp", equals: 22 } },
+      { assert: { path: "session.log.0", contains: "Riposte reaction" } },
+      { command: "check-invariants" },
+    ]
+  }
+
   if (name === "character-name") {
     return [
       { command: "set-hero-name", name: "Nyx Prime" },

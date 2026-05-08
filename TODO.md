@@ -99,7 +99,7 @@
 - [x] More skills.
 - [x] Status effects.
 - [x] Initiative order.
-- [ ] Reactions and blocks.
+- [x] Reactions and blocks.
 - [x] Area-of-effect targeting.
 - [x] Boss phase transitions.
 
