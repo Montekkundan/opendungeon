@@ -23,7 +23,7 @@
 - [x] Add bounded/clipped text in the run panel so labels do not overflow their boxes.
 - [x] Add pixel-style HUD badges, beveled panels, key badges, and quickbar slots.
 - [x] Use clean terminal-native panels, dialogs, quest rows, slots, and status bars.
-- [ ] Add screenshot/golden visual regression checks for the terminal renderer.
+- [x] Add screenshot/golden visual regression checks for the terminal renderer.
 - [x] Use terminal-native UI assets instead of downsampling high-res reference sheets.
 
 ## Website
@@ -127,7 +127,7 @@
 
 - [ ] Move sprite sampling into a dedicated `spriteSampler.ts`.
 - [ ] Split tests into session, save store, assets, d20, and UI suites only where it reduces maintenance.
-- [ ] Add renderer screenshot/snapshot smoke tests.
+- [x] Add renderer screenshot/snapshot smoke tests.
 - [ ] Add debug overlays behind explicit flags only.
 - [ ] Move reference asset/cache import code out of `generate-opendungeon-assets.ts` once the asset manifest stabilizes.
 - [ ] Remove unnecessary test-case bloat.
