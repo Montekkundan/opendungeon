@@ -13,6 +13,7 @@ import {
   selectSkill,
   statusEffectMagnitude,
   statusEffectsFor,
+  startingLoadout,
   tryMove,
   usePotion,
 } from "./session.js"
@@ -42,6 +43,20 @@ describe("game session", () => {
     expect(session.world.events).toHaveLength(50)
     expect(session.world.quests.length).toBeGreaterThan(0)
     expect(session.hero.name).toBe("Nyx Prime")
+  })
+
+  test("uses class-specific starting loadouts", () => {
+    const warden = createSession(1234, "solo", "warden")
+    const arcanist = createSession(1234, "solo", "arcanist")
+    const ranger = createSession(1234, "solo", "ranger")
+
+    expect(warden.inventory).toContain("Stone buckler")
+    expect(arcanist.inventory).toContain("Ash focus")
+    expect(ranger.inventory).toContain("Rope arrow")
+    expect(startingLoadout("warden")).not.toEqual(startingLoadout("arcanist"))
+
+    warden.inventory.push("Changed")
+    expect(startingLoadout("warden")).not.toContain("Changed")
   })
 
   test("resolves loot checks into inventory consequences", () => {

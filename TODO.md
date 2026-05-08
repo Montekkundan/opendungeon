@@ -88,7 +88,7 @@
 - [x] Profile name entry in settings.
 - [x] Character name entry for each run.
 - [ ] Portrait/class variants.
-- [ ] Starting loadouts.
+- [x] Starting loadouts.
 - [ ] Cosmetic palette selection.
 - [ ] Per-character weapon sprites and animation overrides.
 

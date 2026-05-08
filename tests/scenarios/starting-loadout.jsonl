@@ -1,0 +1,5 @@
+{"assert":{"path":"session.inventory","contains":"Rope arrow"}}
+{"assert":{"path":"session.inventory.length","min":3}}
+{"action":"open-inventory"}
+{"assert":{"path":"panel","equals":"inventory"}}
+{"command":"check-invariants"}

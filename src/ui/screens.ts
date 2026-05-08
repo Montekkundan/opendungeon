@@ -14,6 +14,7 @@ import {
   pointKey,
   skillCheckModifier,
   statusEffectsFor,
+  startingLoadout,
   type GameSession,
   type HeroClass,
   type MultiplayerMode,
@@ -297,6 +298,7 @@ function drawCharacter(canvas: Canvas, model: AppModel) {
     canvas.write(textX, row, `${selected ? ">" : " "} ${option.name}`, selected ? UI.gold : UI.ink, bg)
     canvas.write(textX + 2, row + 1, trim(option.text, width - (textX - x) - 7), selected ? UI.ink : UI.soft, bg)
     if (selected && row + 3 < y + height - 2) canvas.write(textX + 2, row + 3, trim(statLine(statsForClass(option.id)), width - (textX - x) - 7), UI.muted, bg)
+    if (selected && row + 4 < y + height - 2) canvas.write(textX + 2, row + 4, trim(startingLoadout(option.id).join(" / "), width - (textX - x) - 7), UI.soft, bg)
   })
 
   drawFooter(canvas, [

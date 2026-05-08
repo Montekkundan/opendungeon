@@ -149,6 +149,16 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
     ]
   }
 
+  if (name === "starting-loadout") {
+    return [
+      { assert: { path: "session.inventory", contains: "Rope arrow" } },
+      { assert: { path: "session.inventory.length", min: 3 } },
+      { action: "open-inventory" },
+      { assert: { path: "panel", equals: "inventory" } },
+      { command: "check-invariants" },
+    ]
+  }
+
   if (name === "skill-check") {
     return [
       { command: "set-relative-tile", dx: 1, dy: 0, tile: "potion" },

@@ -150,6 +150,16 @@ const heroTitles: Record<HeroClass, string> = {
   ranger: "Ranger of Hollow Paths",
 }
 
+const startingLoadouts: Record<HeroClass, string[]> = {
+  warden: ["Warden axe", "Stone buckler", "Dew vial"],
+  arcanist: ["Ash focus", "Bound spark", "Deploy nerve potion"],
+  ranger: ["Rusty blade", "Dew vial", "Rope arrow"],
+}
+
+export function startingLoadout(classId: HeroClass) {
+  return [...startingLoadouts[classId]]
+}
+
 export const combatSkills: CombatSkill[] = [
   {
     id: "strike",
@@ -259,7 +269,7 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
     maxFocus,
     dungeon,
     log: ["Dev jokes hide in loot."],
-    inventory: ["Rusty blade", "Dew vial"],
+    inventory: startingLoadout(classId),
     turn: 0,
     status: "running",
     gold: 0,

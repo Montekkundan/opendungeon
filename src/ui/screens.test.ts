@@ -28,7 +28,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("character", createSession(1234, "solo", "ranger", "Nyx Prime")),
-      expectedHash: "10a843dd",
+      expectedHash: "0f53359d",
       requiredText: ["Choose Your Crawler", "Name", "Nyx Prime", "Ranger"],
     },
     {
@@ -36,7 +36,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: skillCheckModel(),
-      expectedHash: "c1d4c579",
+      expectedHash: "82b4d130",
       requiredText: ["Talent Check", "Whispering Relic", "Roll"],
     },
     {
