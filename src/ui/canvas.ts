@@ -27,7 +27,7 @@ export class Canvas {
     for (let i = 0; i < text.length; i++) {
       const cellX = x + i
       if (cellX < 0 || cellX >= this.width) continue
-      this.cells[y][cellX] = { text: text[i], fg: fgColor, bg: bgColor }
+      this.cells[y][cellX] = { text: text[i], fg: fgColor, bg: bgColor ?? this.cells[y][cellX].bg }
     }
   }
 
@@ -43,14 +43,15 @@ export class Canvas {
 
   border(x: number, y: number, width: number, height: number, fgColor = "#d8dee9") {
     if (width < 2 || height < 2) return
-    this.write(x, y, "╭" + "─".repeat(width - 2) + "╮", fgColor)
+    this.write(x, y, "┌" + "─".repeat(width - 2) + "┐", fgColor)
     for (let row = y + 1; row < y + height - 1; row++) {
       this.write(x, row, "│", fgColor)
       this.write(x + width - 1, row, "│", fgColor)
     }
-    this.write(x, y + height - 1, "╰" + "─".repeat(width - 2) + "╯", fgColor)
+    this.write(x, y + height - 1, "└" + "─".repeat(width - 2) + "┘", fgColor)
   }
 
+  // fallow-ignore-next-line unused-class-member
   toStyledText(): StyledText {
     const chunks: TextChunk[] = []
     for (let y = 0; y < this.height; y++) {
@@ -60,6 +61,7 @@ export class Canvas {
     return new StyledText(chunks)
   }
 
+  // fallow-ignore-next-line unused-class-member
   paint(buffer: OptimizedBuffer) {
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
