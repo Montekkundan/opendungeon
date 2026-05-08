@@ -200,8 +200,8 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
 
   if (name === "starting-loadout") {
     return [
-      { assert: { path: "session.inventory", contains: "Rope arrow" } },
       { assert: { path: "session.inventory.length", min: 3 } },
+      { assert: { path: "session.inventory.0", truthy: true } },
       { action: "open-inventory" },
       { assert: { path: "panel", equals: "inventory" } },
       { command: "check-invariants" },

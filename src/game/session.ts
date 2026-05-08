@@ -25,7 +25,8 @@ import {
 import { clamp, wrap } from "../shared/numeric.js"
 
 export type MultiplayerMode = "solo" | "coop" | "race"
-export type HeroClass = "warden" | "arcanist" | "ranger"
+export const heroClassIds = ["warden", "arcanist", "ranger", "duelist", "cleric", "engineer", "witch", "grave-knight"] as const
+export type HeroClass = (typeof heroClassIds)[number]
 
 export type Hero = {
   name: string
@@ -190,12 +191,22 @@ const heroTitles: Record<HeroClass, string> = {
   warden: "Warden of Stone",
   arcanist: "Arcanist of Ash",
   ranger: "Ranger of Hollow Paths",
+  duelist: "Duelist of Bright Edges",
+  cleric: "Cleric of Quiet Bells",
+  engineer: "Engineer of Trapworks",
+  witch: "Witch of Black Salt",
+  "grave-knight": "Grave Knight Errant",
 }
 
 const startingLoadouts: Record<HeroClass, string[]> = {
   warden: ["Warden axe", "Stone buckler", "Dew vial"],
   arcanist: ["Ash focus", "Bound spark", "Deploy nerve potion"],
   ranger: ["Rusty blade", "Dew vial", "Rope arrow"],
+  duelist: ["Needle rapier", "Parry cloak", "Dew vial"],
+  cleric: ["Bell mace", "Shrine charm", "Deploy nerve potion"],
+  engineer: ["Gear spanner", "Tripwire kit", "Rollback scroll"],
+  witch: ["Salt knife", "Hex pouch", "Cursed shard"],
+  "grave-knight": ["Grave blade", "Oath shield", "Bone token"],
 }
 
 const floorModifiers: FloorModifier[] = [
@@ -248,6 +259,10 @@ const floorModifiers: FloorModifier[] = [
 
 export function startingLoadout(classId: HeroClass) {
   return [...startingLoadouts[classId]]
+}
+
+export function isHeroClass(value: string | undefined): value is HeroClass {
+  return Boolean(value && (heroClassIds as readonly string[]).includes(value))
 }
 
 export function floorModifierFor(seed: number, floor: number): FloorModifier {

@@ -3,8 +3,10 @@ import {
   createSession,
   cycleTarget,
   attemptFlee,
+  heroClassIds,
   dismissSkillCheck,
   interactWithWorld,
+  isHeroClass,
   performCombatAction,
   rest,
   resolveSkillCheck,
@@ -911,7 +913,7 @@ function modeFromEnv(): MultiplayerMode {
 
 function classFromEnv(): HeroClass {
   const value = env("OPENDUNGEON_CLASS", "DUNGEON_CLASS")
-  return value === "warden" || value === "arcanist" || value === "ranger" ? value : "ranger"
+  return isHeroClass(value) ? value : "ranger"
 }
 
 function modeIndexFromEnv() {
@@ -922,10 +924,7 @@ function modeIndexFromEnv() {
 }
 
 function classIndexFromEnv() {
-  const heroClass = classFromEnv()
-  if (heroClass === "warden") return 0
-  if (heroClass === "arcanist") return 1
-  return 2
+  return classIndexFor(classFromEnv())
 }
 
 function runScore(session: GameSession) {
@@ -990,9 +989,7 @@ function indexForSave(saves: SaveSummary[], summary: SaveSummary) {
 }
 
 function classIndexFor(classId: HeroClass) {
-  if (classId === "warden") return 0
-  if (classId === "arcanist") return 1
-  return 2
+  return Math.max(0, heroClassIds.indexOf(classId))
 }
 
 function modeIndexFor(mode: MultiplayerMode) {

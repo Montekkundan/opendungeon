@@ -13,7 +13,7 @@
 - [ ] Add a first-class reference asset importer for refreshing `assets/opendungeon-assets/runtime` with license checks.
 - [x] Add frame tags for `windup`, `impact`, `recover`, `cast-loop`, `pickup`, `block`, and `open`.
 - [x] Add per-character JSON metadata for hitboxes, palette notes, weapon socket positions, and dialog portrait ids.
-- [ ] Add more crawlers: duelist, cleric, engineer, witch, grave knight.
+- [x] Add more crawlers: duelist, cleric, engineer, witch, grave knight.
 - [x] Add more NPCs: cartographer, wound surgeon, shrine keeper, jailer, merchant.
 - [x] Add more enemies: gallows wisp, rust squire, carrion moth, crypt mimic, grave-root boss.
 

@@ -81,6 +81,11 @@ const classOptions: Array<{ id: HeroClass; name: string; text: string }> = [
   { id: "warden", name: "Warden", text: "High HP, low focus. Holds corridors." },
   { id: "arcanist", name: "Arcanist", text: "Low HP, high focus. Deletes threats." },
   { id: "ranger", name: "Ranger", text: "Balanced. Best first run." },
+  { id: "duelist", name: "Duelist", text: "Fast precision crawler with strong single-target pressure." },
+  { id: "cleric", name: "Cleric", text: "Faith-heavy support crawler with steadier recovery." },
+  { id: "engineer", name: "Engineer", text: "Trapwise crawler with tools, scrolls, and strong checks." },
+  { id: "witch", name: "Witch", text: "Mind and luck caster with risky occult inventory." },
+  { id: "grave-knight", name: "Grave Knight", text: "Heavy oathbound crawler with durable melee stats." },
 ]
 const modeOptions: Array<{ id: MultiplayerMode; name: string; text: string }> = [
   { id: "solo", name: "Solo", text: "One crawl, local run." },
@@ -181,7 +186,7 @@ export function currentStartItem(model: AppModel) {
 }
 
 export function currentClass(model: AppModel) {
-  return classOptions[model.classIndex]
+  return classOptions[model.classIndex] ?? classOptions[2]
 }
 
 export function currentMode(model: AppModel) {
@@ -285,14 +290,17 @@ function drawCharacter(canvas: Canvas, model: AppModel) {
   drawInputField(canvas, x + 4, y + 3, width - 8, "Name", shownName, editingName)
 
   const listY = y + 7
-  const rowStep = Math.max(5, Math.floor((height - 10) / classOptions.length))
-  const cardH = clamp(rowStep, 4, 6)
+  const visibleRows = clamp(Math.floor((height - 10) / 4), 3, classOptions.length)
+  const rowStep = 4
+  const cardH = 4
   const spriteW = cardH >= 6 ? 15 : 12
   const spriteH = cardH >= 6 ? 5 : 4
   const textX = x + spriteW + 12
-  classOptions.forEach((option, index) => {
+  const offset = scrollOffset(model.classIndex, visibleRows, classOptions.length)
+  classOptions.slice(offset, offset + visibleRows).forEach((option, visibleIndex) => {
+    const index = offset + visibleIndex
     const selected = model.classIndex === index
-    const row = listY + index * rowStep
+    const row = listY + visibleIndex * rowStep
     const sprite = classSprite(option.id)
     const bg = selected ? UI.panel3 : UI.panel2
     drawSelectCard(canvas, x + 3, row - 1, width - 6, cardH, selected)
@@ -302,6 +310,7 @@ function drawCharacter(canvas: Canvas, model: AppModel) {
     if (selected && row + 3 < y + height - 2) canvas.write(textX + 2, row + 3, trim(statLine(statsForClass(option.id)), width - (textX - x) - 7), UI.muted, bg)
     if (selected && row + 4 < y + height - 2) canvas.write(textX + 2, row + 4, trim(startingLoadout(option.id).join(" / "), width - (textX - x) - 7), UI.soft, bg)
   })
+  if (classOptions.length > visibleRows) drawScrollbar(canvas, x + width - 5, listY - 1, visibleRows * rowStep, offset, visibleRows, classOptions.length)
 
   drawFooter(canvas, [
     ["n", "name"],
@@ -1694,8 +1703,8 @@ function actorAnimation(selected: boolean, session: GameSession): SpriteAnimatio
 }
 
 function classSprite(classId: HeroClass): PixelSpriteId {
-  if (classId === "arcanist") return "hero-arcanist"
-  if (classId === "warden") return "hero-warden"
+  if (classId === "arcanist" || classId === "witch") return "hero-arcanist"
+  if (classId === "warden" || classId === "cleric" || classId === "grave-knight") return "hero-warden"
   return "hero-ranger"
 }
 

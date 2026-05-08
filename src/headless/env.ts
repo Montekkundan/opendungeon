@@ -12,6 +12,7 @@ import {
   currentBiome,
   cycleTarget,
   dismissSkillCheck,
+  heroClassIds,
   interactWithWorld,
   performCombatAction,
   resolveSkillCheck,
@@ -155,7 +156,8 @@ export type TestObservation = ReturnType<HeadlessGameEnv["observeTest"]>
 
 export const agentViewRadius = 5
 export const maxObservedActors = 8
-export const agentObservationSize = (agentViewRadius * 2 + 1) ** 2 + 16 + 12 + maxObservedActors * 6 + 23
+const agentCoreFeatureSize = 8 + heroClassIds.length + 3 + 2
+export const agentObservationSize = (agentViewRadius * 2 + 1) ** 2 + agentCoreFeatureSize + 12 + maxObservedActors * 6 + 23
 
 const movement: Partial<Record<HeadlessActionId, Point>> = {
   "move-north": { x: 0, y: -1 },
@@ -293,9 +295,7 @@ export class HeadlessGameEnv {
       ratio(this.session.floor, this.session.finalFloor),
       bounded(this.session.turn / this.maxSteps),
       statusCode,
-      this.session.hero.classId === "warden" ? 1 : 0,
-      this.session.hero.classId === "arcanist" ? 1 : 0,
-      this.session.hero.classId === "ranger" ? 1 : 0,
+      ...heroClassIds.map((id) => (this.session.hero.classId === id ? 1 : 0)),
       this.session.mode === "solo" ? 1 : 0,
       this.session.mode === "coop" ? 1 : 0,
       this.session.mode === "race" ? 1 : 0,

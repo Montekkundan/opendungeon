@@ -2,6 +2,7 @@ import { resolve } from "node:path"
 import { builtinScenario, loadScenarioFile, runScenario } from "./scenario.js"
 import { runHeadlessProtocol } from "./protocol.js"
 import { type HeadlessEnvOptions } from "./env.js"
+import { isHeroClass } from "../game/session.js"
 
 const args = process.argv.slice(2)
 
@@ -19,7 +20,7 @@ Options:
   --script <path>        JSONL scenario file
   --seed <number>        Deterministic seed
   --mode <mode>          solo | coop | race
-  --class <class>        warden | arcanist | ranger
+  --class <class>        warden | arcanist | ranger | duelist | cleric | engineer | witch | grave-knight
   --hero-name <name>     Crawler name for reset/protocol sessions
   --max-steps <number>   Episode truncation limit
   --assert              Exit non-zero when scenario assertions fail
@@ -58,7 +59,7 @@ function envOptionsFromArgs(): HeadlessEnvOptions {
     seed: Number.isFinite(seed) ? Math.floor(seed) : undefined,
     maxSteps: Number.isFinite(maxSteps) ? Math.floor(maxSteps) : undefined,
     mode: mode === "solo" || mode === "coop" || mode === "race" ? mode : undefined,
-    classId: classId === "warden" || classId === "arcanist" || classId === "ranger" ? classId : undefined,
+    classId: isHeroClass(classId) ? classId : undefined,
     heroName,
   }
 }
