@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { profileDirectory } from "../game/settingsStore.js"
 
@@ -24,12 +24,24 @@ type AuthEnvelope = {
 
 const authVersion = 1
 
-function authDirectory() {
+export function authDirectory() {
   return process.env.OPENDUNGEON_AUTH_DIR || join(profileDirectory(), "cloud")
 }
 
 export function authSessionPath() {
   return join(authDirectory(), "session.json")
+}
+
+export function loadAuthSession(): AuthSession | null {
+  if (!existsSync(authSessionPath())) return null
+
+  try {
+    const parsed = JSON.parse(readFileSync(authSessionPath(), "utf8")) as Partial<AuthEnvelope>
+    if (parsed.game !== "opendungeon" || parsed.version !== authVersion || !parsed.session) return null
+    return normalizeSession(parsed.session)
+  } catch {
+    return null
+  }
 }
 
 export function saveAuthSession(session: AuthSession) {

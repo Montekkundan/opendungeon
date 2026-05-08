@@ -41,6 +41,7 @@
   "scripts": {
     "dev": "bun run src/main.ts",
     "server:dev": "bun run src/server/dev.ts",
+    "headless": "bun run src/headless/cli.ts",
     "www:dev": "bun --cwd packages/www dev",
     "www:build": "bun --cwd packages/www build",
     "www:typecheck": "bun --cwd packages/www typecheck",

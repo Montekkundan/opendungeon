@@ -1,0 +1,7 @@
+{"command":"set-gold","value":77}
+{"action":"save"}
+{"assert":{"path":"saves.length","min":1}}
+{"command":"set-gold","value":1}
+{"action":"load-latest-save"}
+{"assert":{"path":"session.gold","equals":77}}
+{"command":"check-invariants"}

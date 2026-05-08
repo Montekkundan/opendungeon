@@ -1,0 +1,5 @@
+{"assert":{"path":"session.status","equals":"running"}}
+{"command":"first-legal-move"}
+{"action":"rest"}
+{"assert":{"path":"session.turn","min":1}}
+{"command":"check-invariants"}

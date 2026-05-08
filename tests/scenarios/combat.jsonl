@@ -1,0 +1,9 @@
+{"command":"set-relative-tile","dx":1,"dy":0,"tile":"floor"}
+{"command":"place-relative-actor","id":"script-slime","kind":"slime","dx":1,"dy":0,"hp":1,"damage":0}
+{"command":"set-stat","stat":"strength","value":100}
+{"action":"move-east"}
+{"assert":{"path":"session.combat.active","equals":true}}
+{"action":"select-skill-0"}
+{"action":"combat-roll"}
+{"assert":{"path":"session.kills","min":1}}
+{"command":"check-invariants"}
