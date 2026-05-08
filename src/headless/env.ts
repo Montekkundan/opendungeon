@@ -21,7 +21,7 @@ import {
   type MultiplayerMode,
 } from "../game/session.js"
 import { defaultSettings, loadSettings } from "../game/settingsStore.js"
-import { deleteSave, listSaves, loadSave, saveSession, type SaveSummary } from "../game/saveStore.js"
+import { deleteSave, exportSave, importSave, listSaves, loadSave, renameSave, saveAutosave, saveSession, validateSave, type SaveSummary } from "../game/saveStore.js"
 import { validateWorldConfig } from "../world/worldConfig.js"
 
 export const headlessActionIds = [
@@ -52,6 +52,11 @@ export const headlessActionIds = [
   "open-settings",
   "close-panel",
   "save",
+  "autosave",
+  "rename-latest-save",
+  "export-latest-save",
+  "import-last-export",
+  "check-latest-save",
   "load-latest-save",
   "delete-latest-save",
 ] as const
@@ -103,8 +108,14 @@ export type HeadlessStepInfo = {
   snapshot: HeadlessSnapshot
   message?: string
   saved?: SaveSummary
+  autosaved?: SaveSummary
+  renamed?: SaveSummary
+  exported?: SaveSummary
+  imported?: SaveSummary
   loaded?: SaveSummary
   deleted?: SaveSummary
+  exportPath?: string
+  validationErrors?: string[]
 }
 
 export type HeadlessSnapshot = {
@@ -155,6 +166,7 @@ export class HeadlessGameEnv {
   steps = 0
   private isolatedStorageDir: string | null = null
   private previousEnv: Record<string, string | undefined> | null = null
+  private lastExportPath: string | null = null
 
   constructor(options: HeadlessEnvOptions = {}) {
     this.observationMode = options.observationMode ?? "test"
@@ -185,7 +197,9 @@ export class HeadlessGameEnv {
     const legalBefore = new Set(this.legalActions())
     const valid = legalBefore.has(action)
     const before = metrics(this.session)
-    let detail: Partial<Pick<HeadlessStepInfo, "message" | "saved" | "loaded" | "deleted">> = {}
+    let detail: Partial<
+      Pick<HeadlessStepInfo, "message" | "saved" | "autosaved" | "renamed" | "exported" | "imported" | "loaded" | "deleted" | "exportPath" | "validationErrors">
+    > = {}
 
     if (valid) detail = this.applyAction(action)
     else detail.message = `Illegal action ignored: ${action}.`
@@ -346,6 +360,7 @@ export class HeadlessGameEnv {
       actions.add("open-settings")
       if (this.panel) actions.add("close-panel")
       actions.add("save")
+      actions.add("autosave")
 
       if (this.session.skillCheck?.status === "pending") {
         actions.add("resolve-skill-check")
@@ -383,7 +398,11 @@ export class HeadlessGameEnv {
     if (safeListSaves().length > 0) {
       actions.add("load-latest-save")
       actions.add("delete-latest-save")
+      actions.add("rename-latest-save")
+      actions.add("export-latest-save")
+      actions.add("check-latest-save")
     }
+    if (this.lastExportPath) actions.add("import-last-export")
 
     if (this.panel) actions.add("close-panel")
     return sortedActions(actions)
@@ -526,7 +545,9 @@ export class HeadlessGameEnv {
     })
   }
 
-  private applyAction(action: HeadlessActionId): Partial<Pick<HeadlessStepInfo, "message" | "saved" | "loaded" | "deleted">> {
+  private applyAction(
+    action: HeadlessActionId,
+  ): Partial<Pick<HeadlessStepInfo, "message" | "saved" | "autosaved" | "renamed" | "exported" | "imported" | "loaded" | "deleted" | "exportPath" | "validationErrors">> {
     if (action === "noop") return { message: "No-op." }
     if (action === "close-panel") {
       this.panel = null
@@ -540,6 +561,35 @@ export class HeadlessGameEnv {
     if (action === "save") {
       const saved = saveSession(this.session, "Headless save")
       return { saved, message: `Saved ${saved.name}.` }
+    }
+    if (action === "autosave") {
+      const autosaved = saveAutosave(this.session)
+      return { autosaved, message: `Autosaved ${autosaved.name}.` }
+    }
+    if (action === "rename-latest-save") {
+      const latest = safeListSaves()[0]
+      if (!latest) return { message: "No save to rename." }
+      const renamed = renameSave(latest.id, "Headless renamed save")
+      return { renamed, message: `Renamed ${renamed.name}.` }
+    }
+    if (action === "export-latest-save") {
+      const latest = safeListSaves()[0]
+      if (!latest) return { message: "No save to export." }
+      const exportPath = join(this.isolatedStorageDir ?? tmpdir(), `opendungeon-export-${Date.now().toString(36)}.json`)
+      const exported = exportSave(latest.id, exportPath)
+      this.lastExportPath = exportPath
+      return { exported, exportPath, message: `Exported ${exported.name}.` }
+    }
+    if (action === "import-last-export") {
+      if (!this.lastExportPath) return { message: "No exported save to import." }
+      const imported = importSave(this.lastExportPath, "Headless imported save")
+      return { imported, message: `Imported ${imported.name}.` }
+    }
+    if (action === "check-latest-save") {
+      const latest = safeListSaves()[0]
+      if (!latest) return { validationErrors: ["No save to check."], message: "No save to check." }
+      const validationErrors = validateSave(latest.id)
+      return { validationErrors, message: validationErrors.length ? validationErrors.join(" ") : `Save ${latest.id} is valid.` }
     }
     if (action === "load-latest-save") {
       const loaded = safeListSaves()[0]
@@ -613,7 +663,9 @@ export class HeadlessGameEnv {
     action: HeadlessActionId,
     valid: boolean,
     rewardTerms: RewardTerms,
-    detail: Partial<Pick<HeadlessStepInfo, "message" | "saved" | "loaded" | "deleted">> = {},
+    detail: Partial<
+      Pick<HeadlessStepInfo, "message" | "saved" | "autosaved" | "renamed" | "exported" | "imported" | "loaded" | "deleted" | "exportPath" | "validationErrors">
+    > = {},
   ): HeadlessStepInfo {
     return {
       action,

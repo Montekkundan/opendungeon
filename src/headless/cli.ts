@@ -15,7 +15,7 @@ Usage:
   bun run headless -- --protocol
 
 Options:
-  --scenario <name>      Built-in scenario: smoke, combat, skill-check, save-load, auth-local, map-generation, npc-event, full-run
+  --scenario <name>      Built-in scenario: smoke, combat, skill-check, save-load, save-management, auth-local, map-generation, npc-event, full-run
   --script <path>        JSONL scenario file
   --seed <number>        Deterministic seed
   --mode <mode>          solo | coop | race

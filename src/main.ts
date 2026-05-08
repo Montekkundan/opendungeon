@@ -14,7 +14,8 @@ import {
   type HeroClass,
   type MultiplayerMode,
 } from "./game/session.js"
-import { deleteSave, listSaves, loadSave, saveSession, type SaveSummary } from "./game/saveStore.js"
+import { deleteSave, listSaves, loadSave, renameSave, saveAutosave, saveSession, type SaveSummary } from "./game/saveStore.js"
+import { handleSaveCommand, saveCommandHelp } from "./game/saveCli.js"
 import { loadSettings, saveSettings, type UserSettings } from "./game/settingsStore.js"
 import { diceSkinIds } from "./assets/diceSkins.js"
 import { version } from "./version.js"
@@ -42,6 +43,7 @@ Usage:
   opendungeon                   Start the game
   opendungeon login <username>  Prompt for a password and save an auth session
   opendungeon --login github    Open Supabase GitHub OAuth
+  opendungeon saves list        List local saves for backup or maintenance
   opendungeon --help            Show this help
   opendungeon --version         Show the version
 
@@ -52,6 +54,7 @@ Environment:
   OPENDUNGEON_TILE_SCALE   overview | wide | medium | close
 
 ${authHelpText()}
+${saveCommandHelp()}
 `)
   process.exit(0)
 }
@@ -63,6 +66,8 @@ if (process.argv.includes("--version") || process.argv.includes("-v")) {
 
 const authExitCode = await handleAuthCommand(process.argv.slice(2))
 if (authExitCode !== null) process.exit(authExitCode)
+const saveExitCode = await handleSaveCommand(process.argv.slice(2))
+if (saveExitCode !== null) process.exit(saveExitCode)
 
 const initialSaves = listSaves()
 const initialSettings = loadSettings()
@@ -96,6 +101,7 @@ let submittedSession: GameSession | null = null
 let diceTimer: ReturnType<typeof setTimeout> | null = null
 let destroyed = false
 let pendingDeleteSaveId: string | null = null
+let lastAutosaveSignature = ""
 
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
@@ -146,12 +152,14 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
 
   if (model.screen === "game" && model.session.skillCheck) {
     handleSkillCheckKey(key)
+    autosaveCurrentRun()
     refresh()
     return
   }
 
   if (model.dialog) {
     handleDialogKey(key)
+    if (model.screen === "game") autosaveCurrentRun()
     refresh()
     return
   }
@@ -161,8 +169,10 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
     return
   }
 
-  if (model.screen === "game") handleGameKey(key)
-  else handleMenuKey(key)
+  if (model.screen === "game") {
+    handleGameKey(key)
+    autosaveCurrentRun()
+  } else handleMenuKey(key)
 
   maybeSubmitLobbyResult()
   refresh()
@@ -341,6 +351,7 @@ function handleMenuKey(key: KeyEvent) {
       pendingDeleteSaveId = null
       refreshSaveList()
     }
+    if (key.name === "e") startInput("saveName")
     if (key.name === "d") deleteSelectedSave()
     if (key.name === "escape") {
       pendingDeleteSaveId = null
@@ -543,6 +554,7 @@ function startRun() {
   model.dialog = null
   model.uiHidden = !model.settings.showUi
   model.saveStatus = "New run started. Press Ctrl+S or F5 to save locally."
+  autosaveCurrentRun()
 }
 
 function openSaveBrowser() {
@@ -579,6 +591,7 @@ function loadSelectedSave() {
     model.uiHidden = !model.settings.showUi
     model.saveStatus = `Loaded ${summary.name}.`
     submittedSession = null
+    lastAutosaveSignature = autosaveSignature(model.session)
   } catch (error) {
     const status = error instanceof Error ? error.message : "Save failed to load."
     refreshSaveList()
@@ -630,6 +643,17 @@ function saveCurrentRun() {
   model.saveStatus = `Saved locally: ${summary.name}.`
   model.session.log.unshift(`Saved locally: ${summary.name}.`)
   while (model.session.log.length > 8) model.session.log.pop()
+  autosaveCurrentRun()
+}
+
+function autosaveCurrentRun() {
+  if (model.screen !== "game") return
+  const signature = autosaveSignature(model.session)
+  if (signature === lastAutosaveSignature) return
+  const summary = saveAutosave(model.session)
+  lastAutosaveSignature = signature
+  model.saves = listSaves()
+  model.saveIndex = indexForSave(model.saves, summary)
 }
 
 function confirmCloud() {
@@ -694,7 +718,7 @@ function changeCurrentSetting() {
 function startInput(field: NonNullable<AppModel["inputMode"]>["field"]) {
   model.inputMode = {
     field,
-    draft: field === "username" ? model.settings.username : model.settings.githubUsername,
+    draft: field === "username" ? model.settings.username : field === "githubUsername" ? model.settings.githubUsername : model.saves[model.saveIndex]?.name ?? "",
   }
 }
 
@@ -707,14 +731,23 @@ function handleInputKey(key: KeyEvent) {
     return
   }
   if (isConfirmKey(key)) {
-    const value = cleanProfileText(input.draft)
+    const value = input.field === "saveName" ? cleanSaveInputText(input.draft) : cleanProfileText(input.draft)
     if (input.field === "username") model.settings.username = value || "local-crawler"
     if (input.field === "githubUsername") {
       model.settings.githubUsername = value
       if (value) model.settings.cloudProvider = "github"
     }
+    if (input.field === "saveName") {
+      const selected = model.saves[model.saveIndex]
+      if (selected) {
+        const renamed = renameSave(selected.id, value || selected.name)
+        refreshSaveList()
+        model.saveIndex = indexForSave(model.saves, renamed)
+        model.saveStatus = `Renamed ${renamed.name}.`
+      }
+    }
     model.inputMode = null
-    saveUserSettings(`${input.field === "username" ? "Player name" : "GitHub profile"} saved locally.`)
+    if (input.field !== "saveName") saveUserSettings(`${input.field === "username" ? "Player name" : "GitHub profile"} saved locally.`)
     return
   }
   if (key.name === "backspace" || key.name === "delete") {
@@ -723,7 +756,8 @@ function handleInputKey(key: KeyEvent) {
   }
   if (key.ctrl || key.meta || key.option) return
   const text = key.sequence && key.sequence.length === 1 ? key.sequence : ""
-  if (/^[\w .-]$/.test(text) && input.draft.length < 24) input.draft += text
+  const limit = input.field === "saveName" ? 80 : 24
+  if (/^[\w .:/'()-]$/.test(text) && input.draft.length < limit) input.draft += text
 }
 
 function saveUserSettings(status: string) {
@@ -855,6 +889,26 @@ function runScore(session: GameSession) {
   return Math.max(0, session.floor * 100 + session.gold * 2 + session.kills * 25 + session.level * 50 - session.turn)
 }
 
+function autosaveSignature(session: GameSession) {
+  return [
+    session.seed,
+    session.floor,
+    session.turn,
+    session.status,
+    `${session.player.x},${session.player.y}`,
+    session.hp,
+    session.focus,
+    session.gold,
+    session.xp,
+    session.level,
+    session.kills,
+    session.inventory.join("|"),
+    session.combat.active ? session.combat.actorIds.join(",") : "",
+    session.skillCheck?.id ?? "",
+    session.skillCheck?.status ?? "",
+  ].join("~")
+}
+
 function isSaveKey(key: KeyEvent) {
   return model.screen === "game" && ((key.ctrl && key.name === "s") || key.name === "f5")
 }
@@ -915,6 +969,10 @@ function cycleValue<const T extends string>(current: T, values: readonly T[]) {
 
 function cleanProfileText(value: string) {
   return value.replace(/[^\w .-]/g, "").trim().slice(0, 24)
+}
+
+function cleanSaveInputText(value: string) {
+  return value.replace(/[^\w .:/'()-]/g, "").trim().slice(0, 80)
 }
 
 function clamp(value: number, min: number, max: number) {

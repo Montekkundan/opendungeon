@@ -46,7 +46,7 @@
 - [ ] Encrypted save upload/download.
 - [ ] Conflict handling between local and cloud saves.
 - [ ] Cloud save browser with account status and sync errors.
-- [ ] Manual export/import for offline backup.
+- [x] Manual export/import for offline backup.
 
 ## AI Admin
 
@@ -78,10 +78,10 @@
 - [x] Delete saves.
 - [x] Continue-last-run shortcut.
 - [x] Save compatibility backfill for world config/log fields.
-- [ ] Rename saves.
-- [ ] Autosave slot.
-- [ ] Save thumbnails using the current room crop.
-- [ ] Save compatibility/migration checks beyond current world-field backfill.
+- [x] Rename saves.
+- [x] Autosave slot.
+- [x] Save thumbnails using the current room crop.
+- [x] Save compatibility/migration checks beyond current world-field backfill.
 
 ## Character Customization
 

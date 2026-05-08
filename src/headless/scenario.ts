@@ -133,6 +133,21 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
     ]
   }
 
+  if (name === "save-management") {
+    return [
+      { command: "set-gold", value: 88 },
+      { action: "autosave" },
+      { assert: { path: "saves.0.slot", equals: "autosave" } },
+      { action: "rename-latest-save" },
+      { assert: { path: "saves.0.name", equals: "Headless renamed save" } },
+      { action: "check-latest-save" },
+      { action: "export-latest-save" },
+      { action: "import-last-export" },
+      { assert: { path: "saves.length", min: 2 } },
+      { command: "check-invariants" },
+    ]
+  }
+
   if (name === "auth-local") {
     return [
       { assert: { path: "auth.loggedIn", equals: false } },

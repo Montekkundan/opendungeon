@@ -38,7 +38,7 @@ type PanelBounds = {
 
 export type ScreenId = "start" | "character" | "mode" | "saves" | "cloud" | "settings" | "controls" | "game"
 export type DialogId = "settings" | "inventory" | "quests" | "help" | "log" | "pause" | null
-export type InputMode = { field: "username" | "githubUsername"; draft: string } | null
+export type InputMode = { field: "username" | "githubUsername" | "saveName"; draft: string } | null
 
 export type DiceRollAnimation = {
   result: number
@@ -351,9 +351,9 @@ function drawSaves(canvas: Canvas, model: AppModel) {
       canvas.fill(listX, rowY, listW, 2, " ", selected ? UI.panel3 : UI.panel2, selected ? UI.panel3 : UI.panel2)
       canvas.border(listX, rowY, listW, 3, selected ? UI.gold : UI.edgeDim)
       drawMiniIcon(canvas, listX + 2, rowY + 1, classSprite(save.classId as HeroClass), 5, 1, selected ? 1 : 0.65)
-      canvas.write(listX + 9, rowY + 1, trim(`${selected ? ">" : " "} ${save.heroName} F${save.floor}/${save.finalFloor}`, listW - 24), selected ? UI.gold : UI.ink, selected ? UI.panel3 : UI.panel2)
+      canvas.write(listX + 9, rowY + 1, trim(`${selected ? ">" : " "} ${save.name}`, listW - 24), selected ? UI.gold : UI.ink, selected ? UI.panel3 : UI.panel2)
       canvas.write(listX + listW - 13, rowY + 1, `LV ${save.level}`, UI.brass, selected ? UI.panel3 : UI.panel2)
-      canvas.write(listX + 9, rowY + 2, trim(formatSaveTime(save.savedAt), listW - 13), UI.muted, selected ? UI.panel3 : UI.panel2)
+      canvas.write(listX + 9, rowY + 2, trim(`${save.slot}  ${formatSaveTime(save.savedAt)}`, listW - 13), UI.muted, selected ? UI.panel3 : UI.panel2)
       canvas.write(listX + listW - 11, rowY + 2, save.status, statusColor(save.status), selected ? UI.panel3 : UI.panel2)
     })
   }
@@ -365,9 +365,12 @@ function drawSaves(canvas: Canvas, model: AppModel) {
   drawPanel(canvas, detailX, listY - 3, detailW, detailHeight, "Save Detail", selected ? UI.gold : UI.edge)
 
   if (selected) {
-    drawPixelBlock(canvas, detailX + 3, listY, animatedPixelSprite(classSprite(selected.classId as HeroClass), "idle", selected.turn, 13, 6), 1)
+    const renaming = model.inputMode?.field === "saveName"
+    if (selected.thumbnail?.length) drawSaveThumbnail(canvas, detailX + 3, listY, selected.thumbnail)
+    else drawPixelBlock(canvas, detailX + 3, listY, animatedPixelSprite(classSprite(selected.classId as HeroClass), "idle", selected.turn, 13, 6), 1)
     canvas.write(detailX + 19, listY, trim(selected.heroName, detailW - 22), UI.ink, UI.panel)
     canvas.write(detailX + 19, listY + 1, trim(selected.heroTitle, detailW - 22), UI.soft, UI.panel)
+    canvas.write(detailX + 19, listY + 2, trim(renaming ? `Rename: ${model.inputMode?.draft ?? ""}_` : selected.name, detailW - 22), renaming ? UI.gold : UI.soft, UI.panel)
     canvas.write(detailX + 19, listY + 3, `Floor ${selected.floor}/${selected.finalFloor}   Turn ${selected.turn}`, UI.gold, UI.panel)
     canvas.write(detailX + 19, listY + 4, `Mode ${selected.mode}   Seed ${selected.seed}`, UI.brass, UI.panel)
 
@@ -386,6 +389,7 @@ function drawSaves(canvas: Canvas, model: AppModel) {
     ["Enter", "load"],
     ["↑↓", "choose"],
     ["r", "refresh"],
+    ["e", "rename"],
     ["d", "delete"],
     ["Esc", "title"],
   ])
@@ -421,6 +425,13 @@ function drawCloud(canvas: Canvas, model: AppModel) {
     ["u", "edit name"],
     ["Esc", "title"],
   ])
+}
+
+function drawSaveThumbnail(canvas: Canvas, x: number, y: number, thumbnail: string[]) {
+  const rows = thumbnail.slice(0, 6)
+  for (const [rowIndex, row] of rows.entries()) {
+    canvas.write(x, y + rowIndex, trim(row, 13), UI.muted, UI.panel)
+  }
 }
 
 function drawSettings(canvas: Canvas, model: AppModel) {
