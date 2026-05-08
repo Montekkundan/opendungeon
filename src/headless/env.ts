@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { authStatusReport } from "../cloud/authStatus.js"
 import { loadAuthSession, saveAuthSession, type AuthSession } from "../cloud/authStore.js"
 import { setTile, tileAt, type Actor, type Point } from "../game/dungeon.js"
 import { type TileId } from "../game/domainTypes.js"
@@ -568,15 +569,20 @@ export class HeadlessGameEnv {
     this.session.hp = Math.max(0, this.session.hp - Math.max(0, amount))
   }
 
-  saveLocalTestAuth(provider: AuthSession["provider"] = "password") {
+  saveLocalTestAuth(provider: AuthSession["provider"] = "password", expiresAt = new Date(Date.UTC(2099, 0, 1)).toISOString()) {
     saveAuthSession({
       provider,
       username: provider === "github" ? "github-test" : "test",
       accessToken: provider === "github" ? "github-test-token" : "local-test-user-session",
+      refreshToken: provider === "github" ? "github-refresh-token" : "local-refresh-token",
       tokenType: "bearer",
       createdAt: new Date(0).toISOString(),
-      expiresAt: new Date(Date.UTC(2099, 0, 1)).toISOString(),
+      expiresAt,
     })
+  }
+
+  saveExpiredTestAuth(provider: AuthSession["provider"] = "password") {
+    this.saveLocalTestAuth(provider, new Date(Date.UTC(2000, 0, 1)).toISOString())
   }
 
   private applyAction(
@@ -852,6 +858,7 @@ function safeLoadSettings() {
 function safeAuthSummary() {
   try {
     const session = loadAuthSession()
+    const status = authStatusReport(session)
     return session
       ? {
           loggedIn: true,
@@ -860,10 +867,34 @@ function safeAuthSummary() {
           expiresAt: session.expiresAt,
           userId: session.userId,
           email: session.email,
+          status: status.kind,
+          accountLabel: status.accountLabel,
+          canRefresh: status.canRefresh,
+          syncAvailable: status.syncAvailable,
+          minutesUntilExpiry: status.minutesUntilExpiry,
+          warnings: status.warnings,
         }
-      : { loggedIn: false as const }
+      : {
+          loggedIn: false as const,
+          provider: status.provider,
+          username: status.username,
+          status: status.kind,
+          accountLabel: status.accountLabel,
+          canRefresh: status.canRefresh,
+          syncAvailable: status.syncAvailable,
+          warnings: status.warnings,
+        }
   } catch {
-    return { loggedIn: false as const }
+    return {
+      loggedIn: false as const,
+      provider: "local" as const,
+      username: "local",
+      status: "offline" as const,
+      accountLabel: "Local profile",
+      canRefresh: false,
+      syncAvailable: false,
+      warnings: ["Auth status unavailable; saves stay local."],
+    }
   }
 }
 

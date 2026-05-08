@@ -42,7 +42,7 @@
 - [x] Store local auth sessions separately from saves.
 - [x] Add local test account: `test` / `opendungeon`.
 - [ ] Finish automatic callback capture for Supabase GitHub OAuth.
-- [ ] Add account status and token refresh checks to the terminal UI.
+- [x] Add account status and token refresh checks to the terminal UI.
 - [ ] Encrypted save upload/download.
 - [ ] Conflict handling between local and cloud saves.
 - [ ] Cloud save browser with account status and sync errors.

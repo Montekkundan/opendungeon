@@ -24,6 +24,7 @@ export type ScenarioLine = {
     | "set-hero-name"
     | "damage-player"
     | "login-local-test"
+    | "login-expired-test"
     | "render"
   assert?: ScenarioAssertion
   dx?: number
@@ -261,9 +262,24 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
   if (name === "auth-local") {
     return [
       { assert: { path: "auth.loggedIn", equals: false } },
+      { assert: { path: "auth.status", equals: "offline" } },
       { command: "login-local-test" },
       { assert: { path: "auth.loggedIn", equals: true } },
       { assert: { path: "auth.username", equals: "test" } },
+      { assert: { path: "auth.status", equals: "active" } },
+      { assert: { path: "auth.canRefresh", equals: true } },
+      { assert: { path: "auth.syncAvailable", equals: true } },
+    ]
+  }
+
+  if (name === "auth-expired") {
+    return [
+      { command: "login-expired-test" },
+      { assert: { path: "auth.loggedIn", equals: true } },
+      { assert: { path: "auth.status", equals: "expired" } },
+      { assert: { path: "auth.canRefresh", equals: true } },
+      { assert: { path: "auth.syncAvailable", equals: false } },
+      { assert: { path: "auth.warnings.0", contains: "expired" } },
     ]
   }
 
@@ -353,6 +369,10 @@ function runScenarioLine(env: HeadlessGameEnv, line: ScenarioLine) {
   }
   if (line.command === "login-local-test") {
     env.saveLocalTestAuth("password")
+    return { type: "setup", command: line.command }
+  }
+  if (line.command === "login-expired-test") {
+    env.saveExpiredTestAuth("password")
     return { type: "setup", command: line.command }
   }
   if (line.command === "render") return { type: "render", text: env.renderText() }

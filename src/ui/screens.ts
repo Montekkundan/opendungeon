@@ -3,6 +3,7 @@ import { activeAssetPack } from "../assets/packs.js"
 import { d20FrameCount, d20RollSprite } from "../assets/d20Sprites.js"
 import { defaultDiceSkin, diceSkinIds, diceSkinName, type DiceSkinId } from "../assets/diceSkins.js"
 import { animatedPixelSprite, pixelSprite, type PixelSprite, type PixelSpriteId, type SpriteAnimationId } from "../assets/pixelSprites.js"
+import { authStatusReport, formatAuthStatus } from "../cloud/authStatus.js"
 import {
   actorAt,
   combatModifier,
@@ -416,18 +417,23 @@ function drawCloud(canvas: Canvas, model: AppModel) {
   const editing = model.inputMode?.field === "githubUsername"
   const githubName = editing ? model.inputMode?.draft ?? "" : model.settings.githubUsername
   const shownName = githubName || "github username"
+  const auth = authStatusReport()
 
   drawCommandBox(canvas, x, inputY, width, shownName, "GitHub cloud identity")
   canvas.write(x + 3, inputY + 1, editing ? ">" : " ", editing ? UI.gold : UI.muted, UI.panel2)
   canvas.write(x + 5, inputY + 1, editing ? `${shownName}_` : shownName, editing ? UI.ink : UI.soft, UI.panel2)
 
-  const rowY = inputY + (compact ? 4 : 5)
-  drawPlainSelectRow(canvas, x, rowY, width, "Sign in with GitHub", model.menuIndex === 0, "device auth later; saves stay local now")
+  const statusY = inputY + 4
+  canvas.center(statusY, trim(formatAuthStatus(auth), width), auth.kind === "expired" ? UI.ruby : auth.kind === "expiring" ? UI.gold : UI.soft, UI.bg)
+
+  const rowY = inputY + (compact ? 6 : 7)
+  drawPlainSelectRow(canvas, x, rowY, width, "Sign in with GitHub", model.menuIndex === 0, auth.loggedIn ? `status ${auth.kind}; refresh ${auth.canRefresh ? "ready" : "missing"}` : "not signed in; saves stay local")
   drawPlainSelectRow(canvas, x, rowY + 2, width, "Use local profile", model.menuIndex === 1, `profile @${model.settings.username}`)
   drawPlainSelectRow(canvas, x, rowY + 4, width, "Back to title", model.menuIndex === 2, "return without syncing")
 
   if (!compact) {
-    canvas.center(rowY + 8, trim("Cloud sync will use GitHub login, encrypted save envelopes, and conflict prompts.", width), UI.soft, UI.bg)
+    const warning = auth.warnings[0] ?? "Cloud sync will use encrypted save envelopes and conflict prompts."
+    canvas.center(rowY + 8, trim(warning, width), auth.warnings.length ? UI.gold : UI.soft, UI.bg)
     canvas.center(rowY + 10, trim(`Local profile: ${profilePath()}`, width), UI.muted, UI.bg)
   }
   drawFooter(canvas, [
