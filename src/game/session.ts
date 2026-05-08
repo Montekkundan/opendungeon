@@ -235,7 +235,7 @@ export const combatSkills: CombatSkill[] = [
   },
 ]
 
-export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", classId: HeroClass = "ranger"): GameSession {
+export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", classId: HeroClass = "ranger", heroName = "Mira"): GameSession {
   const dungeon = createDungeon(seed, 1)
   const stats = statsForClass(classId)
   const maxHp = derivedMaxHp(stats)
@@ -245,7 +245,7 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
   const session: GameSession = {
     mode,
     hero: {
-      name: "Mira",
+      name: cleanHeroName(heroName),
       classId,
       title: heroTitles[classId],
     },
@@ -952,6 +952,10 @@ function statusEffectLabel(id: StatusEffectId) {
 
 function cleanStatusLabel(text: string) {
   return text.replace(/[^\w .:/'()-]/g, "").trim().slice(0, 40) || "Status"
+}
+
+function cleanHeroName(text: string) {
+  return text.replace(/[^\w .'-]/g, "").trim().slice(0, 24) || "Mira"
 }
 
 function stepToward(from: Point, to: Point): Point {

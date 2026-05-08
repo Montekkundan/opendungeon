@@ -21,6 +21,7 @@ export type ScenarioLine = {
     | "add-item"
     | "set-stat"
     | "set-gold"
+    | "set-hero-name"
     | "damage-player"
     | "login-local-test"
     | "render"
@@ -35,6 +36,7 @@ export type ScenarioLine = {
   item?: string
   stat?: keyof HeadlessGameEnv["session"]["stats"]
   value?: number
+  name?: string
 }
 
 export type ScenarioResult = {
@@ -133,6 +135,16 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
       { assert: { path: "statusEffects.0.id", equals: "weakened" } },
       { assert: { path: "statusEffects.0.remainingTurns", equals: 1 } },
       { assert: { path: "session.hp", equals: 22 } },
+      { command: "check-invariants" },
+    ]
+  }
+
+  if (name === "character-name") {
+    return [
+      { command: "set-hero-name", name: "Nyx Prime" },
+      { assert: { path: "session.hero.name", equals: "Nyx Prime" } },
+      { action: "save" },
+      { assert: { path: "saves.0.heroName", equals: "Nyx Prime" } },
       { command: "check-invariants" },
     ]
   }
@@ -260,6 +272,10 @@ function runScenarioLine(env: HeadlessGameEnv, line: ScenarioLine) {
   }
   if (line.command === "set-gold") {
     env.setGold(number(line.value))
+    return { type: "setup", command: line.command }
+  }
+  if (line.command === "set-hero-name") {
+    env.setHeroName(line.name ?? "Mira")
     return { type: "setup", command: line.command }
   }
   if (line.command === "damage-player") {

@@ -404,6 +404,11 @@ function handleMenuKey(key: KeyEvent) {
     return
   }
 
+  if (model.screen === "character" && key.name === "n") {
+    startInput("characterName")
+    return
+  }
+
   if (isUpKey(key)) moveSelection(model, -1)
   if (isDownKey(key)) moveSelection(model, 1)
   if (model.screen === "start" && key.name === "c") loadLatestSave()
@@ -548,7 +553,7 @@ function confirmMenu() {
 }
 
 function startRun() {
-  model.session = createSession(model.seed, currentMode(model).id, currentClass(model).id)
+  model.session = createSession(model.seed, currentMode(model).id, currentClass(model).id, model.session.hero.name)
   submittedSession = null
   model.screen = "game"
   model.dialog = null
@@ -718,7 +723,14 @@ function changeCurrentSetting() {
 function startInput(field: NonNullable<AppModel["inputMode"]>["field"]) {
   model.inputMode = {
     field,
-    draft: field === "username" ? model.settings.username : field === "githubUsername" ? model.settings.githubUsername : model.saves[model.saveIndex]?.name ?? "",
+    draft:
+      field === "username"
+        ? model.settings.username
+        : field === "githubUsername"
+          ? model.settings.githubUsername
+          : field === "characterName"
+            ? model.session.hero.name
+            : model.saves[model.saveIndex]?.name ?? "",
   }
 }
 
@@ -731,8 +743,9 @@ function handleInputKey(key: KeyEvent) {
     return
   }
   if (isConfirmKey(key)) {
-    const value = input.field === "saveName" ? cleanSaveInputText(input.draft) : cleanProfileText(input.draft)
+    const value = input.field === "saveName" ? cleanSaveInputText(input.draft) : input.field === "characterName" ? cleanCharacterName(input.draft) : cleanProfileText(input.draft)
     if (input.field === "username") model.settings.username = value || "local-crawler"
+    if (input.field === "characterName") model.session.hero.name = value || "Mira"
     if (input.field === "githubUsername") {
       model.settings.githubUsername = value
       if (value) model.settings.cloudProvider = "github"
@@ -747,7 +760,8 @@ function handleInputKey(key: KeyEvent) {
       }
     }
     model.inputMode = null
-    if (input.field !== "saveName") saveUserSettings(`${input.field === "username" ? "Player name" : "GitHub profile"} saved locally.`)
+    if (input.field === "username" || input.field === "githubUsername") saveUserSettings(`${input.field === "username" ? "Player name" : "GitHub profile"} saved locally.`)
+    if (input.field === "characterName") model.saveStatus = `Crawler name set to ${model.session.hero.name}.`
     return
   }
   if (key.name === "backspace" || key.name === "delete") {
@@ -973,6 +987,10 @@ function cleanProfileText(value: string) {
 
 function cleanSaveInputText(value: string) {
   return value.replace(/[^\w .:/'()-]/g, "").trim().slice(0, 80)
+}
+
+function cleanCharacterName(value: string) {
+  return value.replace(/[^\w .'-]/g, "").trim().slice(0, 24)
 }
 
 function clamp(value: number, min: number, max: number) {

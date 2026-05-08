@@ -15,11 +15,12 @@ Usage:
   bun run headless -- --protocol
 
 Options:
-  --scenario <name>      Built-in scenario: smoke, combat, combat-skills, status-effects, skill-check, save-load, save-management, auth-local, map-generation, npc-event, full-run
+  --scenario <name>      Built-in scenario: smoke, combat, combat-skills, status-effects, character-name, skill-check, save-load, save-management, auth-local, map-generation, npc-event, full-run
   --script <path>        JSONL scenario file
   --seed <number>        Deterministic seed
   --mode <mode>          solo | coop | race
   --class <class>        warden | arcanist | ranger
+  --hero-name <name>     Crawler name for reset/protocol sessions
   --max-steps <number>   Episode truncation limit
   --assert              Exit non-zero when scenario assertions fail
   --protocol            Start JSONL/stdin protocol for Python or other clients
@@ -52,11 +53,13 @@ function envOptionsFromArgs(): HeadlessEnvOptions {
   const maxSteps = Number(valueAfter("--max-steps"))
   const mode = valueAfter("--mode")
   const classId = valueAfter("--class")
+  const heroName = valueAfter("--hero-name")
   return {
     seed: Number.isFinite(seed) ? Math.floor(seed) : undefined,
     maxSteps: Number.isFinite(maxSteps) ? Math.floor(maxSteps) : undefined,
     mode: mode === "solo" || mode === "coop" || mode === "race" ? mode : undefined,
     classId: classId === "warden" || classId === "arcanist" || classId === "ranger" ? classId : undefined,
+    heroName,
   }
 }
 

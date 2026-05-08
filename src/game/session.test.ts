@@ -33,7 +33,7 @@ function addEnemyBesidePlayer(session: GameSession, id: string, kind: ActorId, h
 
 describe("game session", () => {
   test("creates a seeded dungeon with a reachable player start", () => {
-    const session = createSession(1234, "solo", "ranger")
+    const session = createSession(1234, "solo", "ranger", "Nyx Prime")
 
     expect(session.dungeon.width).toBeGreaterThan(40)
     expect(session.dungeon.height).toBeGreaterThan(20)
@@ -41,6 +41,7 @@ describe("game session", () => {
     expect(session.dungeon.anchors[0].kind).toBe("start")
     expect(session.world.events).toHaveLength(50)
     expect(session.world.quests.length).toBeGreaterThan(0)
+    expect(session.hero.name).toBe("Nyx Prime")
   })
 
   test("resolves loot checks into inventory consequences", () => {

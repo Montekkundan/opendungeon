@@ -39,7 +39,7 @@ type PanelBounds = {
 
 export type ScreenId = "start" | "character" | "mode" | "saves" | "cloud" | "settings" | "controls" | "game"
 export type DialogId = "settings" | "inventory" | "quests" | "help" | "log" | "pause" | null
-export type InputMode = { field: "username" | "githubUsername" | "saveName"; draft: string } | null
+export type InputMode = { field: "username" | "githubUsername" | "saveName" | "characterName"; draft: string } | null
 
 export type DiceRollAnimation = {
   result: number
@@ -243,7 +243,7 @@ function drawStart(canvas: Canvas, model: AppModel) {
   const brandHeight = compact ? drawCompactBrand(canvas, brandY, width) : drawBrand(canvas, x, brandY, width, UI.bg)
   const summaryY = brandY + brandHeight + 1
   const profile = model.settings.username || "local-crawler"
-  canvas.center(summaryY, trim(`@${profile}  ${currentClass(model).name}  ${currentMode(model).name}  seed ${model.seed}`, width), UI.brass, UI.bg)
+  canvas.center(summaryY, trim(`${model.session.hero.name}  @${profile}  ${currentClass(model).name}  ${currentMode(model).name}  seed ${model.seed}`, width), UI.brass, UI.bg)
   if (!compact) canvas.center(summaryY + 2, trim(`local saves ${model.saves.length}   art ${activeAssetPack.name}   profile ${profilePath()}`, width), UI.soft, UI.bg)
 
   const cardW = Math.min(72, width)
@@ -277,14 +277,19 @@ function drawCharacter(canvas: Canvas, model: AppModel) {
   const { x, y, width, height } = centeredPanelBounds(canvas, 90, 28)
   drawPanel(canvas, x, y, width, height, "Choose Your Crawler", UI.gold)
 
-  const rowStep = Math.max(5, Math.floor((height - 7) / classOptions.length))
+  const editingName = model.inputMode?.field === "characterName"
+  const shownName = editingName ? `${model.inputMode?.draft ?? ""}_` : model.session.hero.name
+  drawInputField(canvas, x + 4, y + 3, width - 8, "Name", shownName, editingName)
+
+  const listY = y + 7
+  const rowStep = Math.max(5, Math.floor((height - 10) / classOptions.length))
   const cardH = clamp(rowStep, 4, 6)
   const spriteW = cardH >= 6 ? 15 : 12
   const spriteH = cardH >= 6 ? 5 : 4
   const textX = x + spriteW + 12
   classOptions.forEach((option, index) => {
     const selected = model.classIndex === index
-    const row = y + 4 + index * rowStep
+    const row = listY + index * rowStep
     const sprite = classSprite(option.id)
     const bg = selected ? UI.panel3 : UI.panel2
     drawSelectCard(canvas, x + 3, row - 1, width - 6, cardH, selected)
@@ -295,6 +300,7 @@ function drawCharacter(canvas: Canvas, model: AppModel) {
   })
 
   drawFooter(canvas, [
+    ["n", "name"],
     ["Enter", "confirm"],
     ["Esc", "title"],
   ])

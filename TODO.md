@@ -86,7 +86,7 @@
 ## Character Customization
 
 - [x] Profile name entry in settings.
-- [ ] Character name entry for each run.
+- [x] Character name entry for each run.
 - [ ] Portrait/class variants.
 - [ ] Starting loadouts.
 - [ ] Cosmetic palette selection.

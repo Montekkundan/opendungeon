@@ -14,6 +14,7 @@ type ProtocolRequest = {
   seed?: number
   mode?: HeadlessEnvOptions["mode"]
   classId?: HeadlessEnvOptions["classId"]
+  heroName?: string
   maxSteps?: number
   observationMode?: ObservationMode
   action?: HeadlessActionInput
@@ -64,6 +65,7 @@ export function handleProtocolRequest(env: HeadlessGameEnv, request: ProtocolReq
       seed: request.seed,
       mode: request.mode,
       classId: request.classId,
+      heroName: request.heroName,
       maxSteps: request.maxSteps,
       observationMode: request.observationMode,
     })

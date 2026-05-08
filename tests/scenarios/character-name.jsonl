@@ -1,0 +1,5 @@
+{"command":"set-hero-name","name":"Nyx Prime"}
+{"assert":{"path":"session.hero.name","equals":"Nyx Prime"}}
+{"action":"save"}
+{"assert":{"path":"saves.0.heroName","equals":"Nyx Prime"}}
+{"command":"check-invariants"}

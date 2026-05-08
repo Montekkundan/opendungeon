@@ -72,6 +72,7 @@ export type HeadlessEnvOptions = {
   seed?: number
   mode?: MultiplayerMode
   classId?: HeroClass
+  heroName?: string
   observationMode?: ObservationMode
   maxSteps?: number
   isolateStorage?: boolean
@@ -174,7 +175,7 @@ export class HeadlessGameEnv {
     this.observationMode = options.observationMode ?? "test"
     this.maxSteps = options.maxSteps ?? 500
     if (options.isolateStorage) this.enableIsolatedStorage()
-    this.session = createSession(options.seed, options.mode, options.classId)
+    this.session = createSession(options.seed, options.mode, options.classId, options.heroName)
   }
 
   close() {
@@ -186,7 +187,7 @@ export class HeadlessGameEnv {
     this.maxSteps = options.maxSteps ?? this.maxSteps
     this.steps = 0
     this.panel = null
-    this.session = createSession(options.seed, options.mode, options.classId)
+    this.session = createSession(options.seed, options.mode, options.classId, options.heroName)
     return {
       observation: this.observe(this.observationMode),
       info: this.infoFor("noop", true, zeroRewardTerms()),
@@ -543,6 +544,10 @@ export class HeadlessGameEnv {
 
   setGold(value: number) {
     this.session.gold = value
+  }
+
+  setHeroName(name: string) {
+    this.session.hero.name = name.replace(/[^\w .'-]/g, "").trim().slice(0, 24) || "Mira"
   }
 
   damagePlayer(amount: number) {

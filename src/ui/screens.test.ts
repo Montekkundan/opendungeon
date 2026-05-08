@@ -20,8 +20,16 @@ describe("terminal renderer snapshots", () => {
       width: 80,
       height: 24,
       model: modelFor("start", createSession(1234)),
-      expectedHash: "808eb354",
+      expectedHash: "0e5daf94",
       requiredText: ["OPENDUNGEON", "New descent", "Settings"],
+    },
+    {
+      name: "character",
+      width: 100,
+      height: 32,
+      model: modelFor("character", createSession(1234, "solo", "ranger", "Nyx Prime")),
+      expectedHash: "10a843dd",
+      requiredText: ["Choose Your Crawler", "Name", "Nyx Prime", "Ranger"],
     },
     {
       name: "skill-check",
