@@ -61,7 +61,7 @@
 - [x] Add Supabase schema migration with pgvector-backed lore memory table.
 - [ ] Replace the procedural admin patch fallback with Vercel Workflow model steps.
 - [ ] Persist generated world configs and event logs to Supabase for signed-in users.
-- [ ] Generate, store, and sample new sprite PNG assets through the `opendungeon-assets` bucket.
+- [x] Generate, store, and sample new sprite PNG assets through the `opendungeon-assets` bucket.
 - [x] Add a first-run server setup check for Supabase, AI Gateway, and storage configuration.
 
 ## Multiplayer

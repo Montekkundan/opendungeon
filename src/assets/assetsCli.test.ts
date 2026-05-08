@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { PNG } from "pngjs"
 import { formatAssetGenerateResult, formatAssetImportResult, runAssetsGenerate, runAssetsImport } from "./assetsCli.js"
 import { validateReferenceAssetImportManifest } from "./referenceImporter.js"
 
@@ -19,13 +20,16 @@ describe("assets CLI", () => {
   })
 
   test("generates and stores through injected dependencies", async () => {
+    const bytes = tinyPngBytes()
     const result = await runAssetsGenerate(["merchant", "--prompt", "merchant portrait"], {
-      generate: async (prompt) => ({ model: "test-model", mimeType: "image/png", bytes: new Uint8Array([1, 2, 3]), prompt }) as never,
+      generate: async () => ({ model: "test-model", mimeType: "image/png", bytes }),
       store: async (assetId, image) => ({ assetId, storagePath: `/tmp/${assetId}-${image.bytes.length}.png`, backend: "local" }),
     })
 
     expect(result.dryRun).toBe(false)
-    expect(result.asset?.storagePath).toBe("/tmp/merchant-3.png")
+    expect(result.asset?.storagePath).toBe(`/tmp/merchant-${bytes.length}.png`)
+    expect(result.sample?.colorCount).toBeGreaterThan(1)
+    expect(formatAssetGenerateResult(result)).toContain("sample:")
   })
 
   test("rejects missing asset id or prompt", async () => {
@@ -94,3 +98,21 @@ describe("assets CLI", () => {
     ])
   })
 })
+
+function tinyPngBytes() {
+  const png = new PNG({ width: 2, height: 2 })
+  const pixels = [
+    [255, 0, 0, 255],
+    [0, 255, 0, 255],
+    [0, 0, 255, 255],
+    [255, 255, 0, 255],
+  ]
+  pixels.forEach((pixel, index) => {
+    const offset = index << 2
+    png.data[offset] = pixel[0]
+    png.data[offset + 1] = pixel[1]
+    png.data[offset + 2] = pixel[2]
+    png.data[offset + 3] = pixel[3]
+  })
+  return new Uint8Array(PNG.sync.write(png))
+}

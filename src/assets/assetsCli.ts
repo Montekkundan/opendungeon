@@ -6,6 +6,7 @@ import {
   type ReferenceAssetImportOptions,
   type ReferenceAssetImportResult,
 } from "./referenceImporter.js"
+import { generatedSpriteSampleSummary, type GeneratedSpriteSample } from "./generatedSpriteSampler.js"
 
 type AssetCommandDeps = {
   generate: (prompt: string) => Promise<GeneratedImage>
@@ -17,6 +18,7 @@ export type AssetGenerateResult = {
   prompt: string
   dryRun: boolean
   asset?: StoredGeneratedAsset
+  sample?: GeneratedSpriteSample
 }
 
 const defaultDeps: AssetCommandDeps = {
@@ -56,7 +58,7 @@ export async function runAssetsGenerate(args: string[], deps: AssetCommandDeps =
 
   const image = await deps.generate(prompt)
   const asset = await deps.store(assetId, image)
-  return { assetId, prompt, dryRun, asset }
+  return { assetId, prompt, dryRun, asset, sample: generatedSpriteSampleSummary(image) }
 }
 
 export function runAssetsImport(args: string[]): ReferenceAssetImportResult {
@@ -79,7 +81,8 @@ export function formatAssetGenerateResult(result: AssetGenerateResult) {
     `assetId: ${result.assetId}`,
     `backend: ${result.asset?.backend ?? "unknown"}`,
     `path: ${result.asset?.storagePath ?? ""}`,
-  ].join("\n")
+    result.sample ? `sample: ${result.sample.width}x${result.sample.height} ${result.sample.colorCount} colors ${result.sample.hash}` : "",
+  ].filter(Boolean).join("\n")
 }
 
 export function formatAssetImportResult(result: ReferenceAssetImportResult) {
