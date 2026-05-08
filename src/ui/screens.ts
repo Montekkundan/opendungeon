@@ -499,7 +499,7 @@ function drawControls(canvas: Canvas, model: AppModel) {
   const rows = [
     ["Move", controlMoveText(model.settings.controlScheme)],
     ["Menus", "Arrows always work. WASD follows the selected control scheme."],
-    ["Combat", "Tab selects an enemy. 1-3 selects a skill. Enter rolls d20. F flees."],
+    ["Combat", "Tab selects an enemy. 1-6 selects a skill. Enter rolls d20. F flees."],
     ["Inventory", "I opens pack. Arrows select. Enter applies. Mouse can drag slots."],
     ["Quests", "J opens the quest journal. Use O instead when Vim movement is active."],
     ["Run", "R rests outside combat. Esc pauses. Ctrl+S/F5 saves locally."],
@@ -887,8 +887,9 @@ function drawKeyBadge(canvas: Canvas, x: number, y: number, key: string, active:
 }
 
 function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRollAnimation | null | undefined, settings: UserSettings) {
+  const minHeight = Math.max(24, 13 + combatSkills.length * 2)
   const width = Math.min(82, Math.max(58, Math.floor(canvas.width * 0.48)))
-  const height = Math.min(22, Math.max(20, canvas.height - gameQuickbarHeight(canvas) - 3))
+  const height = Math.min(30, Math.max(minHeight, canvas.height - gameQuickbarHeight(canvas) - 3))
   const x = Math.max(1, canvas.width - width - 2)
   const y = Math.max(1, canvas.height - gameQuickbarHeight(canvas) - height - 1)
   const targets = combatTargets(session)
@@ -901,7 +902,7 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
 
   drawPanel(canvas, x, y, width, height, "Turn Combat", UI.gold)
   canvas.write(x + 2, y + 2, "Tab target", UI.muted, UI.panel)
-  canvas.write(x + 15, y + 2, "1-3 skill", UI.muted, UI.panel)
+  canvas.write(x + 15, y + 2, "1-6 skill", UI.muted, UI.panel)
   canvas.write(x + 27, y + 2, "F flee", UI.muted, UI.panel)
   canvas.write(x + 36, y + 2, "Enter roll", UI.muted, UI.panel)
 
@@ -936,7 +937,7 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
     canvas.write(actionX + actionW - 4, row, `F${skill.cost}`, unavailable ? UI.hp : UI.muted, bg)
   })
 
-  const fleeY = y + 11
+  const fleeY = y + 5 + combatSkills.length * 2
   canvas.fill(actionX, fleeY, actionW, 1, " ", UI.panel2, UI.panel2)
   canvas.write(actionX + 2, fleeY, "F", UI.gold, UI.panel2)
   canvas.write(actionX + 5, fleeY, "Flee", UI.ink, UI.panel2)
@@ -1689,7 +1690,7 @@ function drawDialog(canvas: Canvas, model: AppModel) {
       ["Confirm", "Enter / Space"],
       ["Save", "Ctrl+S or F5 saves locally"],
       ["Pack", "I inventory, J quests, O quests in Vim mode, H potion, L log"],
-      ["Combat", "Tab target, 1-3 skill, F flee, Enter rolls d20"],
+      ["Combat", "Tab target, 1-6 skill, F flee, Enter rolls d20"],
       ["Camera", "- wider FOV, = closer view"],
       ["Overlay", "U hides or shows the UI for this run"],
       ["Run", "R rest, Esc pause, Q quit"],

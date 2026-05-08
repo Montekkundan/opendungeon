@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { existsSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { attemptFlee, combatModifier, createSession, performCombatAction, resolveSkillCheck, selectSkill, tryMove, usePotion } from "./session.js"
+import { attemptFlee, combatModifier, combatSkills, createSession, performCombatAction, resolveSkillCheck, selectSkill, tryMove, usePotion } from "./session.js"
 import type { GameSession } from "./session.js"
 import { setTile } from "./dungeon.js"
 import type { ActorId } from "./domainTypes.js"
@@ -78,6 +78,29 @@ describe("game session", () => {
     expect(session.combat.lastRoll?.d20).toBeLessThanOrEqual(20)
     expect(session.combat.lastRoll?.modifier).toBe(combatModifier(session, "strength"))
     expect(session.turn).toBe(1)
+  })
+
+  test("supports expanded combat skills beyond the original three slots", () => {
+    const session = createSession(1234)
+    const target = { x: session.player.x + 1, y: session.player.y }
+    setTile(session.dungeon, target, "floor")
+    session.stats.faith = 40
+    session.focus = session.maxFocus
+    session.dungeon.actors.push({
+      id: "test-necromancer",
+      kind: "necromancer",
+      position: target,
+      hp: 20,
+      damage: 0,
+    })
+
+    tryMove(session, 1, 0)
+    selectSkill(session, 3)
+    performCombatAction(session)
+
+    expect(combatSkills.length).toBeGreaterThanOrEqual(6)
+    expect(session.combat.lastRoll?.skill).toBe("Smite")
+    expect(session.combat.lastRoll?.modifier).toBe(combatModifier(session, "faith"))
   })
 
   test("enemies patrol until the player enters their aggro radius", () => {

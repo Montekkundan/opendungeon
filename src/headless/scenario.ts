@@ -108,6 +108,19 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
     ]
   }
 
+  if (name === "combat-skills") {
+    return [
+      { command: "set-relative-tile", dx: 1, dy: 0, tile: "floor" },
+      { command: "place-relative-actor", id: "script-necromancer", kind: "necromancer", dx: 1, dy: 0, hp: 20, damage: 0 },
+      { command: "set-stat", stat: "faith", value: 100 },
+      { action: "move-east" },
+      { action: "select-skill-3" },
+      { action: "combat-roll" },
+      { assert: { path: "session.combat.lastRoll.skill", equals: "Smite" } },
+      { command: "check-invariants" },
+    ]
+  }
+
   if (name === "skill-check") {
     return [
       { command: "set-relative-tile", dx: 1, dy: 0, tile: "potion" },

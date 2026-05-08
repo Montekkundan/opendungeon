@@ -96,7 +96,7 @@
 
 - [x] Enemy selection UI.
 - [x] Basic d20 combat actions.
-- [ ] More skills.
+- [x] More skills.
 - [ ] Status effects.
 - [ ] Initiative order.
 - [ ] Reactions and blocks.

@@ -32,7 +32,7 @@ export type Hero = {
   title: string
 }
 
-export type CombatSkillId = "strike" | "aimed-shot" | "arcane-burst"
+export type CombatSkillId = "strike" | "aimed-shot" | "arcane-burst" | "smite" | "shadow-hex" | "lucky-riposte"
 
 export type CombatSkill = {
   id: CombatSkillId
@@ -157,6 +157,33 @@ export const combatSkills: CombatSkill[] = [
     dc: 15,
     damage: 8,
     text: "High-risk focus spender.",
+  },
+  {
+    id: "smite",
+    name: "Smite",
+    stat: "faith",
+    cost: 1,
+    dc: 12,
+    damage: 4,
+    text: "Faith-driven strike with steady damage.",
+  },
+  {
+    id: "shadow-hex",
+    name: "Shadow Hex",
+    stat: "mind",
+    cost: 1,
+    dc: 12,
+    damage: 3,
+    text: "Careful occult pressure for high-mind crawlers.",
+  },
+  {
+    id: "lucky-riposte",
+    name: "Lucky Riposte",
+    stat: "luck",
+    cost: 1,
+    dc: 14,
+    damage: 6,
+    text: "Swingy counterattack that rewards lucky builds.",
   },
 ]
 

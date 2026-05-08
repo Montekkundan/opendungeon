@@ -488,7 +488,7 @@ function handleCombatKey(key: KeyEvent) {
     cycleTarget(model.session, -1)
     return
   }
-  if (key.name === "1" || key.name === "2" || key.name === "3") {
+  if (/^[1-6]$/.test(key.name)) {
     selectSkill(model.session, Number(key.name) - 1)
     return
   }
