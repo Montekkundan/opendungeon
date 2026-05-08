@@ -125,7 +125,7 @@
 
 ## Codebase Cleanup
 
-- [ ] Move sprite sampling into a dedicated `spriteSampler.ts`.
+- [x] Move sprite sampling into a dedicated `spriteSampler.ts`.
 - [ ] Split tests into session, save store, assets, d20, and UI suites only where it reduces maintenance.
 - [x] Add renderer screenshot/snapshot smoke tests.
 - [ ] Add debug overlays behind explicit flags only.

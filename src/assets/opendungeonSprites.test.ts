@@ -112,6 +112,8 @@ describe("opendungeon runtime sprites", () => {
     const pixelSpriteSource = readFileSync("src/assets/pixelSprites.ts", "utf8")
     expect(pixelSpriteSource.includes("proceduralActorSprite")).toBe(false)
     expect(pixelSpriteSource.includes("sourceActorSprite(id, animation, frame, width, height) ?? emptySprite(width, height)")).toBe(true)
+    expect(existsSync("src/assets/spriteSampler.ts")).toBe(true)
+    expect(pixelSpriteSource.includes("PNG.sync.read")).toBe(false)
   })
 })
 
