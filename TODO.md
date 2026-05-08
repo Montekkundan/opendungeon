@@ -128,6 +128,6 @@
 - [x] Move sprite sampling into a dedicated `spriteSampler.ts`.
 - [ ] Split tests into session, save store, assets, d20, and UI suites only where it reduces maintenance.
 - [x] Add renderer screenshot/snapshot smoke tests.
-- [ ] Add debug overlays behind explicit flags only.
+- [x] Add debug overlays behind explicit flags only.
 - [x] Move reference asset/cache import code out of `generate-opendungeon-assets.ts` once the asset manifest stabilizes.
 - [ ] Remove unnecessary test-case bloat.

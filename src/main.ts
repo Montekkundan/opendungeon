@@ -40,6 +40,7 @@ import { authHelpText, handleAuthCommand } from "./cloud/authCli.js"
 import { formatTerminalCapabilityReport, terminalCapabilityReport } from "./system/terminalDoctor.js"
 import { formatServerSetupReport, serverSetupReport } from "./system/serverSetupCheck.js"
 import { handleSetupCommand } from "./system/firstRunSetup.js"
+import { debugOverlaysEnabled } from "./system/debugFlags.js"
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`opendungeon ${version}
@@ -63,6 +64,7 @@ Environment:
   OPENDUNGEON_PROFILE_DIR  Override local profile/settings directory
   OPENDUNGEON_ASSET_DIR    Override bundled asset directory
   OPENDUNGEON_TILE_SCALE   overview | wide | medium | close
+  OPENDUNGEON_DEBUG_OVERLAY=1 enables debug map/console overlays
 
 ${authHelpText()}
 ${saveCommandHelp()}
@@ -111,7 +113,7 @@ const model: AppModel = {
   saves: initialSaves,
   saveIndex: 0,
   saveStatus: "",
-  debugView: env("OPENDUNGEON_DEBUG_VIEW", "DUNGEON_DEBUG_VIEW") === "1",
+  debugView: debugOverlaysEnabled(),
   rendererBackend: shouldUseThreeRenderer() ? "three" : "terminal",
   settings: initialSettings,
   settingsTabIndex: 0,
