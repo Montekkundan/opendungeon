@@ -4,6 +4,8 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createSession } from "./session.js"
 import { exportSave, importSave, listSaves, loadAutosave, loadSave, renameSave, saveAutosave, saveDirectory, saveSession, validateSave } from "./saveStore.js"
+import { defaultSettings, loadSettings, profilePath, saveSettings } from "./settingsStore.js"
+import { worldBundleDirectory } from "../world/worldConfig.js"
 
 describe("save store", () => {
   test("renames saves without changing run data", () => {
@@ -75,6 +77,55 @@ describe("save store", () => {
       expect(listed.thumbnail.length).toBeGreaterThan(0)
     })
   })
+
+  test("persists local saves and rehydrates fog of war sets", () => {
+    withSaveDirs(() => {
+      const session = createSession(4321, "race", "warden")
+      session.gold = 42
+      session.visible.add("1,2")
+      session.seen.add("3,4")
+
+      const summary = saveSession(session, "Test save")
+      const saves = listSaves()
+      const loaded = loadSave(summary.id)
+
+      expect(summary.path.startsWith(saveDirectory())).toBe(true)
+      expect(existsSync(worldBundleDirectory(session.world.worldId))).toBe(true)
+      expect(saves).toHaveLength(1)
+      expect(loaded.gold).toBe(42)
+      expect(loaded.mode).toBe("race")
+      expect(loaded.hero.classId).toBe("warden")
+      expect(loaded.stats.strength).toBe(session.stats.strength)
+      expect(loaded.visible.has("1,2")).toBe(true)
+      expect(loaded.seen.has("3,4")).toBe(true)
+      expect(loaded.dungeon.width).toBe(session.dungeon.width)
+      expect(loaded.world.worldId).toBe(session.world.worldId)
+      expect(loaded.worldLog[0].type).toBe("world-created")
+    })
+  })
+
+  test("persists local profile settings separately from saves", () => {
+    withProfileDir(() => {
+      saveSettings({
+        ...defaultSettings,
+        username: "dev-runner",
+        githubUsername: "terminal-host",
+        cloudProvider: "github",
+        highContrast: true,
+        reduceMotion: true,
+        controlScheme: "vim",
+      })
+
+      const loaded = loadSettings()
+
+      expect(profilePath().startsWith(process.env.OPENDUNGEON_PROFILE_DIR!)).toBe(true)
+      expect(loaded.username).toBe("dev-runner")
+      expect(loaded.githubUsername).toBe("terminal-host")
+      expect(loaded.cloudProvider).toBe("github")
+      expect(loaded.highContrast).toBe(true)
+      expect(loaded.controlScheme).toBe("vim")
+    })
+  })
 })
 
 function withSaveDirs(run: () => void) {
@@ -90,6 +141,19 @@ function withSaveDirs(run: () => void) {
     else process.env.OPENDUNGEON_SAVE_DIR = previousSaveDir
     if (previousWorldDir === undefined) delete process.env.OPENDUNGEON_WORLD_DIR
     else process.env.OPENDUNGEON_WORLD_DIR = previousWorldDir
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+function withProfileDir(run: () => void) {
+  const previousProfileDir = process.env.OPENDUNGEON_PROFILE_DIR
+  const dir = mkdtempSync(join(tmpdir(), "opendungeon-profile-test-"))
+  process.env.OPENDUNGEON_PROFILE_DIR = dir
+  try {
+    run()
+  } finally {
+    if (previousProfileDir === undefined) delete process.env.OPENDUNGEON_PROFILE_DIR
+    else process.env.OPENDUNGEON_PROFILE_DIR = previousProfileDir
     rmSync(dir, { recursive: true, force: true })
   }
 }
