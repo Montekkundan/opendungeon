@@ -1,11 +1,12 @@
 import { Hono } from "hono"
 import { checkAiGatewayImageModel, generateSpriteImage } from "../cloud/aiGateway.js"
 import { storeGeneratedSpriteAsset } from "../cloud/generatedAssets.js"
-import { createSupabaseServiceClient, supabaseConfig } from "../cloud/supabase.js"
+import { supabaseConfig } from "../cloud/supabase.js"
 import { createDungeon } from "../game/dungeon.js"
-import { createInitialWorldConfig, validateWorldConfig, worldAnchorsFromDungeonAnchors, writeWorldConfig } from "../world/worldConfig.js"
+import { createInitialWorldConfig, createWorldLogEntry, validateWorldConfig, worldAnchorsFromDungeonAnchors, writeWorldConfig } from "../world/worldConfig.js"
 import { createAdminGenerationRequest, createProceduralAdminPatch } from "../world/adminGenerator.js"
 import { aiAdminWorkflow } from "./workflows/aiAdminWorkflow.js"
+import { persistGeneratedWorldForUser } from "../cloud/worldPersistence.js"
 
 const app = new Hono()
 
@@ -27,7 +28,12 @@ app.post("/worlds", async (c) => {
   for (let floor = 1; floor <= finalFloor; floor++) anchors.push(...worldAnchorsFromDungeonAnchors(createDungeon(seed, floor).anchors))
   const world = createInitialWorldConfig(seed, anchors)
   writeWorldConfig(world)
-  await maybePersistWorld(world)
+  await persistGeneratedWorldForUser(world, [
+    createWorldLogEntry(world.worldId, 0, {
+      type: "world-created",
+      message: `Generated world ${world.worldId} from seed ${seed}.`,
+    }),
+  ])
   return c.json({ world })
 })
 
@@ -57,19 +63,6 @@ app.post("/assets/generated-sprites", async (c) => {
   const asset = await storeGeneratedSpriteAsset(assetId, image)
   return c.json({ asset })
 })
-
-async function maybePersistWorld(world: ReturnType<typeof createInitialWorldConfig>) {
-  const client = createSupabaseServiceClient()
-  const ownerId = process.env.OPENDUNGEON_SUPABASE_OWNER_ID
-  if (!client || !ownerId) return
-  await client.from("opendungeon_worlds").upsert({
-    id: world.worldId,
-    owner_id: ownerId,
-    seed: world.seed,
-    config: world,
-    generation: world.generation,
-  })
-}
 
 function integer(value: unknown, fallback: number) {
   const number = Number(value)
