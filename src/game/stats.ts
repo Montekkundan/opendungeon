@@ -1,6 +1,6 @@
 import type { HeroClass } from "./session.js"
 
-export const statIds = ["vigor", "mind", "endurance", "strength", "dexterity", "intelligence", "faith", "luck"] as const
+const statIds = ["vigor", "mind", "endurance", "strength", "dexterity", "intelligence", "faith", "luck"] as const
 
 export type StatId = (typeof statIds)[number]
 export type HeroStats = Record<StatId, number>
