@@ -925,6 +925,7 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
   canvas.write(x + 15, y + 2, "1-6 skill", UI.muted, UI.panel)
   canvas.write(x + 27, y + 2, "F flee", UI.muted, UI.panel)
   canvas.write(x + 36, y + 2, "Enter roll", UI.muted, UI.panel)
+  canvas.write(x + 2, y + 3, trim(`Round ${session.combat.round || 1}  Order ${formatInitiativeOrder(session)}`, width - 4), UI.brass, UI.panel)
 
   canvas.write(x + 2, y + 4, "Targets", UI.brass, UI.panel)
   const targetLimit = height < 21 ? 2 : 3
@@ -1823,6 +1824,14 @@ function label(kind: string) {
   if (kind === "slime") return "Slime"
   if (kind === "ghoul") return "Ghoul"
   return "Necromancer"
+}
+
+function formatInitiativeOrder(session: GameSession) {
+  const enemies = (session.combat.initiative ?? [])
+    .filter((entry) => entry.id !== "player")
+    .slice(0, 4)
+    .map((entry) => label(entry.kind))
+  return ["You", ...enemies].join(" > ")
 }
 
 function startHint(model: AppModel) {

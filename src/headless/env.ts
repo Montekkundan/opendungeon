@@ -807,6 +807,18 @@ export function validateHeadlessInvariants(session: GameSession): string[] {
   for (const event of session.world.events) {
     if (!worldAnchorIds.has(event.anchorId)) errors.push(`World event ${event.id} references missing anchor ${event.anchorId}.`)
   }
+
+  if (session.combat.active) {
+    const activeActorIds = new Set(session.combat.actorIds)
+    const initiativeIds = new Set((session.combat.initiative ?? []).map((entry) => entry.id))
+    if (!initiativeIds.has("player")) errors.push("Combat initiative is missing the player.")
+    for (const actorId of activeActorIds) {
+      if (!initiativeIds.has(actorId)) errors.push(`Combat initiative is missing actor ${actorId}.`)
+    }
+    for (const id of initiativeIds) {
+      if (id !== "player" && !activeActorIds.has(id)) errors.push(`Combat initiative references inactive actor ${id}.`)
+    }
+  }
   return errors
 }
 

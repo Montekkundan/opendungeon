@@ -104,6 +104,8 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
       { command: "set-stat", stat: "strength", value: 100 },
       { action: "move-east" },
       { assert: { path: "session.combat.active", equals: true } },
+      { assert: { path: "session.combat.round", equals: 1 } },
+      { assert: { path: "session.combat.initiative.length", min: 2 } },
       { action: "select-skill-0" },
       { action: "combat-roll" },
       { assert: { path: "session.kills", min: 1 } },

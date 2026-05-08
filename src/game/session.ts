@@ -88,11 +88,21 @@ export type CombatRoll = {
   target: string
 }
 
+export type CombatInitiativeEntry = {
+  id: "player" | string
+  kind: "player" | Actor["kind"]
+  roll: number
+  modifier: number
+  total: number
+}
+
 export type CombatState = {
   active: boolean
   actorIds: string[]
   selectedTarget: number
   selectedSkill: number
+  initiative: CombatInitiativeEntry[]
+  round: number
   lastRoll?: CombatRoll
   message: string
 }
@@ -354,6 +364,8 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
       actorIds: [],
       selectedTarget: 0,
       selectedSkill: 0,
+      initiative: [],
+      round: 0,
       message: "",
     },
     skillCheck: null,
@@ -530,8 +542,12 @@ export function normalizeSessionAfterLoad(session: GameSession): GameSession {
     actorIds: [],
     selectedTarget: 0,
     selectedSkill: 0,
+    initiative: [],
+    round: 0,
     message: "",
   }
+  session.combat.initiative = session.combat.active ? normalizeCombatInitiative(session, session.combat.initiative) : []
+  session.combat.round = session.combat.active ? Math.max(1, Math.floor(session.combat.round || 1)) : 0
   session.statusEffects = normalizeStatusEffects(session.statusEffects)
   session.world ??= createWorldForSeed(session.seed, session.finalFloor || 5)
   session.worldLog ??= []
@@ -558,6 +574,7 @@ export function combatTargets(session: GameSession): Actor[] {
   session.combat.actorIds = targets.map((actor) => actor.id)
   if (targets.length === 0) session.combat.selectedTarget = 0
   else session.combat.selectedTarget = clamp(session.combat.selectedTarget, 0, targets.length - 1)
+  syncCombatInitiative(session, targets)
 
   return targets
 }
@@ -748,10 +765,12 @@ function startCombat(session: GameSession, actors: Actor[]) {
     actorIds,
     selectedTarget: 0,
     selectedSkill: session.combat.selectedSkill,
+    initiative: rollCombatInitiative(session, actorIds),
+    round: 1,
     lastRoll: session.combat.lastRoll,
     message: "Initiative rolled. Choose target, choose skill, then roll d20.",
   }
-  session.log.unshift("Combat starts. The d20 waits.")
+  session.log.unshift(`Combat starts. ${initiativeSummary(session.combat.initiative)}.`)
   trimLog(session)
 }
 
@@ -759,6 +778,8 @@ function endCombat(session: GameSession, message: string) {
   session.combat.active = false
   session.combat.actorIds = []
   session.combat.selectedTarget = 0
+  session.combat.initiative = []
+  session.combat.round = 0
   session.combat.message = message
   session.log.unshift(message)
   trimLog(session)
@@ -965,6 +986,7 @@ function moveEnemies(session: GameSession) {
 function finishCombatRound(session: GameSession, enemiesAct: boolean) {
   if (enemiesAct) combatEnemyTurn(session)
   tickStatusEffects(session)
+  if (session.combat.active) session.combat.round += 1
   session.turn += 1
   revealAroundPlayer(session)
   if (session.hp <= 0) {
@@ -978,7 +1000,7 @@ function finishCombatRound(session: GameSession, enemiesAct: boolean) {
 }
 
 function combatEnemyTurn(session: GameSession) {
-  for (const actor of combatTargets(session)) {
+  for (const actor of combatTargetsInInitiativeOrder(session)) {
     ensureEnemyAi(actor, 0, session.floor).alerted = true
     if (manhattan(actor.position, session.player) === 1) {
       const weakened = statusEffectMagnitude(session, actor.id, "weakened")
@@ -993,6 +1015,100 @@ function combatEnemyTurn(session: GameSession) {
     const step = chaseStep(session, actor)
     if (step) actor.position = step
   }
+}
+
+function rollCombatInitiative(session: GameSession, actorIds: string[]): CombatInitiativeEntry[] {
+  const actors = actorIds
+    .map((id) => session.dungeon.actors.find((actor) => actor.id === id))
+    .filter((actor): actor is Actor => Boolean(actor))
+  return sortInitiative([
+    playerInitiativeEntry(session),
+    ...actors.map((actor) => actorInitiativeEntry(session, actor)),
+  ])
+}
+
+function normalizeCombatInitiative(session: GameSession, entries: CombatInitiativeEntry[] | undefined): CombatInitiativeEntry[] {
+  if (!Array.isArray(entries)) return rollCombatInitiative(session, session.combat.actorIds)
+  const actorIds = new Set(session.combat.actorIds)
+  const normalized = entries.flatMap((entry) => {
+    if (!entry || typeof entry.id !== "string") return []
+    if (entry.id !== "player" && !actorIds.has(entry.id)) return []
+    const roll = clamp(Math.floor(Number(entry.roll) || 1), 1, 20)
+    const modifier = Math.floor(Number(entry.modifier) || 0)
+    const kind = entry.id === "player" ? "player" : session.dungeon.actors.find((actor) => actor.id === entry.id)?.kind
+    if (!kind) return []
+    return [{ id: entry.id, kind, roll, modifier, total: roll + modifier }]
+  })
+  if (!normalized.some((entry) => entry.id === "player")) normalized.push(playerInitiativeEntry(session))
+  for (const actorId of actorIds) {
+    if (!normalized.some((entry) => entry.id === actorId)) {
+      const actor = session.dungeon.actors.find((candidate) => candidate.id === actorId)
+      if (actor) normalized.push(actorInitiativeEntry(session, actor))
+    }
+  }
+  return sortInitiative(normalized)
+}
+
+function syncCombatInitiative(session: GameSession, targets: Actor[]) {
+  if (!session.combat.active) return
+  const targetIds = new Set(targets.map((target) => target.id))
+  session.combat.initiative = sortInitiative(
+    session.combat.initiative.filter((entry) => entry.id === "player" || targetIds.has(entry.id)),
+  )
+  if (!session.combat.initiative.some((entry) => entry.id === "player")) session.combat.initiative.push(playerInitiativeEntry(session))
+  for (const target of targets) {
+    if (!session.combat.initiative.some((entry) => entry.id === target.id)) session.combat.initiative.push(actorInitiativeEntry(session, target))
+  }
+  session.combat.initiative = sortInitiative(session.combat.initiative)
+}
+
+function combatTargetsInInitiativeOrder(session: GameSession) {
+  const targets = combatTargets(session)
+  const order = new Map(session.combat.initiative.map((entry, index) => [entry.id, index]))
+  return [...targets].sort((left, right) => (order.get(left.id) ?? 99) - (order.get(right.id) ?? 99))
+}
+
+function playerInitiativeEntry(session: GameSession): CombatInitiativeEntry {
+  const roll = initiativeD20(session, "player")
+  const modifier = session.level + statModifier(session.stats.dexterity) + Math.max(0, Math.floor(statModifier(session.stats.luck) / 2))
+  return {
+    id: "player",
+    kind: "player",
+    roll,
+    modifier,
+    total: roll + modifier,
+  }
+}
+
+function actorInitiativeEntry(session: GameSession, actor: Actor): CombatInitiativeEntry {
+  const roll = initiativeD20(session, actor.id)
+  const modifier = enemyDefenseBonus(actor.kind) + Math.max(0, (actor.phase ?? 1) - 1)
+  return {
+    id: actor.id,
+    kind: actor.kind,
+    roll,
+    modifier,
+    total: roll + modifier,
+  }
+}
+
+function sortInitiative(entries: CombatInitiativeEntry[]) {
+  return [...entries].sort((left, right) => {
+    if (right.total !== left.total) return right.total - left.total
+    if (right.roll !== left.roll) return right.roll - left.roll
+    return initiativeTieBreaker(left) - initiativeTieBreaker(right)
+  })
+}
+
+function initiativeTieBreaker(entry: CombatInitiativeEntry) {
+  if (entry.id === "player") return -1
+  return entry.id.split("").reduce((total, char) => total + char.charCodeAt(0), 0)
+}
+
+function initiativeSummary(entries: CombatInitiativeEntry[]) {
+  const enemies = entries.filter((entry) => entry.id !== "player").slice(0, 3).map((entry) => label(entry.kind as Actor["kind"]))
+  const order = ["You", ...enemies].join(" > ")
+  return `Initiative: ${order}`
 }
 
 function applyCombatSkillEffect(session: GameSession, skill: CombatSkill, target: Actor) {
@@ -1223,6 +1339,12 @@ function rollD20(session: GameSession, skill: CombatSkill, target: Actor) {
 function rollFleeD20(session: GameSession, targets: Actor[]) {
   const targetSalt = targets.reduce((total, target) => total + target.id.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0), 0)
   const value = session.seed * 134775813 + session.floor * 9127 + session.turn * 4567 + session.player.x * 313 + session.player.y * 733 + targetSalt
+  return (Math.abs(value) % 20) + 1
+}
+
+function initiativeD20(session: GameSession, id: string) {
+  const salt = id.split("").reduce((total, char) => total + char.charCodeAt(0), id === "player" ? 17 : 0)
+  const value = session.seed * 1664525 + session.floor * 1013904223 + session.turn * 22695477 + salt * 1109
   return (Math.abs(value) % 20) + 1
 }
 

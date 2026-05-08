@@ -98,7 +98,7 @@
 - [x] Basic d20 combat actions.
 - [x] More skills.
 - [x] Status effects.
-- [ ] Initiative order.
+- [x] Initiative order.
 - [ ] Reactions and blocks.
 - [x] Area-of-effect targeting.
 - [x] Boss phase transitions.

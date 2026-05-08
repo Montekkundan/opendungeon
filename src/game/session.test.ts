@@ -35,6 +35,15 @@ function addEnemyBesidePlayer(session: GameSession, id: string, kind: ActorId, h
   return target
 }
 
+function startTwoEnemyFight(session: GameSession) {
+  addEnemyBesidePlayer(session, "initiative-slime", "slime", 20, 1)
+  const second = { x: session.player.x, y: session.player.y + 1 }
+  setTile(session.dungeon, second, "floor")
+  session.dungeon.actors.push({ id: "initiative-ghoul", kind: "ghoul", position: second, hp: 20, damage: 1 })
+  tryMove(session, 1, 0)
+  return session.combat.initiative.map((entry) => ({ id: entry.id, roll: entry.roll, modifier: entry.modifier, total: entry.total }))
+}
+
 describe("game session", () => {
   test("creates a seeded dungeon with a reachable player start", () => {
     const session = createSession(1234, "solo", "ranger", "Nyx Prime")
@@ -128,6 +137,22 @@ describe("game session", () => {
     expect(session.combat.active).toBe(true)
     expect(session.combat.actorIds).toContain("test-slime")
     expect(session.log[0]).toContain("Combat starts")
+  })
+
+  test("rolls deterministic initiative order on combat start", () => {
+    const left = createSession(1234)
+    const right = createSession(1234)
+
+    const leftOrder = startTwoEnemyFight(left)
+    const rightOrder = startTwoEnemyFight(right)
+
+    expect(leftOrder).toEqual(rightOrder)
+    expect(left.combat.round).toBe(1)
+    expect(left.combat.initiative.map((entry) => entry.id)).toContain("player")
+    expect(left.combat.initiative.map((entry) => entry.id)).toContain("initiative-slime")
+    expect(left.combat.initiative.map((entry) => entry.id)).toContain("initiative-ghoul")
+    expect(left.combat.initiative.every((entry) => entry.roll >= 1 && entry.roll <= 20)).toBe(true)
+    expect(left.log[0]).toContain("Initiative:")
   })
 
   test("combat action rolls d20 against selected target", () => {

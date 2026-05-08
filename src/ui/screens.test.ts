@@ -44,8 +44,8 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: combatModel(),
-      expectedHash: "e5c4f390",
-      requiredText: ["Turn Combat", "Shado", "Necroman"],
+      expectedHash: "50d6689f",
+      requiredText: ["Turn Combat", "Order", "Shado", "Necroman"],
     },
     {
       name: "settings",
