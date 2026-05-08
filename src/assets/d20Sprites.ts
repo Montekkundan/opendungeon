@@ -1,6 +1,7 @@
 import { defaultDiceSkin, diceSkins, type DiceSkin, type DiceSkinId, type Rgb } from "./diceSkins.js"
 import { diceFrameCount } from "./opendungeonSprites.js"
-import type { PixelCell, PixelSprite } from "./pixelSprites.js"
+import type { PixelSprite } from "./pixelSprites.js"
+import { drawLine, fillPolygon, fillRect, makeVirtual, spriteFromVirtual } from "./virtualSprites.js"
 
 const resultCount = 20
 const cache = new Map<string, PixelSprite>()
@@ -24,7 +25,7 @@ export function d20FrameCount() {
 function drawD20(result: number, frame: number, width: number, height: number, skin: DiceSkin): PixelSprite {
   const virtualWidth = Math.max(1, width)
   const virtualHeight = Math.max(1, height * 2)
-  const pixels = Array.from<string | undefined>({ length: virtualWidth * virtualHeight })
+  const pixels = makeVirtual(virtualWidth, virtualHeight)
   const cx = (virtualWidth - 1) / 2
   const cy = (virtualHeight - 1) / 2
   const wobble = Math.sin((frame / Math.max(1, diceFrameCount - 1)) * Math.PI * 2)
@@ -45,16 +46,16 @@ function drawD20(result: number, frame: number, width: number, height: number, s
   fillPolygon(pixels, virtualWidth, virtualHeight, [left, bottom, right, center], color(skin.shadow))
 
   const edge = color(skin.shadow)
-  drawLine(pixels, virtualWidth, virtualHeight, top, leftTop, edge)
-  drawLine(pixels, virtualWidth, virtualHeight, top, rightTop, edge)
-  drawLine(pixels, virtualWidth, virtualHeight, leftTop, left, edge)
-  drawLine(pixels, virtualWidth, virtualHeight, rightTop, right, edge)
-  drawLine(pixels, virtualWidth, virtualHeight, left, bottom, edge)
-  drawLine(pixels, virtualWidth, virtualHeight, right, bottom, edge)
-  drawLine(pixels, virtualWidth, virtualHeight, bottom, center, color(skin.dark))
-  drawLine(pixels, virtualWidth, virtualHeight, center, top, color(skin.light))
-  drawLine(pixels, virtualWidth, virtualHeight, leftTop, center, color(skin.base))
-  drawLine(pixels, virtualWidth, virtualHeight, rightTop, center, color(skin.light))
+  drawEdge(pixels, virtualWidth, virtualHeight, top, leftTop, edge)
+  drawEdge(pixels, virtualWidth, virtualHeight, top, rightTop, edge)
+  drawEdge(pixels, virtualWidth, virtualHeight, leftTop, left, edge)
+  drawEdge(pixels, virtualWidth, virtualHeight, rightTop, right, edge)
+  drawEdge(pixels, virtualWidth, virtualHeight, left, bottom, edge)
+  drawEdge(pixels, virtualWidth, virtualHeight, right, bottom, edge)
+  drawEdge(pixels, virtualWidth, virtualHeight, bottom, center, color(skin.dark))
+  drawEdge(pixels, virtualWidth, virtualHeight, center, top, color(skin.light))
+  drawEdge(pixels, virtualWidth, virtualHeight, leftTop, center, color(skin.base))
+  drawEdge(pixels, virtualWidth, virtualHeight, rightTop, center, color(skin.light))
 
   drawNumber(pixels, virtualWidth, virtualHeight, String(result), color(skin.ink), virtualWidth >= 18 && virtualHeight >= 16 ? 2 : 1)
   return spriteFromVirtual(pixels, virtualWidth, height)
@@ -92,65 +93,8 @@ const digitGlyphs: Record<string, string[]> = {
   "9": ["111", "101", "111", "001", "111"],
 }
 
-function fillRect(pixels: Array<string | undefined>, width: number, height: number, x: number, y: number, w: number, h: number, fill: string) {
-  for (let py = Math.floor(y); py < Math.ceil(y + h); py++) {
-    for (let px = Math.floor(x); px < Math.ceil(x + w); px++) setVirtual(pixels, width, height, px, py, fill)
-  }
-}
-
-function fillPolygon(pixels: Array<string | undefined>, width: number, height: number, points: Point[], fill: string) {
-  const minX = Math.floor(Math.min(...points.map((point) => point[0])))
-  const maxX = Math.ceil(Math.max(...points.map((point) => point[0])))
-  const minY = Math.floor(Math.min(...points.map((point) => point[1])))
-  const maxY = Math.ceil(Math.max(...points.map((point) => point[1])))
-  for (let y = minY; y <= maxY; y++) {
-    for (let x = minX; x <= maxX; x++) if (insidePolygon(x + 0.5, y + 0.5, points)) setVirtual(pixels, width, height, x, y, fill)
-  }
-}
-
-function drawLine(pixels: Array<string | undefined>, width: number, height: number, a: Point, b: Point, fill: string) {
-  const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1])))
-  for (let step = 0; step <= steps; step++) {
-    const t = step / steps
-    setVirtual(pixels, width, height, a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, fill)
-  }
-}
-
-function setVirtual(pixels: Array<string | undefined>, width: number, height: number, x: number, y: number, fill: string) {
-  const px = Math.round(x)
-  const py = Math.round(y)
-  if (px < 0 || py < 0 || px >= width || py >= height) return
-  pixels[py * width + px] = fill
-}
-
-function spriteFromVirtual(pixels: Array<string | undefined>, width: number, height: number): PixelSprite {
-  const cells: PixelCell[][] = []
-  for (let row = 0; row < height; row++) {
-    const cellsRow: PixelCell[] = []
-    for (let col = 0; col < width; col++) {
-      const top = pixels[row * 2 * width + col]
-      const bottom = pixels[(row * 2 + 1) * width + col]
-      if (top && bottom) cellsRow.push({ ch: "▀", fg: top, bg: bottom })
-      else if (top) cellsRow.push({ ch: "▀", fg: top })
-      else if (bottom) cellsRow.push({ ch: "▄", fg: bottom })
-      else cellsRow.push({ ch: " ", fg: "#000000" })
-    }
-    cells.push(cellsRow)
-  }
-  return { width, height, cells }
-}
-
-function insidePolygon(x: number, y: number, points: Point[]) {
-  let inside = false
-  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
-    const xi = points[i]?.[0] ?? 0
-    const yi = points[i]?.[1] ?? 0
-    const xj = points[j]?.[0] ?? 0
-    const yj = points[j]?.[1] ?? 0
-    const intersect = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi || 1) + xi
-    if (intersect) inside = !inside
-  }
-  return inside
+function drawEdge(pixels: Array<string | undefined>, width: number, height: number, a: Point, b: Point, fill: string) {
+  drawLine(pixels, width, height, a[0], a[1], b[0], b[1], fill)
 }
 
 function color(rgb: Rgb) {

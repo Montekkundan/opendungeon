@@ -1,0 +1,50 @@
+const dict = {
+  "app.meta.description": "opendungeon - A terminal roguelike with deterministic worlds and AI-admin generated content.",
+
+  "nav.home": "Home",
+  "nav.docs": "Docs",
+  "nav.github": "GitHub",
+  "nav.login": "Login",
+  "nav.openMenu": "Open menu",
+
+  "home.title": "opendungeon | Terminal RPG with AI-admin worlds",
+  "home.banner.badge": "New",
+  "home.banner.text": "AI-admin architecture is now landing in the terminal client",
+  "home.banner.link": "Read the docs",
+  "home.hero.title": "A terminal dungeon that remembers what you do",
+  "home.hero.subtitle.a": "Seeded runs stay deterministic, while validated AI content patches add quests, bosses, loot, lore, and sprites.",
+  "home.hero.subtitle.b": "Play locally first, then sync worlds through Supabase when you are ready.",
+  "home.install.ariaLabel": "Install options",
+  "home.install.bun": "bun add -g @montekkundan/opendungeon",
+  "home.install.run": "opendungeon",
+  "home.install.login": "opendungeon login test",
+  "home.install.github": "opendungeon --login github",
+  "home.what.title": "What is opendungeon?",
+  "home.what.body": "opendungeon is a terminal roguelike built with OpenTUI. The engine owns the rules; the AI admin proposes validated world config patches.",
+  "home.what.seeded.title": "Seeded worlds",
+  "home.what.seeded.body": "Share a seed and replay the same dungeon layout.",
+  "home.what.ai.title": "AI-admin content",
+  "home.what.ai.body": "Events and quests expand after milestone progress without breaking deterministic gameplay.",
+  "home.what.assets.title": "Runtime assets",
+  "home.what.assets.body": "Sprites and terminal variants are stored as opendungeon assets.",
+  "home.what.docs": "Open docs",
+  "home.preview.title": "Cloud-backed, local-playable",
+  "home.preview.body": "Supabase handles auth and world storage. Vercel Workflow handles durable generation. SpacetimeDB is reserved for a later multiplayer phase.",
+
+  "docs.title": "opendungeon Docs",
+  "docs.heading": "Docs",
+  "docs.intro": "These docs cover the current architecture milestone and the commands needed to try it locally.",
+  "docs.quickstart.title": "Quickstart",
+  "docs.quickstart.install": "Install dependencies with bun install.",
+  "docs.quickstart.play": "Run bun run dev to start the terminal game.",
+  "docs.quickstart.login": "Use the local test login: OPENDUNGEON_PASSWORD=opendungeon bun src/main.ts login test.",
+  "docs.arch.title": "Architecture",
+  "docs.arch.engine": "The game engine is deterministic and authoritative.",
+  "docs.arch.admin": "The AI admin only writes validated WorldConfig patches.",
+  "docs.arch.storage": "World config and player action logs are separate files and can be persisted to Supabase.",
+  "docs.links.title": "Useful Links",
+} as const
+
+export type EnKey = keyof typeof dict
+export type EnDict = Record<EnKey, string>
+export const enDict = dict

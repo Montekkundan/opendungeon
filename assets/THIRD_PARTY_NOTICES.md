@@ -10,4 +10,4 @@ opendungeon code is MIT licensed. Some bundled game art is third-party pixel art
   - License summary from the asset page: use in commercial or non-commercial projects allowed, reselling or redistributing the asset pack is not allowed.
 - Samurai 2D Pixel Art by Mattz Art: https://xzany.itch.io/samurai-2d-pixel-art
   - Used files: free Samurai runtime sprites.
-  - See assets/itch/samurai-free/LICENSE.txt.
+  - See assets/opendungeon-assets/samurai-free/LICENSE.txt.

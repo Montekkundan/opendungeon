@@ -11,6 +11,17 @@ import {
   type HeroStats,
   type StatId,
 } from "./stats.js"
+import {
+  completeFirstMatchingWorldEvent,
+  createInitialWorldConfig,
+  createWorldLogEntry,
+  worldAnchorsFromDungeonAnchors,
+  type WorldConfig,
+  type WorldEvent,
+  type WorldEventType,
+  type WorldLogEntry,
+} from "../world/worldConfig.js"
+import { clamp, wrap } from "../shared/numeric.js"
 
 export type MultiplayerMode = "solo" | "coop" | "race"
 export type HeroClass = "warden" | "arcanist" | "ranger"
@@ -108,6 +119,9 @@ export type GameSession = {
   seen: Set<string>
   combat: CombatState
   skillCheck: SkillCheckState | null
+  world: WorldConfig
+  worldLog: WorldLogEntry[]
+  pendingWorldGeneration: boolean
 }
 
 const heroTitles: Record<HeroClass, string> = {
@@ -151,6 +165,8 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
   const stats = statsForClass(classId)
   const maxHp = derivedMaxHp(stats)
   const maxFocus = derivedMaxFocus(stats)
+  const finalFloor = 5
+  const world = createWorldForSeed(seed, finalFloor)
   const session: GameSession = {
     mode,
     hero: {
@@ -175,7 +191,7 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
     xp: 0,
     level: 1,
     kills: 0,
-    finalFloor: 5,
+    finalFloor,
     visible: new Set(),
     seen: new Set(),
     combat: {
@@ -186,6 +202,14 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
       message: "",
     },
     skillCheck: null,
+    world,
+    worldLog: [
+      createWorldLogEntry(world.worldId, 0, {
+        type: "world-created",
+        message: `World ${world.worldId} created from seed ${seed}.`,
+      }),
+    ],
+    pendingWorldGeneration: false,
   }
   revealAroundPlayer(session)
   return session
@@ -338,6 +362,9 @@ export function normalizeSessionAfterLoad(session: GameSession): GameSession {
     selectedSkill: 0,
     message: "",
   }
+  session.world ??= createWorldForSeed(session.seed, session.finalFloor || 5)
+  session.worldLog ??= []
+  session.pendingWorldGeneration = Boolean(session.pendingWorldGeneration)
   session.dungeon.actors.forEach((actor, index) => ensureEnemyAi(actor, index, session.floor))
   return session
 }
@@ -521,11 +548,13 @@ function endCombat(session: GameSession, message: string) {
 }
 
 function defeatActor(session: GameSession, actor: Actor) {
+  const position = { ...actor.position }
   removeActor(session.dungeon.actors, actor)
   session.kills += 1
   session.xp += xpFor(actor.kind)
   session.log.unshift(defeatMessage(actor.kind))
   maybeLevelUp(session)
+  completeWorldProgress(session, actor.kind === "necromancer" ? "boss" : "enemy", position, defeatMessage(actor.kind))
 }
 
 function defeatMessage(kind: Actor["kind"]) {
@@ -587,6 +616,7 @@ function applySkillCheckConsequence(session: GameSession, check: SkillCheckState
   setTile(session.dungeon, check.point, "floor")
   if (roll.success) applySkillCheckSuccess(session, check)
   else applySkillCheckFailure(session, check)
+  completeWorldProgress(session, "loot", check.point, `${check.title}: ${roll.success ? "success" : "failure"}.`)
   session.log.unshift(`${check.title}: ${roll.success ? "success" : "failure"} (${roll.total}/${roll.dc}).`)
   trimLog(session)
 }
@@ -662,6 +692,7 @@ function descend(session: GameSession) {
   session.hp = Math.min(session.maxHp, session.hp + 3)
   session.focus = Math.min(session.maxFocus, session.focus + 2)
   revealAroundPlayer(session)
+  completeWorldProgress(session, "biome", session.player, `Reached floor ${session.floor}.`)
   session.log.unshift(`Floor ${session.floor}. Same seed, darker shape.`)
 }
 
@@ -889,6 +920,59 @@ function hasFinalGuardian(session: GameSession) {
   return session.dungeon.actors.some((actor) => actor.id === "final-guardian")
 }
 
+function createWorldForSeed(seed: number, finalFloor: number) {
+  const anchors = []
+  for (let floor = 1; floor <= finalFloor; floor++) {
+    anchors.push(...worldAnchorsFromDungeonAnchors(createDungeon(seed, floor).anchors))
+  }
+  return createInitialWorldConfig(seed, anchors)
+}
+
+function completeWorldProgress(session: GameSession, type: WorldEventType, point: Point, message: string) {
+  const event = completeFirstMatchingWorldEvent(session.world, type, nearestWorldAnchorId(session, point)) ?? completeFirstMatchingWorldEvent(session.world, type)
+  if (!event) return
+  session.worldLog.push(
+    createWorldLogEntry(session.world.worldId, session.turn, {
+      type: "event-completed",
+      message,
+      eventId: event.id,
+      metadata: { eventType: event.type, completed: completedWorldEventCount(session.world) },
+    }),
+  )
+  queueWorldMilestones(session, event)
+}
+
+function queueWorldMilestones(session: GameSession, event: WorldEvent) {
+  const completed = completedWorldEventCount(session.world)
+  while (completed >= session.world.nextMilestoneAt) {
+    const milestone = session.world.nextMilestoneAt
+    session.world.nextMilestoneAt += 20
+    session.pendingWorldGeneration = true
+    const message = `AI admin generation queued after ${milestone} completed events.`
+    session.log.unshift(message)
+    session.worldLog.push(
+      createWorldLogEntry(session.world.worldId, session.turn, {
+        type: "milestone-queued",
+        message,
+        eventId: event.id,
+        metadata: { milestone, completed },
+      }),
+    )
+  }
+}
+
+function completedWorldEventCount(world: WorldConfig) {
+  return world.events.filter((event) => event.status === "completed").length
+}
+
+function nearestWorldAnchorId(session: GameSession, point: Point) {
+  const floorAnchors = session.world.anchors.filter((anchor) => anchor.floor === session.floor)
+  if (!floorAnchors.length) return undefined
+  return floorAnchors
+    .map((anchor) => ({ anchor, distance: manhattan(anchor.position, point) }))
+    .sort((left, right) => left.distance - right.distance || left.anchor.roomIndex - right.anchor.roomIndex)[0]?.anchor.id
+}
+
 function trimLog(session: GameSession) {
   while (session.log.length > 8) session.log.pop()
 }
@@ -938,12 +1022,4 @@ function hasLineOfSight(session: GameSession, target: Point) {
 
 export function pointKey(point: Point) {
   return `${point.x},${point.y}`
-}
-
-function wrap(value: number, count: number) {
-  return (value + count) % count
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value))
 }

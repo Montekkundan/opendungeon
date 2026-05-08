@@ -1,11 +1,11 @@
 import type { ActorId, TileId } from "../game/domainTypes.js"
 
-export type GlyphStyle = {
+type GlyphStyle = {
   glyph: string
   fg: string
 }
 
-export type AssetPack = {
+type AssetPack = {
   id: string
   name: string
   mood: "dark-serious" | "clean" | "custom"
@@ -19,15 +19,15 @@ export type AssetPack = {
   actors: Record<ActorId, GlyphStyle>
 }
 
-export const opendungeonPack: AssetPack = {
+const opendungeonPack: AssetPack = {
   id: "opendungeon",
-  name: "Itch runtime",
+  name: "opendungeon assets runtime",
   mood: "custom",
   tileSize: 100,
-  sourceUrl: "runtime://itch-cache-and-procedural-terminal-sprites",
-  license: "Runtime renderer uses locally cached free Itch sources where present; procedural terminal sprites for terrain, items, and dice.",
+  sourceUrl: "runtime://opendungeon-assets-and-procedural-terminal-sprites",
+  license: "Runtime renderer uses locally cached third-party sources where present; procedural terminal sprites for terrain, items, and dice.",
   author: "Zerie, Xzany, MonopixelArt, opendungeon",
-  previewPath: ".asset-cache/itch/extracted/zerie/Tiny RPG Character Asset Pack v1.03 -Free Soldier&Orc/Characters(100x100)/Soldier/Soldier/Soldier-Idle.png",
+  previewPath: ".asset-cache/opendungeon-assets/extracted/zerie/Tiny RPG Character Asset Pack v1.03 -Free Soldier&Orc/Characters(100x100)/Soldier/Soldier/Soldier-Idle.png",
   tiles: {
     void: { glyph: " ", fg: "#05070a" },
     floor: { glyph: ".", fg: "#5b6f76" },
@@ -46,11 +46,11 @@ export const opendungeonPack: AssetPack = {
   },
 }
 
-export const assetPacks = {
+const assetPacks = {
   opendungeon: opendungeonPack,
 } as const
 
-export type AssetPackId = keyof typeof assetPacks
+type AssetPackId = keyof typeof assetPacks
 
-export const activeAssetPackId: AssetPackId = "opendungeon"
+const activeAssetPackId: AssetPackId = "opendungeon"
 export const activeAssetPack = assetPacks[activeAssetPackId]

@@ -1,4 +1,4 @@
-import { FrameBufferRenderable, createCliRenderer, type KeyEvent } from "@opentui/core"
+import { FrameBufferRenderable, createCliRenderer, type KeyEvent, type MouseEvent as OpenTuiMouseEvent } from "@opentui/core"
 import {
   createSession,
   cycleTarget,
@@ -23,12 +23,15 @@ import {
   currentMode,
   currentStartItem,
   currentSettingItem,
+  inventoryGridInfo,
+  inventoryHitTest,
   moveSelection,
   moveSettingsTab,
   paint,
   type AppModel,
 } from "./ui/screens.js"
 import { shouldUseThreeRenderer } from "./rendering/threeAssets.js"
+import { authHelpText, handleAuthCommand } from "./cloud/authCli.js"
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`opendungeon ${version}
@@ -36,15 +39,19 @@ if (process.argv.includes("--help") || process.argv.includes("-h")) {
 Terminal roguelike RPG built with OpenTUI.
 
 Usage:
-  opendungeon              Start the game
-  opendungeon --help       Show this help
-  opendungeon --version    Show the version
+  opendungeon                   Start the game
+  opendungeon login <username>  Prompt for a password and save an auth session
+  opendungeon --login github    Open Supabase GitHub OAuth
+  opendungeon --help            Show this help
+  opendungeon --version         Show the version
 
 Environment:
   OPENDUNGEON_SAVE_DIR     Override local save directory
   OPENDUNGEON_PROFILE_DIR  Override local profile/settings directory
   OPENDUNGEON_ASSET_DIR    Override bundled asset directory
   OPENDUNGEON_TILE_SCALE   overview | wide | medium | close
+
+${authHelpText()}
 `)
   process.exit(0)
 }
@@ -53,6 +60,9 @@ if (process.argv.includes("--version") || process.argv.includes("-v")) {
   console.log(`opendungeon ${version}`)
   process.exit(0)
 }
+
+const authExitCode = await handleAuthCommand(process.argv.slice(2))
+if (authExitCode !== null) process.exit(authExitCode)
 
 const initialSaves = listSaves()
 const initialSettings = loadSettings()
@@ -77,6 +87,9 @@ const model: AppModel = {
   settingsReturnScreen: "start",
   inputMode: null,
   uiHidden: !initialSettings.showUi,
+  inventoryIndex: 0,
+  inventoryDragIndex: null,
+  questIndex: 0,
   diceRollAnimation: null,
 }
 let submittedSession: GameSession | null = null
@@ -89,6 +102,8 @@ const renderer = await createCliRenderer({
   screenMode: "alternate-screen",
   targetFps: 30,
   maxFps: 30,
+  useMouse: true,
+  enableMouseMovement: true,
   consoleMode: model.debugView ? "console-overlay" : "disabled",
   openConsoleOnError: model.debugView,
   backgroundColor: "#071014",
@@ -102,6 +117,9 @@ const screen = new FrameBufferRenderable(renderer, {
   top: 0,
   width: renderer.terminalWidth,
   height: renderer.terminalHeight,
+  onMouseDown: handleMouseDown,
+  onMouseDrag: handleMouseDrag,
+  onMouseDragEnd: handleMouseDragEnd,
 })
 
 renderer.root.add(screen)
@@ -151,6 +169,16 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
 })
 
 function handleDialogKey(key: KeyEvent) {
+  if (model.dialog === "inventory") {
+    handleInventoryKey(key)
+    return
+  }
+
+  if (model.dialog === "quests") {
+    handleQuestsKey(key)
+    return
+  }
+
   if (model.dialog === "pause" && key.name === "s") {
     model.dialog = null
     openSettings("game")
@@ -168,6 +196,121 @@ function handleDialogKey(key: KeyEvent) {
     return
   }
   if (key.name === "escape" || key.name === "return" || key.name === "enter" || key.name === "linefeed") model.dialog = null
+}
+
+function handleInventoryKey(key: KeyEvent) {
+  if (key.name === "escape") {
+    closeInventory()
+    return
+  }
+
+  const grid = inventoryGridInfo(model, renderer.terminalWidth, renderer.terminalHeight)
+  if (isLeftKey(key)) setInventoryIndex(model.inventoryIndex - 1)
+  if (isRightKey(key)) setInventoryIndex(model.inventoryIndex + 1)
+  if (isUpKey(key)) setInventoryIndex(model.inventoryIndex - grid.columns)
+  if (isDownKey(key)) setInventoryIndex(model.inventoryIndex + grid.columns)
+  if (isConfirmKey(key)) applySelectedInventoryItem()
+}
+
+function handleQuestsKey(key: KeyEvent) {
+  const max = Math.max(0, model.session.world.quests.length - 1)
+  if (key.name === "escape" || isConfirmKey(key)) {
+    model.dialog = null
+    return
+  }
+  if (isUpKey(key)) model.questIndex = clamp(model.questIndex - 1, 0, max)
+  if (isDownKey(key)) model.questIndex = clamp(model.questIndex + 1, 0, max)
+  if (key.name === "pageup") model.questIndex = clamp(model.questIndex - 5, 0, max)
+  if (key.name === "pagedown") model.questIndex = clamp(model.questIndex + 5, 0, max)
+}
+
+function handleMouseDown(event: OpenTuiMouseEvent) {
+  if (model.dialog !== "inventory") return
+  const hit = inventoryHitTest(model, renderer.terminalWidth, renderer.terminalHeight, event.x, event.y)
+  if (!hit) return
+  event.preventDefault()
+  event.stopPropagation()
+
+  if (hit.kind === "close") closeInventory()
+  if (hit.kind === "apply") applySelectedInventoryItem()
+  if (hit.kind === "slot") {
+    setInventoryIndex(hit.index)
+    model.inventoryDragIndex = model.session.inventory[hit.index] ? hit.index : null
+  }
+  refresh()
+}
+
+function handleMouseDrag(event: OpenTuiMouseEvent) {
+  if (model.dialog !== "inventory" || model.inventoryDragIndex === null) return
+  const hit = inventoryHitTest(model, renderer.terminalWidth, renderer.terminalHeight, event.x, event.y)
+  if (hit?.kind !== "slot") return
+  event.preventDefault()
+  event.stopPropagation()
+  setInventoryIndex(hit.index)
+  refresh()
+}
+
+function handleMouseDragEnd(event: OpenTuiMouseEvent) {
+  if (model.dialog !== "inventory" || model.inventoryDragIndex === null) return
+  const source = model.inventoryDragIndex
+  model.inventoryDragIndex = null
+  const hit = inventoryHitTest(model, renderer.terminalWidth, renderer.terminalHeight, event.x, event.y)
+  if (hit?.kind === "slot") moveInventoryItem(source, hit.index)
+  event.preventDefault()
+  event.stopPropagation()
+  refresh()
+}
+
+function closeInventory() {
+  model.dialog = null
+  model.inventoryDragIndex = null
+  model.message = ""
+}
+
+function setInventoryIndex(index: number) {
+  const grid = inventoryGridInfo(model, renderer.terminalWidth, renderer.terminalHeight)
+  model.inventoryIndex = clamp(index, 0, Math.max(0, grid.slotCount - 1))
+}
+
+function applySelectedInventoryItem() {
+  const index = clamp(model.inventoryIndex, 0, Math.max(0, model.session.inventory.length - 1))
+  const item = model.session.inventory[index]
+  if (!item) {
+    model.message = "No item selected."
+    return
+  }
+
+  if (item === "Deploy nerve potion") {
+    usePotion(model.session)
+    model.message = model.session.log[0] ?? "Potion applied."
+    setInventoryIndex(index)
+    return
+  }
+
+  if (/vial|potion/i.test(item) && model.session.status === "running" && !model.session.skillCheck) {
+    model.session.inventory.splice(index, 1)
+    model.session.hp = Math.min(model.session.maxHp, model.session.hp + 3)
+    pushSessionLog(`${item} applied. A little health returns.`)
+    model.message = model.session.log[0] ?? `${item} applied.`
+    setInventoryIndex(index)
+    return
+  }
+
+  model.message = `${item} selected. No apply action yet.`
+}
+
+function moveInventoryItem(source: number, target: number) {
+  if (source < 0 || source >= model.session.inventory.length) return
+  const [item] = model.session.inventory.splice(source, 1)
+  const destination = clamp(target, 0, model.session.inventory.length)
+  model.session.inventory.splice(destination, 0, item)
+  model.inventoryIndex = destination
+  model.message = `${item} moved.`
+}
+
+function pushSessionLog(message: string) {
+  model.session.log.unshift(message)
+  while (model.session.log.length > 8) model.session.log.pop()
 }
 
 function handleSkillCheckKey(key: KeyEvent) {
@@ -278,10 +421,17 @@ function handleGameKey(key: KeyEvent) {
   }
   if (key.name === "i") {
     model.dialog = "inventory"
+    model.message = ""
+    setInventoryIndex(model.inventoryIndex)
     return
   }
   if (key.name === "l") {
     model.dialog = "log"
+    return
+  }
+  if (key.name === "o" || (key.name === "j" && model.settings.controlScheme !== "vim")) {
+    model.dialog = "quests"
+    model.questIndex = clamp(model.questIndex, 0, Math.max(0, model.session.world.quests.length - 1))
     return
   }
   if (key.name === "r") {
@@ -518,6 +668,10 @@ function closeSettings() {
 
 function changeCurrentSetting() {
   const item = currentSettingItem(model)
+  if (item.control === "readonly") {
+    model.saveStatus = `${item.name}: ${item.id === "runSaves" ? "shown in settings" : "run detail"}`
+    return
+  }
   if (item.id === "username") {
     startInput("username")
     return

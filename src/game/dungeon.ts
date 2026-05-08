@@ -23,6 +23,17 @@ export type Dungeon = {
   tiles: TileId[][]
   actors: Actor[]
   playerStart: Point
+  anchors: DungeonAnchor[]
+}
+
+export type DungeonAnchor = {
+  id: string
+  floor: number
+  roomIndex: number
+  kind: "start" | "room" | "stairs"
+  position: Point
+  width: number
+  height: number
 }
 
 export type EnemyPattern = "sentinel" | "wander" | "patrol-horizontal" | "patrol-vertical" | "stalker"
@@ -75,6 +86,7 @@ export function createDungeon(seed: number, floor: number, width = 96, height = 
     tiles,
     actors,
     playerStart,
+    anchors: createDungeonAnchors(rooms, floor),
   }
 }
 
@@ -136,13 +148,17 @@ function placeFeature(tiles: TileId[][], point: Point, tile: TileId) {
   tiles[point.y][point.x] = tile
 }
 
+function randomInteriorPoint(room: Room, rng: Rng): Point {
+  return {
+    x: rng.int(room.x + 1, room.x + room.width - 2),
+    y: rng.int(room.y + 1, room.y + room.height - 2),
+  }
+}
+
 function scatterFeatures(tiles: TileId[][], rooms: Room[], rng: Rng) {
   const featureTiles: TileId[] = ["potion", "relic", "chest"]
   for (const room of rooms.slice(1, 18)) {
-    const point = {
-      x: rng.int(room.x + 1, room.x + room.width - 2),
-      y: rng.int(room.y + 1, room.y + room.height - 2),
-    }
+    const point = randomInteriorPoint(room, rng)
     if (tiles[point.y][point.x] === "floor") tiles[point.y][point.x] = rng.pick(featureTiles)
   }
 }
@@ -153,10 +169,7 @@ function spawnActors(tiles: TileId[][], rooms: Room[], rng: Rng, floor: number):
 
   for (const room of rooms.slice(0, 18)) {
     if (rng.next() < 0.35) continue
-    const position = {
-      x: rng.int(room.x + 1, room.x + room.width - 2),
-      y: rng.int(room.y + 1, room.y + room.height - 2),
-    }
+    const position = randomInteriorPoint(room, rng)
     if (tiles[position.y][position.x] !== "floor") continue
     const kind = rng.pick(enemyKinds)
     actors.push({ id: `enemy-${actors.length}`, kind, position, ...enemyStats(kind, floor), ai: enemyAi(kind, position, actors.length, floor) })
@@ -231,4 +244,16 @@ function createRoomZones(width: number, height: number): Room[] {
   }
 
   return zones
+}
+
+function createDungeonAnchors(rooms: Room[], floor: number): DungeonAnchor[] {
+  return rooms.map((room, index) => ({
+    id: `room-${index.toString().padStart(2, "0")}`,
+    floor,
+    roomIndex: index,
+    kind: index === 0 ? "start" : index === rooms.length - 1 ? "stairs" : "room",
+    position: center(room),
+    width: room.width,
+    height: room.height,
+  }))
 }

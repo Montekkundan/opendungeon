@@ -1,5 +1,6 @@
 node_modules/
 dist/
+.output/
 *.log
 .DS_Store
 .env
@@ -9,3 +10,5 @@ dist/
 !.codex/config.toml
 !.codex/hooks.json
 .asset-cache/
+output/
+tmp/

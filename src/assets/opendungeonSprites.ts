@@ -63,16 +63,8 @@ export const staticSpriteIds = [
 export type StaticSpriteId = (typeof staticSpriteIds)[number]
 export type PixelSpriteId = StaticSpriteId | AnimatedSpriteId
 
-export const pixelSpriteIds = [...staticSpriteIds, ...animatedSpriteIds] as PixelSpriteId[]
-export const weaponSpriteIds = ["sword", "bow", "staff", "dagger", "axe", "shield"] as const
-export const lootSpriteIds = ["potion", "relic", "chest", "coin", "scroll", "focus-gem", "ember", "key", "map"] as const
-
 export function isAnimatedSprite(id: string): id is AnimatedSpriteId {
   return (animatedSpriteIds as readonly string[]).includes(id)
-}
-
-export function isStaticSprite(id: string): id is StaticSpriteId {
-  return (staticSpriteIds as readonly string[]).includes(id)
 }
 
 export function animationFramesForSprite(id: PixelSpriteId, animation: SpriteAnimationId) {

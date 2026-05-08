@@ -31,6 +31,7 @@
     "src/**/*.ts",
     "!src/**/*.test.ts",
     "README.md",
+    "supabase",
     "LICENSE",
     "package.json"
   ],
@@ -39,6 +40,10 @@
   },
   "scripts": {
     "dev": "bun run src/main.ts",
+    "server:dev": "bun run src/server/dev.ts",
+    "www:dev": "bun --cwd packages/www dev",
+    "www:build": "bun --cwd packages/www build",
+    "www:typecheck": "bun --cwd packages/www typecheck",
     "host": "bun run src/net/host.ts",
     "start": "bun run src/main.ts",
     "build:binary": "bun build --compile --outfile=dist/opendungeon src/main.ts",
@@ -49,9 +54,9 @@
   },
   "dependencies": {
     "@opentui/core": "^0.2.4",
-    "@opentui/three": "^0.2.4",
-    "pngjs": "^7.0.0",
-    "three": "^0.184.0"
+    "@supabase/supabase-js": "^2.105.3",
+    "hono": "^4.12.18",
+    "pngjs": "^7.0.0"
   },
   "devDependencies": {
     "@types/bun": "^1.3.13",

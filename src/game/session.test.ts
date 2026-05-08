@@ -1,12 +1,22 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtempSync, rmSync } from "node:fs"
+import { existsSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { attemptFlee, combatModifier, createSession, performCombatAction, resolveSkillCheck, selectSkill, tryMove, usePotion } from "./session.js"
+import type { GameSession } from "./session.js"
 import { setTile } from "./dungeon.js"
+import type { ActorId } from "./domainTypes.js"
 import { listSaves, loadSave, saveSession } from "./saveStore.js"
 import { defaultSettings, loadSettings, profilePath, saveSettings } from "./settingsStore.js"
 import { draw } from "../ui/screens.js"
+import { worldBundleDirectory } from "../world/worldConfig.js"
+
+function addEnemyBesidePlayer(session: GameSession, id: string, kind: ActorId, hp: number, damage: number) {
+  const target = { x: session.player.x + 1, y: session.player.y }
+  setTile(session.dungeon, target, "floor")
+  session.dungeon.actors.push({ id, kind, position: target, hp, damage })
+  return target
+}
 
 describe("game session", () => {
   test("creates a seeded dungeon with a reachable player start", () => {
@@ -15,6 +25,9 @@ describe("game session", () => {
     expect(session.dungeon.width).toBeGreaterThan(40)
     expect(session.dungeon.height).toBeGreaterThan(20)
     expect(session.dungeon.tiles[session.player.y][session.player.x]).toBe("floor")
+    expect(session.dungeon.anchors[0].kind).toBe("start")
+    expect(session.world.events).toHaveLength(50)
+    expect(session.world.quests.length).toBeGreaterThan(0)
   })
 
   test("resolves loot checks into inventory consequences", () => {
@@ -44,15 +57,7 @@ describe("game session", () => {
 
   test("bumping an enemy enters d20 combat", () => {
     const session = createSession(1234)
-    const target = { x: session.player.x + 1, y: session.player.y }
-    setTile(session.dungeon, target, "floor")
-    session.dungeon.actors.push({
-      id: "test-slime",
-      kind: "slime",
-      position: target,
-      hp: 6,
-      damage: 1,
-    })
+    addEnemyBesidePlayer(session, "test-slime", "slime", 6, 1)
 
     tryMove(session, 1, 0)
 
@@ -63,15 +68,7 @@ describe("game session", () => {
 
   test("combat action rolls d20 against selected target", () => {
     const session = createSession(1234)
-    const target = { x: session.player.x + 1, y: session.player.y }
-    setTile(session.dungeon, target, "floor")
-    session.dungeon.actors.push({
-      id: "test-ghoul",
-      kind: "ghoul",
-      position: target,
-      hp: 20,
-      damage: 0,
-    })
+    addEnemyBesidePlayer(session, "test-ghoul", "ghoul", 20, 0)
 
     tryMove(session, 1, 0)
     selectSkill(session, 0)
@@ -120,18 +117,10 @@ describe("game session", () => {
 
   test("flee rolls d20 against dexterity luck and endurance pressure", () => {
     const session = createSession(1234)
-    const target = { x: session.player.x + 1, y: session.player.y }
-    setTile(session.dungeon, target, "floor")
     session.stats.dexterity = 30
     session.stats.luck = 30
     session.stats.endurance = 30
-    session.dungeon.actors.push({
-      id: "test-slime",
-      kind: "slime",
-      position: target,
-      hp: 6,
-      damage: 0,
-    })
+    addEnemyBesidePlayer(session, "test-slime", "slime", 6, 0)
 
     tryMove(session, 1, 0)
     const roll = attemptFlee(session)
@@ -205,12 +194,15 @@ describe("game session", () => {
         settingsReturnScreen: "start",
         inputMode: null,
         uiHidden: false,
+        inventoryIndex: 0,
+        inventoryDragIndex: null,
+        questIndex: 0,
       },
       80,
       24,
     ).chunks
 
-    expect(start.map((chunk) => chunk.text).join("")).toContain("opendungeon")
+    expect(start.map((chunk) => chunk.text).join("")).toContain("OPENDUNGEON")
 
     const target = { x: session.player.x + 1, y: session.player.y }
     setTile(session.dungeon, target, "relic")
@@ -236,6 +228,9 @@ describe("game session", () => {
         settingsReturnScreen: "start",
         inputMode: null,
         uiHidden: false,
+        inventoryIndex: 0,
+        inventoryDragIndex: null,
+        questIndex: 0,
       },
       120,
       40,
@@ -259,11 +254,14 @@ describe("game session", () => {
         debugView: false,
         rendererBackend: "terminal",
         settings: defaultSettings,
-        settingsTabIndex: 2,
+        settingsTabIndex: 3,
         settingsIndex: 0,
         settingsReturnScreen: "start",
         inputMode: null,
         uiHidden: false,
+        inventoryIndex: 0,
+        inventoryDragIndex: null,
+        questIndex: 0,
       },
       120,
       40,
@@ -290,6 +288,7 @@ describe("game session", () => {
       const loaded = loadSave(summary.id)
 
       expect(summary.path.startsWith(dir)).toBe(true)
+      expect(existsSync(worldBundleDirectory(session.world.worldId))).toBe(true)
       expect(saves).toHaveLength(1)
       expect(loaded.gold).toBe(42)
       expect(loaded.mode).toBe("race")
@@ -298,6 +297,8 @@ describe("game session", () => {
       expect(loaded.visible.has("1,2")).toBe(true)
       expect(loaded.seen.has("3,4")).toBe(true)
       expect(loaded.dungeon.width).toBe(session.dungeon.width)
+      expect(loaded.world.worldId).toBe(session.world.worldId)
+      expect(loaded.worldLog[0].type).toBe("world-created")
     } finally {
       if (previousSaveDir === undefined) delete process.env.OPENDUNGEON_SAVE_DIR
       else process.env.OPENDUNGEON_SAVE_DIR = previousSaveDir

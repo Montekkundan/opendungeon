@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFile
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { normalizeSessionAfterLoad, type GameSession } from "./session.js"
+import { readWorldConfig, writeWorldConfig, writeWorldLog } from "../world/worldConfig.js"
 
 export type SaveSummary = {
   id: string
@@ -56,6 +57,8 @@ export function listSaves(): SaveSummary[] {
 
 export function saveSession(session: GameSession, label = "Manual save"): SaveSummary {
   ensureSaveDirectory()
+  writeWorldConfig(session.world)
+  writeWorldLog(session.world.worldId, session.worldLog)
   const summary = createSummary(session, label)
   const envelope: SaveEnvelope = {
     game: "opendungeon",
@@ -71,7 +74,13 @@ export function saveSession(session: GameSession, label = "Manual save"): SaveSu
 export function loadSave(id: string): GameSession {
   const envelope = readEnvelope(id)
   if (!envelope) throw new Error(`Save not found: ${id}`)
-  return deserializeSession(envelope.session)
+  const session = deserializeSession(envelope.session)
+  try {
+    session.world = readWorldConfig(session.world.worldId)
+  } catch {
+    // Keep the save-embedded world for offline and pre-world-store saves.
+  }
+  return session
 }
 
 export function deleteSave(id: string) {

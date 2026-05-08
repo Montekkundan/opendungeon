@@ -1,4 +1,4 @@
-import { fonts, measureText, type ASCIIFontName, type OptimizedBuffer } from "@opentui/core"
+import { type OptimizedBuffer } from "@opentui/core"
 import { activeAssetPack } from "../assets/packs.js"
 import { d20FrameCount, d20RollSprite } from "../assets/d20Sprites.js"
 import { defaultDiceSkin, diceSkinIds, diceSkinName, type DiceSkinId } from "../assets/diceSkins.js"
@@ -20,6 +20,7 @@ import {
 import { saveDirectory, type SaveSummary } from "../game/saveStore.js"
 import { profilePath, type UserSettings } from "../game/settingsStore.js"
 import { formatModifier, statAbbreviations, statLabels, statLine, statsForClass } from "../game/stats.js"
+import { clamp, wrap } from "../shared/numeric.js"
 import { Canvas } from "./canvas.js"
 
 type TileRenderStyle = {
@@ -28,8 +29,15 @@ type TileRenderStyle = {
   pattern: string[]
 }
 
+type PanelBounds = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export type ScreenId = "start" | "character" | "mode" | "saves" | "cloud" | "settings" | "controls" | "game"
-export type DialogId = "settings" | "inventory" | "help" | "log" | "pause" | null
+export type DialogId = "settings" | "inventory" | "quests" | "help" | "log" | "pause" | null
 export type InputMode = { field: "username" | "githubUsername"; draft: string } | null
 
 export type DiceRollAnimation = {
@@ -58,6 +66,9 @@ export type AppModel = {
   settingsReturnScreen: ScreenId
   inputMode: InputMode
   uiHidden: boolean
+  inventoryIndex: number
+  inventoryDragIndex: number | null
+  questIndex: number
   diceRollAnimation?: DiceRollAnimation | null
 }
 
@@ -74,6 +85,7 @@ const modeOptions: Array<{ id: MultiplayerMode; name: string; text: string }> = 
 ]
 const settingTabs = [
   { id: "profile", name: "Profile", description: "Identity, cloud, and overlays" },
+  { id: "run", name: "Run", description: "Current world, seed, save, and asset details" },
   { id: "access", name: "Access", description: "Controls and readability" },
   { id: "visuals", name: "Visuals", description: "Camera, dice, and screen motion" },
   { id: "audio", name: "Audio", description: "Stored audio preferences" },
@@ -82,6 +94,12 @@ const settingTabs = [
 const settingsOptions = [
   { id: "username", tab: "profile", name: "Player name", text: "Saved locally and later used by cloud sync.", control: "input" },
   { id: "showUi", tab: "profile", name: "Show UI", text: "Default overlay visibility for future runs.", control: "switch" },
+  { id: "runSeed", tab: "run", name: "Seed", text: "World seed for replaying this crawl.", control: "readonly" },
+  { id: "runMode", tab: "run", name: "Mode", text: "Current multiplayer/run mode.", control: "readonly" },
+  { id: "runFloor", tab: "run", name: "Floor", text: "Current floor and final floor target.", control: "readonly" },
+  { id: "runTurn", tab: "run", name: "Turn", text: "Turns taken in this run.", control: "readonly" },
+  { id: "runAssets", tab: "run", name: "Assets", text: "Runtime art source for dungeon sprites.", control: "readonly" },
+  { id: "runSaves", tab: "run", name: "Saves", text: "Local save directory for this profile.", control: "readonly" },
   { id: "controlScheme", tab: "access", name: "Control scheme", text: "Movement and menu navigation preference.", control: "tabs" },
   { id: "highContrast", tab: "access", name: "High contrast", text: "Brighter borders and selected states.", control: "switch" },
   { id: "reduceMotion", tab: "access", name: "Reduce motion", text: "Quieter background and dice movement.", control: "switch" },
@@ -101,8 +119,13 @@ const UI = {
   panel: "#101820",
   panel2: "#16212b",
   panel3: "#1e2d38",
-  edge: "#59616d",
-  edgeDim: "#343b45",
+  edge: "#35414b",
+  edgeDim: "#242e37",
+  edgeHot: "#f0c65a",
+  cyan: "#49d5ff",
+  ruby: "#ff5e86",
+  violet: "#c675ff",
+  glow: "#fff0a6",
   gold: "#f4d06f",
   brass: "#d6a85c",
   hp: "#d56b8c",
@@ -111,6 +134,11 @@ const UI = {
   focusBack: "#123223",
   shadow: "#05090c",
 }
+const cleanPanel = "#101820"
+const cleanPanel2 = "#15212b"
+const cleanPanel3 = "#1b2a35"
+const cleanLine = "#35424d"
+const cleanLineHot = "#d6a85c"
 
 type QuickbarItem = {
   key: string
@@ -194,6 +222,17 @@ function currentSettingsOptions(model: AppModel): SettingOption[] {
   return settingsOptions.filter((option) => option.tab === tab)
 }
 
+function centeredPanelBounds(canvas: Canvas, maxWidth: number, maxHeight: number, xPadding = 8, yPadding = 6): PanelBounds {
+  const width = Math.min(maxWidth, canvas.width - xPadding)
+  const height = Math.min(maxHeight, canvas.height - yPadding)
+  return {
+    x: Math.floor((canvas.width - width) / 2),
+    y: Math.max(2, Math.floor((canvas.height - height) / 2)),
+    width,
+    height,
+  }
+}
+
 function drawStart(canvas: Canvas, model: AppModel) {
   drawDungeonBackdrop(canvas, model.seed, model.settings)
   const width = Math.min(86, canvas.width - 8)
@@ -234,10 +273,7 @@ function drawStart(canvas: Canvas, model: AppModel) {
 
 function drawCharacter(canvas: Canvas, model: AppModel) {
   drawDungeonBackdrop(canvas, model.seed + 2, model.settings)
-  const width = Math.min(90, canvas.width - 8)
-  const height = Math.min(28, canvas.height - 6)
-  const x = Math.floor((canvas.width - width) / 2)
-  const y = Math.max(2, Math.floor((canvas.height - height) / 2))
+  const { x, y, width, height } = centeredPanelBounds(canvas, 90, 28)
   drawPanel(canvas, x, y, width, height, "Choose Your Crawler", UI.gold)
 
   const rowStep = Math.max(5, Math.floor((height - 7) / classOptions.length))
@@ -265,10 +301,7 @@ function drawCharacter(canvas: Canvas, model: AppModel) {
 
 function drawMode(canvas: Canvas, model: AppModel) {
   drawDungeonBackdrop(canvas, model.seed + 4, model.settings)
-  const width = Math.min(86, canvas.width - 8)
-  const height = Math.min(22, canvas.height - 6)
-  const x = Math.floor((canvas.width - width) / 2)
-  const y = Math.max(2, Math.floor((canvas.height - height) / 2))
+  const { x, y, width, height } = centeredPanelBounds(canvas, 86, 22)
   drawPanel(canvas, x, y, width, height, "Run Mode", UI.gold)
   drawD20Sprite(canvas, x + 5, y + 4, 20, d20FrameCount() - 1, 10, 5, model.settings.diceSkin)
 
@@ -291,10 +324,7 @@ function drawMode(canvas: Canvas, model: AppModel) {
 
 function drawSaves(canvas: Canvas, model: AppModel) {
   drawDungeonBackdrop(canvas, model.seed + 8, model.settings)
-  const width = Math.min(108, canvas.width - 8)
-  const height = Math.min(30, canvas.height - 6)
-  const x = Math.floor((canvas.width - width) / 2)
-  const y = Math.max(2, Math.floor((canvas.height - height) / 2))
+  const { x, y, width, height } = centeredPanelBounds(canvas, 108, 30)
   drawPanel(canvas, x, y, width, height, "Load Save", UI.gold)
   drawBrand(canvas, x + 4, y + 3, Math.min(width - 8, 58), UI.panel)
 
@@ -395,10 +425,7 @@ function drawCloud(canvas: Canvas, model: AppModel) {
 
 function drawSettings(canvas: Canvas, model: AppModel) {
   drawDungeonBackdrop(canvas, model.seed + 16, model.settings)
-  const width = Math.min(104, canvas.width - 8)
-  const height = Math.min(30, canvas.height - 6)
-  const x = Math.floor((canvas.width - width) / 2)
-  const y = Math.max(2, Math.floor((canvas.height - height) / 2))
+  const { x, y, width, height } = centeredPanelBounds(canvas, 104, 30)
   drawPanel(canvas, x, y, width, height, "Settings", model.settings.highContrast ? UI.focus : UI.gold)
 
   const listX = x + 4
@@ -426,14 +453,23 @@ function drawSettings(canvas: Canvas, model: AppModel) {
   const detailW = width - (detailX - x) - 4
   const detailH = Math.min(17, height - 12)
   drawPanel(canvas, detailX, listY, detailW, detailH, activeTab.name, UI.edge)
-  drawMiniIcon(canvas, detailX + 3, listY + 3, "focus-gem", 8, 3)
-  if (detailW > 28 && detailH > 7) drawD20Sprite(canvas, detailX + detailW - 15, listY + 3, 20, d20FrameCount() - 1, 10, 4, model.settings.diceSkin)
-  const editing = model.inputMode?.field === "username"
-  const name = editing ? `${model.inputMode?.draft ?? ""}_` : `@${model.settings.username}`
-  if (detailH > 8) drawInputField(canvas, detailX + 3, listY + 7, detailW - 6, "Player", name, editing)
-  if (detailH > 11) drawSettingRow(canvas, detailX + 3, listY + 10, detailW - 6, "Profile", profilePath())
-  if (detailH > 13) drawSettingRow(canvas, detailX + 3, listY + 12, detailW - 6, "Saves", saveDirectory())
-  if (detailH > 15) canvas.write(detailX + 3, listY + 14, "Settings save immediately to the local profile.", UI.soft, UI.panel)
+  if (activeTab.id === "run") {
+    drawMiniIcon(canvas, detailX + 3, listY + 3, "map", 8, 3)
+    if (detailH > 7) drawSettingRow(canvas, detailX + 3, listY + 7, detailW - 6, "Seed", String(model.session.seed))
+    if (detailH > 9) drawSettingRow(canvas, detailX + 3, listY + 9, detailW - 6, "World", model.session.world.worldId)
+    if (detailH > 11) drawSettingRow(canvas, detailX + 3, listY + 11, detailW - 6, "Run", `${model.session.mode} floor ${model.session.floor}/${model.session.finalFloor}`)
+    if (detailH > 13) drawSettingRow(canvas, detailX + 3, listY + 13, detailW - 6, "Assets", activeAssetPack.name)
+    if (detailH > 15) canvas.write(detailX + 3, listY + 15, "Run facts live here now so the play HUD can stay quiet.", UI.soft, UI.panel)
+  } else {
+    drawMiniIcon(canvas, detailX + 3, listY + 3, "focus-gem", 8, 3)
+    if (detailW > 28 && detailH > 7) drawD20Sprite(canvas, detailX + detailW - 15, listY + 3, 20, d20FrameCount() - 1, 10, 4, model.settings.diceSkin)
+    const editing = model.inputMode?.field === "username"
+    const name = editing ? `${model.inputMode?.draft ?? ""}_` : `@${model.settings.username}`
+    if (detailH > 8) drawInputField(canvas, detailX + 3, listY + 7, detailW - 6, "Player", name, editing)
+    if (detailH > 11) drawSettingRow(canvas, detailX + 3, listY + 10, detailW - 6, "Profile", profilePath())
+    if (detailH > 13) drawSettingRow(canvas, detailX + 3, listY + 12, detailW - 6, "Saves", saveDirectory())
+    if (detailH > 15) canvas.write(detailX + 3, listY + 14, "Settings save immediately to the local profile.", UI.soft, UI.panel)
+  }
 
   drawFooter(canvas, [
     ["Enter", "change"],
@@ -446,17 +482,15 @@ function drawSettings(canvas: Canvas, model: AppModel) {
 
 function drawControls(canvas: Canvas, model: AppModel) {
   drawDungeonBackdrop(canvas, model.seed + 18, model.settings)
-  const width = Math.min(96, canvas.width - 8)
-  const height = Math.min(28, canvas.height - 6)
-  const x = Math.floor((canvas.width - width) / 2)
-  const y = Math.max(2, Math.floor((canvas.height - height) / 2))
+  const { x, y, width, height } = centeredPanelBounds(canvas, 96, 28)
   drawPanel(canvas, x, y, width, height, "Controls & Accessibility", UI.gold)
 
   const rows = [
     ["Move", controlMoveText(model.settings.controlScheme)],
     ["Menus", "Arrows always work. WASD follows the selected control scheme."],
     ["Combat", "Tab selects an enemy. 1-3 selects a skill. Enter rolls d20. F flees."],
-    ["Inventory", "I opens pack. H drinks potion. L opens run log."],
+    ["Inventory", "I opens pack. Arrows select. Enter applies. Mouse can drag slots."],
+    ["Quests", "J opens the quest journal. Use O instead when Vim movement is active."],
     ["Run", "R rests outside combat. Esc pauses. Ctrl+S/F5 saves locally."],
     ["Accessibility", accessibilitySummary(model.settings)],
     ["Visuals", `Camera ${model.settings.tileScale}. UI ${onOff(model.settings.showUi)}. Dice ${diceSkinName(model.settings.diceSkin)}.`],
@@ -706,45 +740,65 @@ function stoneColor(x: number, y: number) {
 function drawHud(canvas: Canvas, session: GameSession) {
   const height = gameHudHeight(canvas)
 
-  if (canvas.width < 96 || height < 6) {
+  if (canvas.width < 96 || height < 5) {
+    canvas.fill(0, 0, canvas.width, Math.min(4, canvas.height), " ", cleanPanel, cleanPanel)
+    if (canvas.height > 4) canvas.fill(0, 4, canvas.width, 1, " ", "#0b1118", "#0b1118")
     const hero = trim(`${session.hero.name} · ${session.hero.title}`, Math.max(16, canvas.width - 34))
-    canvas.write(1, 0, hero, UI.ink)
-    writeRight(canvas, 0, `F${session.floor}/${session.finalFloor}  Seed ${session.seed}`, UI.brass)
+    canvas.write(1, 0, hero, UI.ink, cleanPanel)
     drawHudBar(canvas, 1, 1, Math.max(12, Math.floor(canvas.width * 0.32)), "HP", session.hp, session.maxHp, UI.hp, UI.hpBack)
     drawHudBar(canvas, Math.floor(canvas.width * 0.43), 1, Math.max(10, Math.floor(canvas.width * 0.25)), "FOCUS", session.focus, session.maxFocus, UI.focus, UI.focusBack)
-    canvas.write(1, 3, compactControls(session), UI.muted)
+    canvas.write(1, 3, trim(session.log[0] ?? "The dungeon waits.", canvas.width - 2), UI.soft, cleanPanel)
     return
   }
 
-  const leftW = Math.min(54, Math.max(38, Math.floor(canvas.width * 0.28)))
-  const rightW = Math.min(48, Math.max(34, Math.floor(canvas.width * 0.22)))
-  const centerX = leftW + 2
-  const centerW = Math.max(38, canvas.width - leftW - rightW - 4)
-  const rightX = canvas.width - rightW - 1
+  const width = Math.min(canvas.width - 2, 112)
+  const x = Math.floor((canvas.width - width) / 2)
+  drawPanel(canvas, x, 0, width, height, "Crawler", UI.brass)
+  drawPixelBlock(canvas, x + 2, 1, animatedPixelSprite(classSprite(session.hero.classId), "idle", session.turn, 10, 3), 1)
 
-  drawPanel(canvas, 1, 0, leftW, height, "Crawler", UI.brass)
-  drawPixelBlock(canvas, 3, 1, animatedPixelSprite(classSprite(session.hero.classId), "idle", session.turn, 12, 5), 1)
-  canvas.write(17, 2, trim(session.hero.name, leftW - 20), UI.ink, UI.panel)
-  canvas.write(17, 3, trim(session.hero.title, leftW - 20), UI.soft, UI.panel)
-  canvas.write(17, 5, `LV ${session.level}   XP ${session.xp}/${session.level * 10}`, UI.gold, UI.panel)
-  if (height > 6) canvas.write(17, 6, trim(statLine(session.stats), leftW - 20), UI.muted, UI.panel)
+  const infoX = x + 14
+  const contentW = width - 17
+  canvas.write(infoX, 1, trim(`${session.hero.name}  LV ${session.level}  XP ${session.xp}/${session.level * 10}`, Math.floor(contentW * 0.48)), UI.gold, UI.panel)
+  canvas.write(infoX + Math.floor(contentW * 0.5), 1, trim(session.hero.title, Math.floor(contentW * 0.48)), UI.soft, UI.panel)
+  drawHudBar(canvas, infoX, 2, Math.max(20, Math.floor(contentW * 0.42)), "HP", session.hp, session.maxHp, UI.hp, UI.hpBack)
+  drawHudBar(canvas, infoX + Math.floor(contentW * 0.48), 2, Math.max(20, Math.floor(contentW * 0.42)), "FOCUS", session.focus, session.maxFocus, UI.focus, UI.focusBack)
 
-  drawPanel(canvas, centerX, 0, centerW, height, "Vitals", UI.edge)
-  drawHudBar(canvas, centerX + 3, 2, Math.max(16, Math.floor(centerW * 0.46)), "HP", session.hp, session.maxHp, UI.hp, UI.hpBack)
-  drawHudBar(canvas, centerX + Math.floor(centerW * 0.52), 2, Math.max(14, Math.floor(centerW * 0.39)), "FOCUS", session.focus, session.maxFocus, UI.focus, UI.focusBack)
-  canvas.write(centerX + 3, 4, trim(compactControls(session), centerW - 6), UI.muted, UI.panel)
-  if (session.skillCheck) canvas.write(centerX + 3, 5, "Talent check: Enter rolls the d20. Stats decide the consequence.", UI.gold, UI.panel)
-  else if (session.combat.active) canvas.write(centerX + 3, 5, "Initiative: target with Tab, choose a skill, roll the d20.", UI.gold, UI.panel)
-  else canvas.write(centerX + 3, 5, trim(session.log[0] ?? "The dungeon waits.", centerW - 6), UI.soft, UI.panel)
+  const quest = focusedQuest(session)
+  if (quest && quest.status !== "locked") {
+    const progress = questProgress(session, quest.objectiveEventIds)
+    const questW = Math.min(contentW, Math.max(28, Math.floor(contentW * 0.64)))
+    drawQuestHudLine(canvas, infoX, 3, questW, quest.title, progress.completed, progress.total, quest.status)
+  } else {
+    canvas.write(infoX, 3, trim(session.log[0] ?? "The dungeon waits.", contentW), UI.soft, UI.panel)
+  }
+}
 
-  drawPanel(canvas, rightX, 0, rightW, height, "Run", UI.brass)
-  canvas.write(rightX + 3, 2, `Floor ${session.floor}/${session.finalFloor}`, UI.gold, UI.panel)
-  canvas.write(rightX + 18, 2, `Seed ${session.seed}`, UI.brass, UI.panel)
-  canvas.write(rightX + 3, 3, `Mode ${session.mode}`, UI.soft, UI.panel)
-  canvas.write(rightX + 18, 3, `Art ${activeAssetPack.name}`, UI.soft, UI.panel)
-  canvas.write(rightX + 3, 5, `Turn ${session.turn}`, session.status === "dead" ? UI.hp : UI.muted, UI.panel)
-  drawMiniIcon(canvas, rightX + rightW - 12, 4, "coin", 6, 2)
-  canvas.write(rightX + rightW - 6, 5, String(session.gold), UI.gold, UI.panel)
+function drawQuestHudLine(
+  canvas: Canvas,
+  x: number,
+  y: number,
+  width: number,
+  title: string,
+  completed: number,
+  total: number,
+  status: string,
+) {
+  if (width < 18) return
+  const bg = "#12201f"
+  const edge = status === "completed" ? UI.focus : UI.violet
+  canvas.fill(x, y, width, 1, " ", bg, bg)
+  canvas.fill(x, y, 1, 1, " ", edge, edge)
+  canvas.write(x + 2, y, trim(`Quest ${title}`, width - 10), UI.focus, bg)
+  canvas.write(x + width - 6, y, `${completed}/${total}`, UI.soft, bg)
+}
+
+function focusedQuest(session: GameSession) {
+  return (
+    session.world.quests.find((quest) => quest.status === "active") ??
+    session.world.quests.find((quest) => quest.status === "completed") ??
+    session.world.quests.find((quest) => quest.status === "locked") ??
+    null
+  )
 }
 
 function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollAnimation | null | undefined, settings: UserSettings) {
@@ -780,7 +834,7 @@ function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollA
           active: session.hp < session.maxHp,
         },
         { key: "G", label: "Gold", sprite: "coin", count: String(session.gold) },
-        { key: "R", label: "Relic", sprite: "relic", count: String(countInventory(session, "Missing env var")) },
+        { key: "J", label: "Quest", sprite: "map", count: String(session.world.quests.filter((quest) => quest.status !== "locked").length) },
         { key: "D", label: "Roll", custom: "d20" },
         { key: "I", label: "Pack", sprite: "scroll", count: String(session.inventory.length) },
       ]
@@ -789,9 +843,8 @@ function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollA
   items.forEach((item, index) => {
     const slotX = x + 2 + index * slotWidth
     const edge = item.active ? UI.gold : UI.edge
-    canvas.fill(slotX + 1, y + 2, slotWidth - 3, height - 4, " ", UI.panel2, UI.panel2)
-    canvas.border(slotX, y + 1, slotWidth - 1, height - 2, edge)
-    canvas.write(slotX + 1, y + 1, item.key, item.active ? UI.gold : UI.muted, UI.panel2)
+    drawPixelSlot(canvas, slotX, y + 1, slotWidth - 1, height - 2, edge, Boolean(item.active))
+    drawKeyBadge(canvas, slotX + 1, y + 1, item.key, Boolean(item.active))
     if (item.custom === "d20") {
       const diceWidth = height >= 10 ? 11 : 8
       const diceHeight = height >= 10 ? 5 : 3
@@ -799,12 +852,27 @@ function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollA
     } else if (item.sprite) {
       drawMiniIcon(canvas, slotX + 3, y + 2, item.sprite, height >= 10 ? 9 : 7, height >= 10 ? 4 : 3)
     }
-    canvas.write(slotX + 1, y + height - 3, trim(item.label, slotWidth - 3), item.active ? UI.gold : UI.soft, UI.panel2)
+    canvas.write(slotX + 1, y + height - 3, trim(item.label, slotWidth - 3), item.active ? UI.gold : UI.soft, cleanPanel2)
     if (item.count !== undefined && item.count !== "0") {
       const count = trim(item.count, 3)
-      canvas.write(slotX + slotWidth - count.length - 2, y + 1, count, UI.gold, UI.panel2)
+      canvas.write(slotX + slotWidth - count.length - 2, y + 1, count, UI.gold, cleanPanel3)
     }
   })
+}
+
+function drawPixelSlot(canvas: Canvas, x: number, y: number, width: number, height: number, edge: string, active: boolean) {
+  const bg = active ? cleanPanel3 : cleanPanel2
+  canvas.fill(x, y, width, height, " ", bg, bg)
+  drawCleanBox(canvas, x, y, width, height, active ? edge : cleanLine, bg)
+  if (height > 3) {
+    canvas.fill(x + 2, y + 2, width - 4, Math.max(1, height - 5), " ", UI.bg, UI.bg)
+    canvas.fill(x + 2, y + height - 3, width - 4, 1, " ", active ? "#22303c" : "#111c25", active ? "#22303c" : "#111c25")
+  }
+  if (active && height > 2) canvas.fill(x, y + 1, 1, height - 2, " ", edge, edge)
+}
+
+function drawKeyBadge(canvas: Canvas, x: number, y: number, key: string, active: boolean) {
+  canvas.write(x, y, trim(key, Math.max(1, key.length)), active ? UI.gold : UI.soft)
 }
 
 function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRollAnimation | null | undefined, settings: UserSettings) {
@@ -832,7 +900,7 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
     const selected = index === session.combat.selectedTarget
     const cardY = y + 5 + index * 3
     const bg = selected ? UI.panel3 : UI.panel2
-    canvas.fill(x + 2, cardY, targetW, 2, " ", bg, bg)
+    canvas.fill(x + 2, cardY, targetW, 3, " ", bg, bg)
     canvas.border(x + 2, cardY, targetW, 3, selected ? UI.gold : UI.edgeDim)
     if (selected) canvas.fill(x + 3, cardY + 1, 1, 1, " ", UI.gold, UI.gold)
     drawMiniIcon(canvas, x + 5, cardY + 1, actorSpriteId(target.kind), 7, 1, selected ? 1 : 0.75)
@@ -969,7 +1037,7 @@ function writeWrapped(canvas: Canvas, x: number, y: number, width: number, parag
 }
 
 function gameHudHeight(canvas: Canvas) {
-  return canvas.height < 28 ? 4 : 7
+  return canvas.height < 28 ? 4 : 5
 }
 
 function gameQuickbarHeight(canvas: Canvas) {
@@ -987,30 +1055,41 @@ function drawUiToggleHint(canvas: Canvas, hidden: boolean) {
 }
 
 function drawPanel(canvas: Canvas, x: number, y: number, width: number, height: number, title: string, accent = UI.edge) {
-  canvas.fill(x + 2, y + 1, width, height, " ", UI.shadow, UI.shadow)
-  canvas.fill(x, y, width, height, " ", UI.panel, UI.panel)
-  canvas.border(x, y, width, height, accent)
-  if (height > 3) {
-    canvas.fill(x + 1, y + 1, width - 2, 1, " ", UI.panel2, UI.panel2)
-    canvas.write(x + 2, y + 1, trim(title, width - 4), accent, UI.panel2)
+  canvas.fill(x, y, width, height, " ", cleanPanel, cleanPanel)
+  drawCleanBox(canvas, x, y, width, height, accent === UI.gold || accent === UI.brass ? cleanLineHot : cleanLine, cleanPanel)
+  if (height > 3) canvas.write(x + 2, y + 1, trim(title, width - 4), accent)
+}
+
+function drawCleanBox(canvas: Canvas, x: number, y: number, width: number, height: number, edge = cleanLine, bg = cleanPanel) {
+  if (width < 2 || height < 2) return
+  canvas.fill(x, y, width, height, " ", bg, bg)
+  canvas.border(x, y, width, height, edge)
+  if (width > 4 && height > 4) {
+    canvas.fill(x + 1, y + 1, width - 2, 1, " ", cleanPanel2, cleanPanel2)
+    canvas.fill(x + 1, y + height - 2, width - 2, 1, " ", "#0d151d", "#0d151d")
   }
 }
 
 function drawCommandBox(canvas: Canvas, x: number, y: number, width: number, labelText: string, hint: string) {
-  canvas.fill(x, y, width, 3, " ", "#1b1b1b", "#1b1b1b")
-  canvas.fill(x, y, 1, 3, " ", UI.focus, UI.focus)
-  canvas.write(x + 3, y + 1, trim(labelText, Math.floor(width * 0.58)), UI.ink, "#1b1b1b")
-  canvas.write(x + Math.max(18, width - hint.length - 3), y + 1, trim(hint, Math.floor(width * 0.38)), UI.muted, "#1b1b1b")
+  const bg = UI.panel2
+  canvas.fill(x, y, width, 3, " ", bg, bg)
+  canvas.fill(x, y + 1, 1, 1, " ", UI.focus, UI.focus)
+  canvas.write(x + 4, y + 1, trim(labelText, Math.max(6, Math.floor(width * 0.5))), UI.ink, bg)
+  const hintW = Math.max(6, Math.floor(width * 0.36))
+  canvas.write(x + width - hintW - 3, y + 1, trim(hint, hintW), UI.muted, bg)
 }
 
 function drawPlainSelectRow(canvas: Canvas, x: number, y: number, width: number, labelText: string, selected: boolean, meta = "") {
-  const bg = selected ? UI.panel3 : UI.bg
-  if (selected) {
-    canvas.fill(x, y, width, 1, " ", bg, bg)
-    canvas.fill(x, y, 1, 1, " ", UI.gold, UI.gold)
+  const bg = selected ? UI.panel3 : UI.panel
+  const edge = selected ? UI.edgeHot : UI.edgeDim
+  canvas.fill(x, y, width, 1, " ", bg, bg)
+  canvas.write(x + 2, y, selected ? ">" : " ", selected ? UI.gold : UI.soft, bg)
+  canvas.write(x + 4, y, trim(labelText, Math.max(4, width - 22)), selected ? UI.gold : UI.ink, bg)
+  if (meta && width > 38) {
+    const metaW = Math.max(6, Math.floor(width * 0.24))
+    canvas.write(x + width - metaW - 2, y, trim(meta, metaW), selected ? UI.focus : UI.muted, bg)
   }
-  canvas.write(x + 3, y, `${selected ? ">" : " "} ${labelText}`, selected ? UI.gold : UI.ink, bg)
-  if (meta && width > 42) canvas.write(x + Math.max(28, width - meta.length - 2), y, trim(meta, Math.max(8, width - 32)), selected ? UI.focus : UI.muted, bg)
+  if (selected && width > 6) canvas.write(x + 1, y, "█", edge, bg)
 }
 
 function drawTabSelect(canvas: Canvas, x: number, y: number, width: number, tabs: ReadonlyArray<{ name: string; description: string }>, selectedIndex: number) {
@@ -1049,25 +1128,30 @@ function drawSettingsOption(canvas: Canvas, x: number, y: number, width: number,
 }
 
 function drawSettingControl(canvas: Canvas, x: number, y: number, width: number, option: SettingOption, model: AppModel, selected: boolean, bg: string) {
+  if (option.control === "readonly") {
+    canvas.write(x, y, trim(settingValue(model, option.id), width), selected ? UI.gold : UI.soft, bg)
+    return
+  }
+
   if (option.control === "switch") {
-    drawSwitch(canvas, x, y, width, settingValue(model.settings, option.id) === "on", selected, bg)
+    drawSwitch(canvas, x, y, width, settingValue(model, option.id) === "on", selected, bg)
     return
   }
 
   if (option.control === "slider") {
     const values = settingSliderValues(option.id)
-    const value = settingValue(model.settings, option.id)
+    const value = settingValue(model, option.id)
     drawSlider(canvas, x, y, width, values.indexOf(value), values.length, value, selected, bg)
     return
   }
 
   if (option.control === "tabs") {
-    const value = settingValue(model.settings, option.id)
+    const value = settingValue(model, option.id)
     drawSegmentedValue(canvas, x, y, width, settingSegments(option.id, value), value, selected, bg)
     return
   }
 
-  canvas.write(x, y, trim(settingValue(model.settings, option.id), width), selected ? UI.focus : UI.soft, bg)
+  canvas.write(x, y, trim(settingValue(model, option.id), width), selected ? UI.focus : UI.soft, bg)
 }
 
 function drawSwitch(canvas: Canvas, x: number, y: number, width: number, enabled: boolean, selected: boolean, bg: string) {
@@ -1111,7 +1195,6 @@ function drawInputField(canvas: Canvas, x: number, y: number, width: number, lab
 function drawSelectCard(canvas: Canvas, x: number, y: number, width: number, height: number, selected: boolean) {
   const bg = selected ? UI.panel3 : UI.panel2
   canvas.fill(x, y, width, height, " ", bg, bg)
-  canvas.border(x, y, width, height + 1, selected ? UI.gold : UI.edgeDim)
   if (selected) canvas.fill(x, y, 1, height, " ", UI.gold, UI.gold)
 }
 
@@ -1131,42 +1214,42 @@ function drawFooter(canvas: Canvas, items: Array<[string, string]>) {
 }
 
 function drawBrand(canvas: Canvas, x: number, y: number, width: number, bg = UI.panel) {
-  const font = brandFont(width)
-  const measured = measureText({ text: "OPENDUNGEON", font })
-  drawAsciiFont(canvas, x, y, width, "OPENDUNGEON", font, [UI.brass, UI.gold], bg)
-  if (width > 24) canvas.write(x, y + measured.height, trim("terminal dungeon crawler", width), UI.soft, bg)
-  return measured.height + (width > 24 ? 1 : 0)
+  const rows = pixelText("OPENDUNGEON")
+  const rowWidth = rows[0]?.length ?? 0
+  if (rowWidth > width) return drawCompactBrand(canvas, y, width)
+  const logoX = x + Math.max(0, Math.floor((width - rowWidth) / 2))
+  rows.forEach((row, index) => {
+    canvas.write(logoX + 1, y + index + 1, row, UI.shadow, bg)
+    canvas.write(logoX, y + index, row, index % 2 ? UI.gold : UI.brass, bg)
+  })
+  const tagline = "terminal dungeon crawler"
+  if (width > tagline.length + 2) canvas.write(x + Math.floor((width - tagline.length) / 2), y + rows.length + 1, tagline, UI.soft, bg)
+  return rows.length + 2
 }
 
 function drawCompactBrand(canvas: Canvas, y: number, width: number) {
-  canvas.center(y, trim("opendungeon", width), UI.ink, UI.bg)
+  canvas.center(y, trim("OPENDUNGEON", width), UI.gold, UI.bg)
   return 1
 }
 
-function brandFont(width: number): ASCIIFontName {
-  if (width >= 70) return "pallet"
-  if (width >= 56) return "grid"
-  return "tiny"
+const pixelGlyphs: Record<string, string[]> = {
+  " ": ["   ", "   ", "   ", "   ", "   "],
+  D: ["███ ", "█  █", "█  █", "█  █", "███ "],
+  E: ["████", "█   ", "███ ", "█   ", "████"],
+  G: ["████", "█   ", "█ ██", "█  █", "████"],
+  N: ["█  █", "██ █", "█ ██", "█  █", "█  █"],
+  O: ["████", "█  █", "█  █", "█  █", "████"],
+  P: ["███ ", "█  █", "███ ", "█   ", "█   "],
+  U: ["█  █", "█  █", "█  █", "█  █", "████"],
 }
 
-function drawAsciiFont(canvas: Canvas, x: number, y: number, width: number, text: string, font: ASCIIFontName, colors: string[], bg: string) {
-  const fontDef = fonts[font]
-  const rows = Array.from({ length: fontDef.lines }, () => "")
-  const chars = text.toUpperCase().split("")
-
-  chars.forEach((char, charIndex) => {
-    const glyph = fontDef.chars[char as keyof typeof fontDef.chars] ?? fontDef.chars[" "]
-    for (let row = 0; row < fontDef.lines; row++) {
-      rows[row] += cleanFontLine(glyph[row] ?? "")
-      if (charIndex < chars.length - 1) rows[row] += cleanFontLine(fontDef.letterspace[row] ?? " ")
-    }
-  })
-
-  rows.forEach((row, index) => canvas.write(x, y + index, trim(row, width), colors[index % colors.length], bg))
-}
-
-function cleanFontLine(line: string) {
-  return line.replace(/<\/?c\d+>/g, "")
+function pixelText(text: string) {
+  const rows = ["", "", "", "", ""]
+  for (const char of text.toUpperCase()) {
+    const glyph = pixelGlyphs[char] ?? pixelGlyphs[" "]
+    for (let row = 0; row < rows.length; row++) rows[row] += `${glyph[row]} `
+  }
+  return rows.map((row) => row.trimEnd())
 }
 
 function drawHudBar(
@@ -1180,13 +1263,20 @@ function drawHudBar(
   color: string,
   back: string,
 ) {
+  if (width < 8) return
   const stat = `${value}/${max}`
-  const barWidth = Math.max(4, width - labelText.length - stat.length - 3)
-  const filled = Math.max(0, Math.min(barWidth, Math.round((value / max) * barWidth)))
-  canvas.write(x, y, labelText, color, UI.panel)
-  canvas.fill(x + labelText.length + 1, y, barWidth, 1, " ", back, back)
-  canvas.fill(x + labelText.length + 1, y, filled, 1, " ", color, color)
-  canvas.write(x + labelText.length + barWidth + 2, y, stat, color, UI.panel)
+  const barWidth = Math.max(4, width - labelText.length - stat.length - 4)
+  const ratio = max <= 0 ? 0 : clamp(value / max, 0, 1)
+  const filled = Math.max(0, Math.min(barWidth, Math.round(ratio * barWidth)))
+  const low = ratio <= 0.25
+  const mid = ratio > 0.25 && ratio <= 0.5
+  const labelColor = low ? UI.hp : mid ? UI.gold : color
+  canvas.write(x, y, labelText, labelColor)
+  const barX = x + labelText.length + 1
+  canvas.fill(barX, y, barWidth, 1, " ", back, back)
+  if (filled > 0) canvas.fill(barX, y, filled, 1, " ", color, color)
+  if (filled > 3) canvas.fill(barX + 1, y, Math.max(1, filled - 2), 1, " ", tint(color, 1.16), tint(color, 1.16))
+  canvas.write(barX + barWidth + 2, y, trim(stat, Math.max(0, width - (barX + barWidth + 2 - x))), labelColor)
 }
 
 function drawMiniIcon(canvas: Canvas, x: number, y: number, sprite: PixelSpriteId, width = 6, height = 2, dim = 1) {
@@ -1244,18 +1334,110 @@ function drawDialogFrame(
   icon: PixelSpriteId | "d20" | null,
   skin: DiceSkinId = defaultDiceSkin,
 ) {
-  canvas.fill(x + 2, y + 1, width, height, " ", UI.shadow, UI.shadow)
-  canvas.fill(x, y, width, height, " ", UI.panel, UI.panel)
-  canvas.border(x, y, width, height, UI.gold)
-  canvas.fill(x + 1, y + 1, width - 2, 2, " ", UI.panel2, UI.panel2)
-  canvas.write(x + 4, y + 1, title.toUpperCase(), UI.gold, UI.panel2)
+  canvas.fill(x, y, width, height, " ", cleanPanel, cleanPanel)
+  drawCleanBox(canvas, x, y, width, height, title === "Paused" ? cleanLineHot : cleanLine, cleanPanel)
+  canvas.write(x + 4, y + 1, title.toUpperCase(), UI.gold, cleanPanel2)
   if (icon === "d20") drawD20Sprite(canvas, x + width - 12, y + 1, 20, d20FrameCount() - 1, 9, 3, skin)
   else if (icon) drawMiniIcon(canvas, x + width - 12, y + 1, icon, 7, 2)
+}
+
+type Rect = { x: number; y: number; width: number; height: number }
+
+type InventoryLayout = {
+  frame: Rect
+  character: Rect
+  pack: Rect
+  details: Rect
+  apply: Rect
+  close: Rect
+  slots: Rect[]
+  columns: number
+  rows: number
+}
+
+export type InventoryHit = { kind: "slot"; index: number } | { kind: "apply" } | { kind: "close" }
+
+export function inventoryGridInfo(model: AppModel, width: number, height: number) {
+  const layout = inventoryLayout(model, width, height)
+  return { columns: layout.columns, rows: layout.rows, slotCount: layout.slots.length }
+}
+
+export function inventoryHitTest(model: AppModel, width: number, height: number, pointerX: number, pointerY: number): InventoryHit | null {
+  if (model.dialog !== "inventory") return null
+  const layout = inventoryLayout(model, width, height)
+  if (insideRect(layout.apply, pointerX, pointerY)) return { kind: "apply" }
+  if (insideRect(layout.close, pointerX, pointerY)) return { kind: "close" }
+  const index = layout.slots.findIndex((slot) => insideRect(slot, pointerX, pointerY))
+  return index >= 0 ? { kind: "slot", index } : null
+}
+
+function dialogMetrics(dialog: NonNullable<DialogId>, canvasWidth: number, canvasHeight: number): Rect {
+  if (dialog === "inventory") {
+    const width = Math.min(Math.max(20, canvasWidth - 4), Math.min(124, Math.max(62, canvasWidth - 8)))
+    const height = Math.min(Math.max(12, canvasHeight - 2), Math.min(36, Math.max(22, canvasHeight - 4)))
+    return {
+      x: Math.floor((canvasWidth - width) / 2),
+      y: Math.floor((canvasHeight - height) / 2),
+      width,
+      height,
+    }
+  }
+
+  const wide = dialog === "log" || dialog === "settings" || dialog === "quests"
+  const width = Math.min(wide ? 88 : 74, Math.max(20, canvasWidth - 10))
+  const height = Math.min(Math.max(10, canvasHeight - 2), dialog === "log" ? 18 : dialog === "quests" ? 22 : dialog === "settings" ? 20 : dialog === "help" ? 21 : dialog === "pause" ? 18 : 14)
+  return {
+    x: Math.floor((canvasWidth - width) / 2),
+    y: Math.floor((canvasHeight - height) / 2),
+    width,
+    height,
+  }
+}
+
+function inventoryLayout(model: AppModel, width: number, height: number): InventoryLayout {
+  const frame = dialogMetrics("inventory", width, height)
+  const innerX = frame.x + 3
+  const innerY = frame.y + 4
+  const innerW = frame.width - 6
+  const innerH = frame.height - 8
+  const characterW = Math.min(36, Math.max(24, Math.floor(innerW * 0.32)))
+  const character: Rect = { x: innerX, y: innerY, width: characterW, height: innerH - 4 }
+  const pack: Rect = {
+    x: innerX + characterW + 2,
+    y: innerY,
+    width: Math.max(28, innerW - characterW - 2),
+    height: innerH - 4,
+  }
+  const details: Rect = { x: innerX, y: frame.y + frame.height - 7, width: innerW, height: 3 }
+  const apply: Rect = { x: frame.x + frame.width - 29, y: frame.y + frame.height - 3, width: 12, height: 1 }
+  const close: Rect = { x: frame.x + frame.width - 15, y: frame.y + frame.height - 3, width: 10, height: 1 }
+  const columns = clamp(Math.floor((pack.width - 4) / 12), 3, 6)
+  const slotW = Math.max(9, Math.floor((pack.width - 4 - (columns - 1)) / columns))
+  const slotH = 4
+  const rows = Math.max(2, Math.floor((pack.height - 5) / slotH))
+  const slots: Rect[] = []
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < columns; col++) {
+      slots.push({
+        x: pack.x + 2 + col * (slotW + 1),
+        y: pack.y + 3 + row * slotH,
+        width: slotW,
+        height: 3,
+      })
+    }
+  }
+
+  return { frame, character, pack, details, apply, close, slots, columns, rows }
+}
+
+function insideRect(rect: Rect, x: number, y: number) {
+  return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height
 }
 
 function dialogTitle(dialog: NonNullable<DialogId>) {
   if (dialog === "settings") return "Settings"
   if (dialog === "inventory") return "Inventory"
+  if (dialog === "quests") return "Quests"
   if (dialog === "help") return "Controls"
   if (dialog === "log") return "Run Log"
   return "Paused"
@@ -1264,6 +1446,7 @@ function dialogTitle(dialog: NonNullable<DialogId>) {
 function dialogIcon(dialog: NonNullable<DialogId>): PixelSpriteId | "d20" {
   if (dialog === "settings") return "focus-gem"
   if (dialog === "inventory") return "scroll"
+  if (dialog === "quests") return "map"
   if (dialog === "help") return "sword"
   if (dialog === "log") return "coin"
   return "scroll"
@@ -1278,14 +1461,8 @@ function drawSettingRow(canvas: Canvas, x: number, y: number, width: number, lab
 function drawKeycap(canvas: Canvas, x: number, y: number, text: string) {
   const key = trim(text, 9)
   const width = Math.max(5, key.length + 4)
-  canvas.fill(x, y, width, 1, " ", UI.panel3, UI.panel3)
-  canvas.write(x, y, `[ ${key} ]`, UI.gold, UI.panel3)
-}
-
-function inventoryRows(session: GameSession) {
-  const counts = new Map<string, number>()
-  for (const item of session.inventory) counts.set(item, (counts.get(item) ?? 0) + 1)
-  return [...counts.entries()].map(([name, count]) => ({ name, count, sprite: inventorySprite(name) }))
+  canvas.fill(x, y, width, 1, " ", cleanPanel3, cleanPanel3)
+  canvas.write(x, y, `[ ${key} ]`, UI.gold, cleanPanel3)
 }
 
 function inventorySprite(name: string): PixelSpriteId {
@@ -1299,6 +1476,137 @@ function inventorySprite(name: string): PixelSpriteId {
 
 function countInventory(session: GameSession, name: string) {
   return session.inventory.filter((item) => item === name).length
+}
+
+function selectedInventoryItem(model: AppModel) {
+  return model.session.inventory[clamp(model.inventoryIndex, 0, Math.max(0, model.session.inventory.length - 1))]
+}
+
+function drawInventoryDialog(canvas: Canvas, model: AppModel) {
+  const layout = inventoryLayout(model, canvas.width, canvas.height)
+  const selectedIndex = clamp(model.inventoryIndex, 0, Math.max(0, model.session.inventory.length - 1))
+  const selectedItem = selectedInventoryItem(model)
+
+  drawPanel(canvas, layout.character.x, layout.character.y, layout.character.width, layout.character.height, "Crawler", UI.edge)
+  drawPixelBlock(canvas, layout.character.x + 3, layout.character.y + 3, animatedPixelSprite(classSprite(model.session.hero.classId), "idle", model.session.turn, 12, 5), 1)
+  canvas.write(layout.character.x + 17, layout.character.y + 3, trim(model.session.hero.name, layout.character.width - 20), UI.ink, UI.panel)
+  canvas.write(layout.character.x + 17, layout.character.y + 4, trim(model.session.hero.title, layout.character.width - 20), UI.soft, UI.panel)
+  if (layout.character.height > 11) canvas.write(layout.character.x + 3, layout.character.y + 10, `Level ${model.session.level}`, UI.gold, UI.panel)
+  if (layout.character.height > 13) canvas.write(layout.character.x + 3, layout.character.y + 12, trim(statLine(model.session.stats), layout.character.width - 6), UI.soft, UI.panel)
+  if (layout.character.height > 16) drawEquipmentLine(canvas, layout.character.x + 3, layout.character.y + 15, layout.character.width - 6, "Weapon", findInventoryByKind(model.session.inventory, "weapon"))
+  if (layout.character.height > 18) drawEquipmentLine(canvas, layout.character.x + 3, layout.character.y + 17, layout.character.width - 6, "Relic", findInventoryByKind(model.session.inventory, "relic"))
+  if (layout.character.height > 20) drawEquipmentLine(canvas, layout.character.x + 3, layout.character.y + 19, layout.character.width - 6, "Consumable", findInventoryByKind(model.session.inventory, "consumable"))
+
+  drawPanel(canvas, layout.pack.x, layout.pack.y, layout.pack.width, layout.pack.height, "Pack", UI.edge)
+  canvas.write(layout.pack.x + 2, layout.pack.y + 1, trim(`${model.session.inventory.length}/${layout.slots.length} slots`, layout.pack.width - 4), UI.soft, UI.panel)
+  layout.slots.forEach((slot, index) => drawInventorySlot(canvas, slot, model.session.inventory[index], index === selectedIndex, index === model.inventoryDragIndex))
+
+  drawPanel(canvas, layout.details.x, layout.details.y, layout.details.width, layout.details.height, "Selection", UI.edgeDim)
+  if (selectedItem) {
+    drawMiniIcon(canvas, layout.details.x + 2, layout.details.y + 1, inventorySprite(selectedItem), 6, 1)
+    canvas.write(layout.details.x + 10, layout.details.y + 1, trim(selectedItem, Math.floor(layout.details.width * 0.34)), UI.gold, UI.panel)
+    canvas.write(layout.details.x + Math.floor(layout.details.width * 0.42), layout.details.y + 1, trim(inventoryItemDescription(selectedItem), Math.floor(layout.details.width * 0.44)), UI.soft, UI.panel)
+  } else {
+    canvas.write(layout.details.x + 2, layout.details.y + 1, "Pack is empty.", UI.soft, UI.panel)
+  }
+
+  if (model.message) canvas.write(layout.details.x + 2, layout.details.y + 2, trim(model.message, layout.details.width - 4), UI.muted, UI.panel)
+  drawInventoryButton(canvas, layout.apply, "Enter apply", selectedItem ? UI.focus : UI.muted)
+  drawInventoryButton(canvas, layout.close, "Esc close", UI.gold)
+}
+
+function drawEquipmentLine(canvas: Canvas, x: number, y: number, width: number, labelText: string, item: string | undefined) {
+  canvas.write(x, y, trim(labelText, 10), UI.brass, UI.panel)
+  canvas.write(x + 12, y, trim(item ?? "empty", width - 12), item ? UI.ink : UI.muted, UI.panel)
+}
+
+function drawInventorySlot(canvas: Canvas, rect: Rect, item: string | undefined, selected: boolean, dragging: boolean) {
+  const bg = selected ? cleanPanel3 : cleanPanel2
+  canvas.fill(rect.x, rect.y, rect.width, rect.height, " ", bg, bg)
+  drawCleanBox(canvas, rect.x, rect.y, rect.width, rect.height, selected ? UI.gold : cleanLine, bg)
+  if (selected || dragging) canvas.fill(rect.x, rect.y, 1, rect.height, " ", dragging ? UI.cyan : UI.gold, dragging ? UI.cyan : UI.gold)
+  if (!item) return
+  drawMiniIcon(canvas, rect.x + 2, rect.y + 1, inventorySprite(item), 5, 1, dragging ? 0.65 : 1)
+  canvas.write(rect.x + 8, rect.y + 1, trim(item, rect.width - 10), selected ? UI.gold : UI.ink)
+}
+
+function drawInventoryButton(canvas: Canvas, rect: Rect, text: string, color: string) {
+  canvas.fill(rect.x, rect.y, rect.width, rect.height, " ", cleanPanel3, cleanPanel3)
+  canvas.write(rect.x + 1, rect.y, trim(text, rect.width - 2), color, cleanPanel3)
+}
+
+function findInventoryByKind(inventory: string[], kind: "weapon" | "relic" | "consumable") {
+  if (kind === "weapon") return inventory.find((item) => /blade|sword|lockpick/i.test(item))
+  if (kind === "relic") return inventory.find((item) => /relic|shard|scroll/i.test(item))
+  return inventory.find((item) => /potion|vial/i.test(item))
+}
+
+function inventoryItemDescription(item: string) {
+  const lower = item.toLowerCase()
+  if (lower.includes("potion")) return "Restores health when applied."
+  if (lower.includes("vial")) return "Small healing vial. Click or Enter to apply."
+  if (lower.includes("scroll")) return "Run-scoped utility item."
+  if (lower.includes("relic") || lower.includes("shard")) return "Quest and lore item."
+  if (lower.includes("blade") || lower.includes("sword")) return "Equipped as a basic weapon."
+  return "Stored in this world save."
+}
+
+function questProgress(session: GameSession, eventIds: string[]) {
+  if (!eventIds.length) return { completed: 0, total: 0 }
+  const completed = eventIds.filter((eventId) => session.world.events.find((event) => event.id === eventId)?.status === "completed").length
+  return { completed, total: eventIds.length }
+}
+
+function drawQuestsDialog(canvas: Canvas, model: AppModel, x: number, y: number, width: number, height: number) {
+  const quests = model.session.world.quests
+  const listX = x + 4
+  const listY = y + 4
+  const listW = Math.min(36, Math.floor((width - 10) * 0.42))
+  const rowH = 2
+  const visibleRows = Math.max(4, Math.min(quests.length || 1, Math.floor((height - 8) / rowH)))
+  const offset = scrollOffset(model.questIndex, visibleRows, quests.length)
+  const selectedQuest = quests[clamp(model.questIndex, 0, Math.max(0, quests.length - 1))]
+
+  canvas.write(listX, y + 3, "Journal", UI.brass, UI.panel)
+  drawScrollbar(canvas, listX + listW + 1, listY, visibleRows * rowH, offset, visibleRows, quests.length)
+  quests.slice(offset, offset + visibleRows).forEach((quest, visibleIndex) => {
+    const index = offset + visibleIndex
+    drawQuestListRow(canvas, listX, listY + visibleIndex * rowH, listW, model, quest, index === model.questIndex)
+  })
+  if (!quests.length) canvas.write(listX, listY, "No quests generated yet.", UI.soft, UI.panel)
+
+  const detailX = listX + listW + 4
+  const detailW = width - (detailX - x) - 4
+  const detailH = height - 8
+  drawPanel(canvas, detailX, listY - 1, detailW, detailH, "Quest Detail", UI.edge)
+  if (!selectedQuest) return
+
+  const progress = questProgress(model.session, selectedQuest.objectiveEventIds)
+  canvas.write(detailX + 3, listY + 1, trim(selectedQuest.title, detailW - 6), selectedQuest.status === "completed" ? UI.focus : UI.gold, UI.panel)
+  canvas.write(detailX + 3, listY + 3, trim(`Status ${selectedQuest.status}   Progress ${progress.completed}/${progress.total}`, detailW - 6), UI.soft, UI.panel)
+  writeWrapped(canvas, detailX + 3, listY + 5, detailW - 6, [selectedQuest.summary], 3, UI.ink, UI.panel)
+
+  const objectiveY = listY + 9
+  canvas.write(detailX + 3, objectiveY, "Objectives", UI.brass, UI.panel)
+  selectedQuest.objectiveEventIds.slice(0, Math.max(1, detailH - 12)).forEach((eventId, index) => {
+    const event = model.session.world.events.find((item) => item.id === eventId)
+    const status = event?.status ?? "future"
+    const marker = status === "completed" ? "✓" : status === "active" ? "◆" : "·"
+    const color = status === "completed" ? UI.focus : status === "active" ? UI.gold : UI.muted
+    canvas.write(detailX + 3, objectiveY + 2 + index, marker, color, UI.panel)
+    canvas.write(detailX + 6, objectiveY + 2 + index, trim(event?.title ?? eventId, detailW - 9), color, UI.panel)
+  })
+}
+
+function drawQuestListRow(canvas: Canvas, x: number, y: number, width: number, model: AppModel, quest: GameSession["world"]["quests"][number], selected: boolean) {
+  const progress = questProgress(model.session, quest.objectiveEventIds)
+  const bg = selected ? cleanPanel3 : cleanPanel2
+  canvas.fill(x, y, width, 2, " ", bg, bg)
+  if (selected) drawCleanBox(canvas, x, y, width, 2, UI.gold, bg)
+  if (selected) canvas.fill(x, y, 1, 2, " ", UI.gold, UI.gold)
+  canvas.write(x + 2, y, trim(quest.title, width - 10), selected ? UI.gold : quest.status === "locked" ? UI.soft : UI.ink, bg)
+  canvas.write(x + width - 6, y, `${progress.completed}/${progress.total}`, quest.status === "completed" ? UI.focus : UI.soft, bg)
+  canvas.write(x + 2, y + 1, trim(quest.status, width - 4), quest.status === "active" ? UI.focus : UI.muted, bg)
 }
 
 function playerAnimation(session: GameSession): SpriteAnimationId {
@@ -1331,51 +1639,28 @@ function targetDefenseBonus(kind: string | undefined) {
   return 0
 }
 
-function compactControls(session: GameSession) {
-  return session.combat.active
-    ? "Tab target   1-3 skill   F flee   Enter roll   U UI   H potion"
-    : "I inventory   L log   H potion   U UI   -/= camera   Ctrl+S save"
-}
-
-function writeRight(canvas: Canvas, y: number, text: string, color: string) {
-  canvas.write(Math.max(1, canvas.width - text.length - 2), y, text, color)
-}
-
 function drawDialog(canvas: Canvas, model: AppModel) {
   if (!model.dialog) return
-  const wide = model.dialog === "inventory" || model.dialog === "log" || model.dialog === "settings"
-  const width = Math.min(wide ? 88 : 74, canvas.width - 10)
-  const height = model.dialog === "inventory" || model.dialog === "log" ? 18 : model.dialog === "settings" ? 20 : model.dialog === "help" ? 21 : model.dialog === "pause" ? 18 : 14
-  const x = Math.floor((canvas.width - width) / 2)
-  const y = Math.floor((canvas.height - height) / 2)
+  const { x, y, width, height } = dialogMetrics(model.dialog, canvas.width, canvas.height)
   drawDialogFrame(canvas, x, y, width, height, dialogTitle(model.dialog), model.dialog === "pause" ? null : dialogIcon(model.dialog), model.settings.diceSkin)
 
   if (model.dialog === "settings") {
     drawSettingRow(canvas, x + 4, y + 4, width - 8, "Seed", String(model.seed))
-    drawSettingRow(canvas, x + 4, y + 6, width - 8, "Renderer", model.rendererBackend === "three" ? "@opentui/three preview disabled" : "Itch cache + terminal sprites")
+    drawSettingRow(canvas, x + 4, y + 6, width - 8, "Renderer", model.rendererBackend === "three" ? "@opentui/three preview disabled" : "opendungeon assets + terminal sprites")
     drawSettingRow(canvas, x + 4, y + 8, width - 8, "Camera", `${model.settings.tileScale} FOV, ${activeAssetPack.tileSize}px source actors`)
     drawSettingRow(canvas, x + 4, y + 10, width - 8, "UI", `${model.uiHidden ? "hidden now" : "visible now"}; profile default ${onOff(model.settings.showUi)}`)
     drawSettingRow(canvas, x + 4, y + 12, width - 8, "Save path", saveDirectory())
-    drawSettingRow(canvas, x + 4, y + 14, width - 8, "Cloud", "planned GitHub login + encrypted save sync")
+    drawSettingRow(canvas, x + 4, y + 14, width - 8, "Cloud", "Supabase auth session stored outside saves")
     drawSettingRow(canvas, x + 4, y + 16, width - 8, "Host", `bun run host -- --mode race --seed ${model.seed}`)
   }
 
   if (model.dialog === "inventory") {
-    const rows = inventoryRows(model.session)
-    const gridX = x + 4
-    const gridY = y + 4
-    rows.slice(0, 8).forEach((row, index) => {
-      const cardX = gridX + (index % 2) * Math.floor((width - 10) / 2)
-      const cardY = gridY + Math.floor(index / 2) * 3
-      const cardW = Math.floor((width - 12) / 2)
-      canvas.fill(cardX, cardY, cardW, 2, " ", UI.panel2, UI.panel2)
-      canvas.border(cardX, cardY, cardW, 3, UI.edgeDim)
-      drawMiniIcon(canvas, cardX + 2, cardY + 1, row.sprite, 6, 1)
-      canvas.write(cardX + 9, cardY + 1, trim(row.name, cardW - 15), UI.ink, UI.panel2)
-      canvas.write(cardX + cardW - 5, cardY + 1, `x${row.count}`, UI.gold, UI.panel2)
-    })
-    if (!rows.length) canvas.center(y + Math.floor(height / 2), "Your pack is empty.", UI.soft, UI.panel)
-    canvas.write(x + 4, y + height - 4, "Loot is run-scoped now; multiplayer trading will reuse this inventory grid.", UI.muted, UI.panel)
+    drawInventoryDialog(canvas, model)
+    return
+  }
+
+  if (model.dialog === "quests") {
+    drawQuestsDialog(canvas, model, x, y, width, height)
   }
 
   if (model.dialog === "log") {
@@ -1392,7 +1677,7 @@ function drawDialog(canvas: Canvas, model: AppModel) {
       ["Move", "Arrows / WASD"],
       ["Confirm", "Enter / Space"],
       ["Save", "Ctrl+S or F5 saves locally"],
-      ["Pack", "I inventory, H potion, L log"],
+      ["Pack", "I inventory, J quests, O quests in Vim mode, H potion, L log"],
       ["Combat", "Tab target, 1-3 skill, F flee, Enter rolls d20"],
       ["Camera", "- wider FOV, = closer view"],
       ["Overlay", "U hides or shows the UI for this run"],
@@ -1408,23 +1693,27 @@ function drawDialog(canvas: Canvas, model: AppModel) {
   if (model.dialog === "pause") {
     drawPixelBlock(canvas, x + 5, y + 5, animatedPixelSprite(classSprite(model.session.hero.classId), "idle", model.session.turn, 14, 6), 0.9)
     canvas.write(x + 24, y + 4, "The dungeon holds your place.", UI.ink, UI.panel)
-    drawKeycap(canvas, x + 24, y + 6, "Esc")
-    canvas.write(x + 35, y + 6, "Resume", UI.ink, UI.panel)
-    drawKeycap(canvas, x + 24, y + 8, "S")
-    canvas.write(x + 35, y + 8, "Settings", UI.ink, UI.panel)
-    drawKeycap(canvas, x + 24, y + 10, "T")
-    canvas.write(x + 35, y + 10, "Quit to title", UI.gold, UI.panel)
-    drawKeycap(canvas, x + 24, y + 12, "Q")
-    canvas.write(x + 35, y + 12, "Exit game", UI.hp, UI.panel)
+    drawPauseAction(canvas, x + 24, y + 6, width - 31, "Esc", "Resume", UI.focus)
+    drawPauseAction(canvas, x + 24, y + 8, width - 31, "S", "Settings", UI.cyan)
+    drawPauseAction(canvas, x + 24, y + 10, width - 31, "T", "Quit to title", UI.gold)
+    drawPauseAction(canvas, x + 24, y + 12, width - 31, "Q", "Exit game", UI.hp)
     writeWrapped(canvas, x + 4, y + height - 5, width - 8, ["Race mode keeps the same seed so friends can replay this generated crawl."], 2, UI.soft, UI.panel)
   }
 
   const footer = model.dialog === "pause" ? "resume" : "close"
   const footerText = `Esc ${footer}`
   const footerW = footerText.length + 4
-  canvas.fill(x + Math.floor((width - footerW) / 2), y + height - 2, footerW, 1, " ", UI.panel3, UI.panel3)
-  canvas.write(x + Math.floor((width - footerW) / 2) + 2, y + height - 2, "Esc", UI.gold, UI.panel3)
-  canvas.write(x + Math.floor((width - footerW) / 2) + 6, y + height - 2, footer, UI.ink, UI.panel3)
+  const footerX = x + Math.floor((width - footerW) / 2)
+  canvas.fill(footerX, y + height - 2, footerW, 1, " ", cleanPanel3, cleanPanel3)
+  canvas.write(footerX + 2, y + height - 2, "Esc", UI.gold, cleanPanel3)
+  canvas.write(footerX + 6, y + height - 2, footer, UI.ink, cleanPanel3)
+}
+
+function drawPauseAction(canvas: Canvas, x: number, y: number, width: number, key: string, labelText: string, accent: string) {
+  if (width < 18) return
+  canvas.fill(x, y, width, 1, " ", cleanPanel2, cleanPanel2)
+  drawKeycap(canvas, x + 1, y, key)
+  canvas.write(x + 11, y, trim(labelText, width - 12), accent, cleanPanel2)
 }
 
 function drawRunEnd(canvas: Canvas, session: GameSession) {
@@ -1514,12 +1803,19 @@ function startItemMeta(item: string, model: AppModel) {
   return ""
 }
 
-function settingValue(settings: UserSettings, id: (typeof settingsOptions)[number]["id"]) {
+function settingValue(model: AppModel, id: (typeof settingsOptions)[number]["id"]) {
+  const settings = model.settings
   if (id === "username") return settings.username
+  if (id === "showUi") return onOff(settings.showUi)
+  if (id === "runSeed") return String(model.session.seed)
+  if (id === "runMode") return model.session.mode
+  if (id === "runFloor") return `${model.session.floor}/${model.session.finalFloor}`
+  if (id === "runTurn") return String(model.session.turn)
+  if (id === "runAssets") return activeAssetPack.name
+  if (id === "runSaves") return saveDirectory()
   if (id === "controlScheme") return settings.controlScheme
   if (id === "highContrast") return onOff(settings.highContrast)
   if (id === "reduceMotion") return onOff(settings.reduceMotion)
-  if (id === "showUi") return onOff(settings.showUi)
   if (id === "diceSkin") return diceSkinName(settings.diceSkin)
   if (id === "backgroundFx") return settings.backgroundFx
   if (id === "tileScale") return settings.tileScale
@@ -1554,7 +1850,10 @@ function onOff(value: boolean) {
 }
 
 function trim(text: string, width: number) {
-  return text.length <= width ? text : text.slice(0, Math.max(0, width - 1))
+  if (width <= 0) return ""
+  if (text.length <= width) return text
+  if (width === 1) return "…"
+  return `${text.slice(0, Math.max(0, width - 1))}…`
 }
 
 function tint(color: string, factor: number) {
@@ -1573,12 +1872,4 @@ function fitPattern(text: string, width: number) {
   if (text.length === width) return text
   if (text.length > width) return text.slice(0, width)
   return text + " ".repeat(width - text.length)
-}
-
-function wrap(value: number, count: number) {
-  return (value + count) % count
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value))
 }
