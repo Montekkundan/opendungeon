@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "entry": [
+    "src/main.ts",
+    "src/net/host.ts",
+    "src/server/dev.ts",
+    "src/**/*.test.ts",
+    "packages/www/vite.config.ts",
+    "packages/www/src/app.tsx",
+    "packages/www/src/entry-client.tsx",
+    "packages/www/src/entry-server.tsx",
+    "packages/www/src/routes/**/*.tsx"
+  ],
+  "ignorePatterns": [
+    "node_modules/**",
+    "dist/**",
+    ".output/**",
+    "packages/www/node_modules/**",
+    "packages/www/dist/**",
+    "packages/www/.output/**"
+  ],
+  "rules": {
+    "unused-files": "warn",
+    "unused-exports": "warn",
+    "unused-types": "warn"
+  }
+}
