@@ -54,7 +54,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("settings", createSession(4321), { settingsTabIndex: 3 }),
-      expectedHash: "d7e3d2b0",
+      expectedHash: "fcac0598",
       requiredText: ["Settings", "Visuals", "Camera FOV"],
     },
     {
@@ -85,16 +85,18 @@ describe("terminal renderer snapshots", () => {
 
   for (const renderCase of cases) {
     test(`${renderCase.name} render stays within its golden terminal frame`, () => {
-      const output = draw(renderCase.model, renderCase.width, renderCase.height)
-      const text = screenText(output.chunks)
-      const rows = text.split("\n")
+      withStableLocalPaths(() => {
+        const output = draw(renderCase.model, renderCase.width, renderCase.height)
+        const text = screenText(output.chunks)
+        const rows = text.split("\n")
 
-      expect(rows).toHaveLength(renderCase.height)
-      expect(rows.every((row) => row.length === renderCase.width)).toBe(true)
-      expect(text).not.toContain("undefined")
-      expect(text).not.toContain("NaN")
-      for (const required of renderCase.requiredText) expect(text).toContain(required)
-      expect(hashText(styledSignature(output.chunks))).toBe(renderCase.expectedHash)
+        expect(rows).toHaveLength(renderCase.height)
+        expect(rows.every((row) => row.length === renderCase.width)).toBe(true)
+        expect(text).not.toContain("undefined")
+        expect(text).not.toContain("NaN")
+        for (const required of renderCase.requiredText) expect(text).toContain(required)
+        expect(hashText(styledSignature(output.chunks))).toBe(renderCase.expectedHash)
+      })
     })
   }
 })
@@ -228,6 +230,21 @@ function modelFor(screen: ScreenId, session = createSession(1234), overrides: Pa
 
 function screenText(chunks: Array<{ text: string }>) {
   return chunks.map((chunk) => chunk.text).join("")
+}
+
+function withStableLocalPaths(assertions: () => void) {
+  const previousProfileDir = process.env.OPENDUNGEON_PROFILE_DIR
+  const previousSaveDir = process.env.OPENDUNGEON_SAVE_DIR
+  process.env.OPENDUNGEON_PROFILE_DIR = "/tmp/opendungeon-test/profile"
+  process.env.OPENDUNGEON_SAVE_DIR = "/tmp/opendungeon-test/saves"
+  try {
+    assertions()
+  } finally {
+    if (previousProfileDir === undefined) delete process.env.OPENDUNGEON_PROFILE_DIR
+    else process.env.OPENDUNGEON_PROFILE_DIR = previousProfileDir
+    if (previousSaveDir === undefined) delete process.env.OPENDUNGEON_SAVE_DIR
+    else process.env.OPENDUNGEON_SAVE_DIR = previousSaveDir
+  }
 }
 
 function styledSignature(chunks: Array<{ text: string; fg?: unknown; bg?: unknown; attributes?: number }>) {
