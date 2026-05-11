@@ -55,6 +55,8 @@ import {
   inventoryHitTest,
   moveSelection,
   moveSettingsTab,
+  multiplayerModeForSelection,
+  multiplayerSelectionIndexForMode,
   paint,
   tutorialTabCount,
   type AppModel,
@@ -891,7 +893,7 @@ function confirmMenu() {
     }
     if (item === "Multiplayer") {
       setScreen("mode", "Choosing run mode.")
-      model.menuIndex = model.modeIndex
+      model.menuIndex = multiplayerSelectionIndexForMode(currentMode(model).id)
     }
     if (item === "Cloud login") {
       setScreen("cloud", "Opening cloud profile.")
@@ -920,7 +922,7 @@ function confirmMenu() {
   }
 
   if (model.screen === "mode") {
-    model.modeIndex = model.menuIndex
+    model.modeIndex = modeIndexFor(multiplayerModeForSelection(model.menuIndex).id)
     setScreen("start", "Run mode selected.")
     model.menuIndex = 0
   }

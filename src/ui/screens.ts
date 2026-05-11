@@ -120,9 +120,10 @@ const classOptions: Array<{ id: HeroClass; name: string; text: string }> = [
 ]
 const modeOptions: Array<{ id: MultiplayerMode; name: string; text: string }> = [
   { id: "solo", name: "Solo", text: "One crawl, local run." },
-  { id: "coop", name: "Co-op", text: "Shared dungeon host. Network hook later." },
+  { id: "coop", name: "Co-op", text: "Shared dungeon host. Friends progress together." },
   { id: "race", name: "Race", text: "Same seed, separate runs. Fastest descent wins." },
 ]
+const multiplayerModeOptions = modeOptions.filter((option) => option.id !== "solo")
 const settingTabs = [
   { id: "profile", name: "Profile", description: "Identity, cloud, and overlays" },
   { id: "run", name: "Run", description: "Current world, seed, save, and asset details" },
@@ -313,7 +314,16 @@ export function currentClass(model: AppModel) {
 }
 
 export function currentMode(model: AppModel) {
-  return modeOptions[model.modeIndex]
+  return modeOptions[model.modeIndex] ?? modeOptions[0]
+}
+
+export function multiplayerModeForSelection(index: number) {
+  return multiplayerModeOptions[wrap(index, multiplayerModeOptions.length)] ?? multiplayerModeOptions[0]
+}
+
+export function multiplayerSelectionIndexForMode(mode: MultiplayerMode) {
+  const index = multiplayerModeOptions.findIndex((option) => option.id === mode)
+  return index >= 0 ? index : 0
 }
 
 export function currentSettingItem(model: AppModel) {
@@ -341,7 +351,7 @@ export function moveSelection(model: AppModel, delta: number) {
     model.screen === "character"
       ? classOptions.length
       : model.screen === "mode"
-        ? modeOptions.length
+        ? multiplayerModeOptions.length
         : model.screen === "cloud"
           ? 3
           : model.screen === "tutorial"
@@ -351,7 +361,7 @@ export function moveSelection(model: AppModel, delta: number) {
             : startItems.length
   model.menuIndex = wrap(model.menuIndex + delta, count)
   if (model.screen === "character") model.classIndex = model.menuIndex
-  if (model.screen === "mode") model.modeIndex = model.menuIndex
+  if (model.screen === "mode") model.modeIndex = modeOptions.findIndex((option) => option.id === multiplayerModeForSelection(model.menuIndex).id)
   if (model.screen === "settings") model.settingsIndex = model.menuIndex
 }
 
@@ -461,11 +471,11 @@ function drawCharacter(canvas: Canvas, model: AppModel) {
 function drawMode(canvas: Canvas, model: AppModel) {
   drawDungeonBackdrop(canvas, model.seed + 4, model.settings)
   const { x, y, width, height } = centeredPanelBounds(canvas, 86, 22)
-  drawPanel(canvas, x, y, width, height, "Run Mode", UI.gold)
+  drawPanel(canvas, x, y, width, height, "Multiplayer", UI.gold)
   drawD20Sprite(canvas, x + 5, y + 4, 20, d20FrameCount() - 1, 10, 5, model.settings.diceSkin)
 
-  modeOptions.forEach((option, index) => {
-    const selected = model.modeIndex === index
+  multiplayerModeOptions.forEach((option, index) => {
+    const selected = model.menuIndex === index
     const row = y + 4 + index * 4
     const rowX = x + 18
     if (selected) drawSelectCard(canvas, rowX - 2, row - 1, width - 24, 3, true)
@@ -473,7 +483,9 @@ function drawMode(canvas: Canvas, model: AppModel) {
     canvas.write(rowX + 4, row + 1, option.text, selected ? UI.ink : UI.soft, selected ? UI.panel3 : UI.panel)
   })
 
-  canvas.write(x + 4, y + height - 4, `Host lobby: bun run host -- --mode ${currentMode(model).id} --seed ${model.seed}`, UI.soft, UI.panel)
+  const selectedMode = multiplayerModeForSelection(model.menuIndex)
+  canvas.write(x + 4, y + height - 5, "Solo runs start from New descent on the title screen.", UI.muted, UI.panel)
+  canvas.write(x + 4, y + height - 4, `Host lobby: bun run host -- --mode ${selectedMode.id} --seed ${model.seed}`, UI.soft, UI.panel)
   canvas.write(x + 4, y + height - 3, "Friends reuse the shared seed for co-op or race runs.", UI.muted, UI.panel)
   drawFooter(canvas, [
     ["Enter", "confirm"],

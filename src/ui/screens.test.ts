@@ -104,6 +104,17 @@ test("title disables internet-only entries while offline", () => {
   expect(currentStartItemDisabled(modelFor("start", createSession(1234), { menuIndex: 1, internetStatus: "offline" }))).toBe(false)
 })
 
+test("multiplayer picker only shows multiplayer modes", () => {
+  const output = draw(modelFor("mode", createSession(1234), { menuIndex: 0, modeIndex: 0 }), 100, 32)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Multiplayer")
+  expect(text).toContain("Co-op")
+  expect(text).toContain("Race")
+  expect(text).toContain("Solo runs start from New descent")
+  expect(text).not.toContain("One crawl, local run.")
+})
+
 function skillCheckModel() {
   const session = createSession(1234)
   const target = { x: session.player.x + 1, y: session.player.y }
