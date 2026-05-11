@@ -259,6 +259,13 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
     return
   }
 
+  if (key.name === "q" && model.screen === "game" && model.session.conversation && !model.session.combat.active && !model.session.skillCheck) {
+    model.session.conversation = null
+    model.saveStatus = "Conversation closed."
+    refresh()
+    return
+  }
+
   if (key.name === "q") {
     requestQuit()
     return
@@ -776,7 +783,7 @@ function handleGameKey(key: KeyEvent) {
   if (model.session.conversation && !model.session.combat.active && !model.session.skillCheck) {
     if (key.name === "escape") {
       model.session.conversation = null
-      model.saveStatus = "Conversation closed. Press Q to quit the game or Esc for pause."
+      model.saveStatus = "Conversation closed."
       return
     }
     if (/^[1-3]$/.test(key.name)) {

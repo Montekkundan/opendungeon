@@ -1793,9 +1793,9 @@ function drawConversationPanel(canvas: Canvas, session: GameSession) {
       canvas.write(optionX, optionY, `${index + 1}`, selected ? UI.gold : UI.muted, UI.panel)
       canvas.write(optionX + 2, optionY, trim(option.label, 12), selected ? UI.focus : UI.soft, UI.panel)
     })
-    canvas.write(x + 14, y + height - 2, trim("1-3 choose  Enter confirm  Esc leave  Q close run", width - 18), UI.muted, UI.panel)
+    canvas.write(x + 14, y + height - 2, trim("1-3 choose  Enter confirm  Esc leave", width - 18), UI.muted, UI.panel)
   } else {
-    canvas.write(x + 14, y + height - 2, trim("Enter close  Esc leave  Q close run", width - 18), UI.muted, UI.panel)
+    canvas.write(x + 14, y + height - 2, trim("Enter close  Esc leave", width - 18), UI.muted, UI.panel)
   }
 }
 

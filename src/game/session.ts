@@ -2138,6 +2138,13 @@ function continueConversation(session: GameSession): ConversationState | null {
   const conversation = session.conversation
   if (!conversation) return null
 
+  if (conversation.status === "completed") {
+    session.conversation = null
+    session.log.unshift(`${conversation.speaker} returns to the dark.`)
+    trimLog(session)
+    return null
+  }
+
   if (conversation.trade && !conversation.trade.purchased) {
     if (session.gold >= conversation.trade.price) {
       session.gold -= conversation.trade.price
@@ -2162,10 +2169,6 @@ function continueConversation(session: GameSession): ConversationState | null {
   }
 
   if (conversation.status === "open") return chooseConversationOption(session, conversation.selectedOption)
-
-  session.conversation = null
-  session.log.unshift(`${conversation.speaker} returns to the dark.`)
-  trimLog(session)
   return null
 }
 

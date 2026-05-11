@@ -273,6 +273,27 @@ test("full map dialog shows dungeon overview and run counts", () => {
   expect(text).toContain("M or Esc close")
 })
 
+test("merchant response footer does not offer close-run from conversation", () => {
+  const session = createSession(1234)
+  session.conversation = {
+    id: "merchant-test",
+    actorId: "merchant-test",
+    kind: "merchant",
+    speaker: "Ash Merchant Pell",
+    text: "12 gold needed for Merchant salve.",
+    status: "completed",
+    options: [],
+    selectedOption: 0,
+    trade: { item: "Merchant salve", price: 12, purchased: false },
+  }
+  const output = draw(modelFor("game", session), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Enter close")
+  expect(text).toContain("Esc leave")
+  expect(text).not.toContain("Q close run")
+})
+
 function skillCheckModel() {
   const session = createSession(1234)
   const target = { x: session.player.x + 1, y: session.player.y }

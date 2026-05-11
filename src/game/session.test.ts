@@ -188,6 +188,25 @@ describe("game session", () => {
     expect(session.log[0]).toContain("purchased")
   })
 
+  test("failed merchant trade closes on the next confirm instead of retrying", () => {
+    const session = createSession(1234)
+    addEnemyBesidePlayer(session, "test-merchant", "merchant", 1, 0)
+
+    tryMove(session, 1, 0)
+    const failed = interactWithWorld(session)
+    const toastCount = session.toasts.length
+
+    expect(failed?.status).toBe("completed")
+    expect(failed?.text).toContain("12 gold needed")
+    expect(session.conversation).not.toBeNull()
+
+    const closed = interactWithWorld(session)
+
+    expect(closed).toBeNull()
+    expect(session.conversation).toBeNull()
+    expect(session.toasts.length).toBe(toastCount)
+  })
+
   test("NPC conversations expose selectable run-affecting options", () => {
     const session = createSession(1234)
     session.hp = session.maxHp - 6
