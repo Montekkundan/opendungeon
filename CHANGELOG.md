@@ -1,5 +1,11 @@
 # @montekkundan/opendungeon
 
+## 0.1.3
+
+### Patch Changes
+
+- 8fbbf9f: Enable auto-merge for generated Changesets release pull requests.
+
 ## 0.1.2
 
 ### Patch Changes
