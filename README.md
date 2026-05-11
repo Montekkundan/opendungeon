@@ -62,7 +62,7 @@ bun run changeset
 git push origin main
 ```
 
-The main-branch npm workflow opens a Changesets version PR. Merging that PR updates `package.json`, `src/version.ts`, and publishes the new npm version through npm Trusted Publishing. For Bun players, publish to npm; Bun installs global packages from the npm registry, so there is no separate Bun registry step.
+The main-branch npm workflow opens a Changesets version PR and enables auto-merge for it. Once branch rules are satisfied, that version PR merges and the follow-up main run publishes the new npm version through npm Trusted Publishing. For Bun players, publish to npm; Bun installs global packages from the npm registry, so there is no separate Bun registry step.
 
 ### Release
 
