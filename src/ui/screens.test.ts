@@ -70,7 +70,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("game", createSession(1234), { dialog: "book" }),
-      expectedHash: "60b7348c",
+      expectedHash: "4b02cc09",
       requiredText: ["BOOK", "Known", "Waking Cell", "Portal Room"],
     },
     {
@@ -225,6 +225,8 @@ test("quest journal only lists discovered chains at the start", () => {
 
   expect(text).toContain("Escort: crypt")
   expect(text).toContain("locked quest chains hidden")
+  const firstObjective = session.world.events.find((event) => event.id === session.world.quests.find((quest) => quest.status === "active")?.objectiveEventIds[0])?.title
+  if (firstObjective) expect(text).toContain(firstObjective)
   if (lockedTitle) expect(text).not.toContain(lockedTitle)
 })
 

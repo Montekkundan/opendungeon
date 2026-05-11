@@ -1892,21 +1892,8 @@ function writeCentered(canvas: Canvas, x: number, y: number, width: number, text
 }
 
 function writeWrapped(canvas: Canvas, x: number, y: number, width: number, paragraphs: readonly string[], maxRows: number, fg: string, bg?: string) {
-  const words = paragraphs.join(" ").split(/\s+/).filter(Boolean)
-  const rows: string[] = []
-  let current = ""
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word
-    if (next.length <= width) {
-      current = next
-      continue
-    }
-    if (current) rows.push(current)
-    current = word
-    if (rows.length >= maxRows) break
-  }
-  if (current && rows.length < maxRows) rows.push(current)
-  rows.slice(0, maxRows).forEach((row, index) => canvas.write(x, y + index, trim(row, width), fg, bg))
+  const rows = wrappedRows(paragraphs.join(" "), width, maxRows)
+  rows.forEach((row, index) => canvas.write(x, y + index, trim(row, width), fg, bg))
 }
 
 function gameHudHeight(canvas: Canvas) {
@@ -2274,8 +2261,9 @@ function dialogMetrics(dialog: NonNullable<DialogId>, canvasWidth: number, canva
   }
 
   const wide = dialog === "log" || dialog === "settings" || dialog === "quests" || dialog === "book" || dialog === "hub" || dialog === "saveManager" || dialog === "cutscene"
-  const width = Math.min(wide ? 88 : 74, Math.max(20, canvasWidth - 10))
-  const height = Math.min(Math.max(10, canvasHeight - 2), dialog === "log" ? 18 : dialog === "quests" || dialog === "book" || dialog === "hub" || dialog === "saveManager" ? 22 : dialog === "cutscene" ? 18 : dialog === "settings" ? 20 : dialog === "help" ? 21 : dialog === "pause" ? 18 : dialog === "quit" ? 18 : 14)
+  const wideMax = dialog === "quests" || dialog === "book" || dialog === "hub" || dialog === "saveManager" ? 118 : dialog === "settings" || dialog === "cutscene" ? 104 : 96
+  const width = Math.min(wide ? wideMax : 74, Math.max(20, canvasWidth - 10))
+  const height = Math.min(Math.max(10, canvasHeight - 2), dialog === "log" ? 18 : dialog === "quests" || dialog === "book" ? 26 : dialog === "hub" || dialog === "saveManager" ? 24 : dialog === "cutscene" ? 18 : dialog === "settings" ? 20 : dialog === "help" ? 21 : dialog === "pause" ? 18 : dialog === "quit" ? 18 : 14)
   return {
     x: Math.floor((canvasWidth - width) / 2),
     y: Math.floor((canvasHeight - height) / 2),
@@ -2485,7 +2473,7 @@ function drawBookDialog(canvas: Canvas, model: AppModel, x: number, y: number, w
   const entries = model.session.knowledge
   const listX = x + 4
   const listY = y + 4
-  const listW = Math.min(34, Math.floor((width - 10) * 0.4))
+  const listW = Math.min(42, Math.floor((width - 10) * 0.4))
   const rowH = 2
   const visibleRows = Math.max(4, Math.min(entries.length || 1, Math.floor((height - 8) / rowH)))
   const offset = scrollOffset(model.bookIndex, visibleRows, entries.length)
@@ -2544,7 +2532,7 @@ function drawQuestsDialog(canvas: Canvas, model: AppModel, x: number, y: number,
   const lockedCount = allQuests.filter((quest) => quest.status === "locked").length
   const listX = x + 4
   const listY = y + 4
-  const listW = Math.min(36, Math.floor((width - 10) * 0.42))
+  const listW = Math.min(44, Math.floor((width - 10) * 0.42))
   const rowH = 2
   const visibleRows = Math.max(4, Math.min(quests.length || 1, Math.floor((height - 8) / rowH)))
   const offset = scrollOffset(selectedIndex, visibleRows, quests.length)
@@ -2557,7 +2545,7 @@ function drawQuestsDialog(canvas: Canvas, model: AppModel, x: number, y: number,
     drawQuestListRow(canvas, listX, listY + visibleIndex * rowH, listW, model, quest, index === selectedIndex)
   })
   if (!quests.length) canvas.write(listX, listY, "No quests generated yet.", UI.soft, UI.panel)
-  if (lockedCount > 0) canvas.write(listX, y + height - 5, trim(`${lockedCount} locked quest chain${lockedCount === 1 ? "" : "s"} hidden until discovered.`, listW), UI.muted, UI.panel)
+  if (lockedCount > 0) writeWrapped(canvas, listX, y + height - 6, listW, [`${lockedCount} locked quest chain${lockedCount === 1 ? "" : "s"} hidden until discovered.`], 2, UI.muted, UI.panel)
 
   const detailX = listX + listW + 4
   const detailW = width - (detailX - x) - 4
@@ -2572,13 +2560,18 @@ function drawQuestsDialog(canvas: Canvas, model: AppModel, x: number, y: number,
 
   const objectiveY = listY + 9
   canvas.write(detailX + 3, objectiveY, "Objectives", UI.brass, UI.panel)
-  selectedQuest.objectiveEventIds.slice(0, Math.max(1, detailH - 12)).forEach((eventId, index) => {
+  let objectiveRow = objectiveY + 2
+  const objectiveMaxY = listY + detailH - 2
+  selectedQuest.objectiveEventIds.forEach((eventId) => {
+    if (objectiveRow > objectiveMaxY) return
     const event = model.session.world.events.find((item) => item.id === eventId)
     const status = event?.status ?? "future"
     const marker = status === "completed" ? "✓" : status === "active" ? "◆" : "·"
     const color = status === "completed" ? UI.focus : status === "active" ? UI.gold : UI.muted
-    canvas.write(detailX + 3, objectiveY + 2 + index, marker, color, UI.panel)
-    canvas.write(detailX + 6, objectiveY + 2 + index, trim(event?.title ?? eventId, detailW - 9), color, UI.panel)
+    const rows = wrappedRows(event?.title ?? eventId, detailW - 9, Math.min(2, objectiveMaxY - objectiveRow + 1))
+    canvas.write(detailX + 3, objectiveRow, marker, color, UI.panel)
+    rows.forEach((row, rowIndex) => canvas.write(detailX + 6, objectiveRow + rowIndex, row, color, UI.panel))
+    objectiveRow += Math.max(1, rows.length)
   })
 }
 
