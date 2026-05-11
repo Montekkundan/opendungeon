@@ -1,23 +1,44 @@
 import { FrameBufferRenderable, createCliRenderer, type KeyEvent, type MouseEvent as OpenTuiMouseEvent } from "@opentui/core"
 import {
+  addToast,
   createSession,
   cycleTarget,
+  chooseConversationOption,
+  chooseLevelUpTalent,
+  cycleConversationOption,
   attemptFlee,
+  buildHubStation,
+  cycleContentPack,
+  cycleSharedFarmPermission,
   heroClassIds,
+  completeVillageQuest,
+  customizeVillageHouse,
   dismissSkillCheck,
+  harvestFarm,
   interactWithWorld,
   isHeroClass,
+  moveVillagePlayer,
+  plantCrop,
+  playLocalCutscene,
+  prepareFood,
   performCombatAction,
+  refreshBalanceDashboard,
   rest,
   resolveSkillCheck,
+  runVillageShopSale,
   selectSkill,
+  sellLootToVillage,
+  toggleRunMutator,
   tryMove,
+  upgradeWeapon,
+  visitVillageLocation,
+  unlockHub,
   usePotion,
   type GameSession,
   type HeroClass,
   type MultiplayerMode,
 } from "./game/session.js"
-import { deleteSave, listSaves, loadSave, renameSave, saveAutosave, saveSession, type SaveSummary } from "./game/saveStore.js"
+import { deleteSave, exportSave, listSaves, loadSave, renameSave, saveAutosave, saveSession, type SaveSummary } from "./game/saveStore.js"
 import { handleSaveCommand, saveCommandHelp } from "./game/saveCli.js"
 import { loadSettings, saveSettings, type UserSettings } from "./game/settingsStore.js"
 import { appearanceLabel, cycleCosmeticPalette, cycleHeroAnimationSet, cycleHeroWeaponSprite, cyclePortraitVariant, normalizeHeroAppearance } from "./game/appearance.js"
@@ -28,13 +49,18 @@ import {
   currentClass,
   currentMode,
   currentStartItem,
+  currentStartItemDisabled,
   currentSettingItem,
   inventoryGridInfo,
   inventoryHitTest,
   moveSelection,
   moveSettingsTab,
   paint,
+  tutorialTabCount,
   type AppModel,
+  type PlayerMoveAnimation,
+  type ScreenId,
+  type ScreenTransition,
 } from "./ui/screens.js"
 import { shouldUseThreeRenderer } from "./rendering/threeAssets.js"
 import { authHelpText, handleAuthCommand } from "./cloud/authCli.js"
@@ -42,6 +68,7 @@ import { formatTerminalCapabilityReport, terminalCapabilityReport } from "./syst
 import { formatServerSetupReport, serverSetupReport } from "./system/serverSetupCheck.js"
 import { handleSetupCommand } from "./system/firstRunSetup.js"
 import { debugOverlaysEnabled } from "./system/debugFlags.js"
+import { checkInternetConnectivity } from "./net/connectivity.js"
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`opendungeon ${version}
@@ -124,14 +151,27 @@ const model: AppModel = {
   uiHidden: !initialSettings.showUi,
   inventoryIndex: 0,
   inventoryDragIndex: null,
+  bookIndex: 0,
   questIndex: 0,
+  tutorialIndex: 0,
+  internetStatus: "checking",
+  animationFrame: 0,
+  playerMoveAnimation: null,
   diceRollAnimation: null,
+  screenTransition: null,
 }
 let submittedSession: GameSession | null = null
 let diceTimer: ReturnType<typeof setTimeout> | null = null
+let moveTimer: ReturnType<typeof setTimeout> | null = null
+let transitionTimer: ReturnType<typeof setTimeout> | null = null
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+let autosaveTimer: ReturnType<typeof setInterval> | null = null
 let destroyed = false
 let pendingDeleteSaveId: string | null = null
 let lastAutosaveSignature = ""
+let lastManualSaveSignature = ""
+const toastCreatedAt = new Map<string, number>()
+const toastTtlMs = 3200
 
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
@@ -160,6 +200,8 @@ const screen = new FrameBufferRenderable(renderer, {
 
 renderer.root.add(screen)
 renderer.on("resize", refresh)
+void refreshInternetStatus()
+autosaveTimer = setInterval(() => autosaveCurrentRun("timer"), 30_000)
 refresh()
 
 renderer.keyInput.on("keypress", (key: KeyEvent) => {
@@ -195,7 +237,15 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
   }
 
   if (key.name === "q") {
-    destroyApp()
+    requestQuit()
+    return
+  }
+
+  if (model.screen === "village") {
+    handleVillageKey(key)
+    autosaveCurrentRun()
+    maybeSubmitLobbyResult()
+    refresh()
     return
   }
 
@@ -209,13 +259,45 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
 })
 
 function handleDialogKey(key: KeyEvent) {
+  if (model.dialog === "quit") {
+    if (key.name === "s") {
+      saveCurrentRun(true)
+      destroyApp()
+      return
+    }
+    if (key.name === "q") {
+      destroyApp()
+      return
+    }
+    if (key.name === "escape") {
+      model.dialog = null
+      return
+    }
+    return
+  }
+
   if (model.dialog === "inventory") {
     handleInventoryKey(key)
     return
   }
 
+  if (model.dialog === "book") {
+    handleBookKey(key)
+    return
+  }
+
   if (model.dialog === "quests") {
     handleQuestsKey(key)
+    return
+  }
+
+  if (model.dialog === "hub") {
+    handleHubKey(key)
+    return
+  }
+
+  if (model.dialog === "saveManager") {
+    handleRunSaveManagerKey(key)
     return
   }
 
@@ -226,13 +308,18 @@ function handleDialogKey(key: KeyEvent) {
   }
   if (model.dialog === "pause" && key.name === "t") {
     model.dialog = null
-    model.screen = "start"
+    setScreen("start", "Returning to title.")
     model.menuIndex = 0
     model.diceRollAnimation = null
     return
   }
   if (model.dialog === "pause" && key.name === "q") {
-    destroyApp()
+    requestQuit()
+    return
+  }
+  if (model.dialog === "pause" && key.name === "m") {
+    refreshSaveList()
+    model.dialog = "saveManager"
     return
   }
   if (key.name === "escape" || key.name === "return" || key.name === "enter" || key.name === "linefeed") model.dialog = null
@@ -262,6 +349,135 @@ function handleQuestsKey(key: KeyEvent) {
   if (isDownKey(key)) model.questIndex = clamp(model.questIndex + 1, 0, max)
   if (key.name === "pageup") model.questIndex = clamp(model.questIndex - 5, 0, max)
   if (key.name === "pagedown") model.questIndex = clamp(model.questIndex + 5, 0, max)
+}
+
+function handleBookKey(key: KeyEvent) {
+  const max = Math.max(0, model.session.knowledge.length - 1)
+  if (key.name === "escape" || isConfirmKey(key)) {
+    model.dialog = null
+    return
+  }
+  if (isUpKey(key)) model.bookIndex = clamp(model.bookIndex - 1, 0, max)
+  if (isDownKey(key)) model.bookIndex = clamp(model.bookIndex + 1, 0, max)
+  if (key.name === "pageup") model.bookIndex = clamp(model.bookIndex - 5, 0, max)
+  if (key.name === "pagedown") model.bookIndex = clamp(model.bookIndex + 5, 0, max)
+}
+
+function handleHubKey(key: KeyEvent) {
+  if (key.name === "escape" || key.name === "return" || key.name === "enter" || key.name === "linefeed") {
+    model.dialog = null
+    return
+  }
+  if (key.name === "v" && model.session.hub.unlocked) {
+    model.dialog = null
+    setScreen("village", "Village road opens.", "village")
+    return
+  }
+  if (key.name === "b") {
+    refreshBalanceDashboard(model.session)
+    model.saveStatus = model.session.log[0] ?? "Balance dashboard refreshed."
+    return
+  }
+  if (key.name === "c") {
+    cycleContentPack(model.session)
+    model.saveStatus = model.session.log[0] ?? "Content pack changed."
+    return
+  }
+  if (key.name === "n") {
+    playLocalCutscene(model.session)
+    model.dialog = "cutscene"
+    return
+  }
+  if (key.name === "1") buildHubStation(model.session, "blacksmith")
+  if (key.name === "2") buildHubStation(model.session, "kitchen")
+  if (key.name === "3") sellLootToVillage(model.session)
+  if (key.name === "4") prepareFood(model.session)
+  if (key.name === "5") {
+    if (!plantCrop(model.session)) harvestFarm(model.session)
+  }
+  if (key.name === "6") upgradeWeapon(model.session)
+  if (key.name === "7") completeVillageQuest(model.session)
+  if (key.name === "8") toggleRunMutator(model.session, "hard-mode")
+  if (key.name === "9") toggleRunMutator(model.session, "cursed-floors")
+  model.saveStatus = model.session.log[0] ?? "Hub updated."
+}
+
+function handleVillageKey(key: KeyEvent) {
+  if (key.name === "escape") {
+    setScreen("game", "Returning to dungeon.", "village")
+    model.saveStatus = ""
+    return
+  }
+  if (key.name === "?" || (key.shift && key.name === "/")) {
+    model.dialog = "help"
+    return
+  }
+  if (key.name === "m") {
+    const sale = runVillageShopSale(model.session)
+    model.saveStatus = sale?.reaction ?? model.session.log[0] ?? "No market sale."
+    return
+  }
+  if (key.name === "h") {
+    const house = customizeVillageHouse(model.session)
+    model.saveStatus = `${house.name} customized.`
+    return
+  }
+  if (key.name === "p") {
+    model.saveStatus = `Farm permissions: ${cycleSharedFarmPermission(model.session)}.`
+    return
+  }
+  if (key.name === "c") {
+    const pack = cycleContentPack(model.session)
+    model.saveStatus = `${pack.active} content pack selected.`
+    return
+  }
+  if (key.name === "b") {
+    const dashboard = refreshBalanceDashboard(model.session)
+    model.saveStatus = `Balance: ${dashboard.classWinRate[model.session.hero.classId]}% ${model.session.hero.classId} projected win rate.`
+    return
+  }
+  if (key.name === "n") {
+    playLocalCutscene(model.session)
+    model.dialog = "cutscene"
+    return
+  }
+  if (isConfirmKey(key)) {
+    const previousCutsceneId = model.session.hub.lastCutsceneId
+    const result = visitVillageLocation(model.session)
+    model.saveStatus = String(result)
+    if (model.session.hub.lastCutsceneId && model.session.hub.lastCutsceneId !== previousCutsceneId) model.dialog = "cutscene"
+    return
+  }
+  const move = movementForKey(key, model.settings)
+  if (move) {
+    const selected = moveVillagePlayer(model.session, move.dx, move.dy)
+    model.saveStatus = `${selected.replace(/-/g, " ")} selected.`
+  }
+}
+
+function handleRunSaveManagerKey(key: KeyEvent) {
+  if (key.name === "escape") {
+    model.dialog = "pause"
+    pendingDeleteSaveId = null
+    return
+  }
+  if (isUpKey(key)) {
+    pendingDeleteSaveId = null
+    model.saveIndex = wrapSaveIndex(model.saveIndex - 1)
+  }
+  if (isDownKey(key)) {
+    pendingDeleteSaveId = null
+    model.saveIndex = wrapSaveIndex(model.saveIndex + 1)
+  }
+  if (key.name === "r") {
+    pendingDeleteSaveId = null
+    refreshSaveList()
+  }
+  if (key.name === "s") saveCurrentRun()
+  if (key.name === "e") startInput("saveName")
+  if (key.name === "d") deleteSelectedSave()
+  if (key.name === "x") exportSelectedSaveBackup()
+  if (isConfirmKey(key)) loadSelectedSave()
 }
 
 function handleMouseDown(event: OpenTuiMouseEvent) {
@@ -331,6 +547,7 @@ function applySelectedInventoryItem() {
     model.session.inventory.splice(index, 1)
     model.session.hp = Math.min(model.session.maxHp, model.session.hp + 3)
     pushSessionLog(`${item} applied. A little health returns.`)
+    addToast(model.session, "Item used", `${item} restored a little health.`, "success")
     model.message = model.session.log[0] ?? `${item} applied.`
     setInventoryIndex(index)
     return
@@ -385,7 +602,7 @@ function handleMenuKey(key: KeyEvent) {
     if (key.name === "d") deleteSelectedSave()
     if (key.name === "escape") {
       pendingDeleteSaveId = null
-      model.screen = "start"
+      setScreen("start", "Save browser closed.")
       model.menuIndex = 0
     }
     if (isConfirmKey(key)) loadSelectedSave()
@@ -397,7 +614,7 @@ function handleMenuKey(key: KeyEvent) {
     if (isDownKey(key)) moveSelection(model, 1)
     if (key.name === "u") startInput("githubUsername")
     if (key.name === "escape") {
-      model.screen = "start"
+      setScreen("start", "Cloud profile closed.")
       model.menuIndex = 0
     }
     if (isConfirmKey(key)) confirmCloud()
@@ -417,7 +634,7 @@ function handleMenuKey(key: KeyEvent) {
     if (isDownKey(key)) moveSelection(model, 1)
     if (key.name === "u") startInput("username")
     if (key.name === "c") {
-      model.screen = "controls"
+      setScreen("controls", "Opening controls.")
       model.menuIndex = 0
     }
     if (key.name === "escape") closeSettings()
@@ -428,7 +645,26 @@ function handleMenuKey(key: KeyEvent) {
   if (model.screen === "controls") {
     if (key.name === "s") openSettings(model.settingsReturnScreen)
     if (key.name === "escape" || isConfirmKey(key)) {
-      model.screen = model.settingsReturnScreen === "game" ? "game" : "start"
+      setScreen(model.settingsReturnScreen === "game" ? "game" : "start", "Controls closed.")
+      model.menuIndex = 0
+    }
+    return
+  }
+
+  if (model.screen === "tutorial") {
+    if (isUpKey(key) || isLeftKey(key)) {
+      moveSelection(model, -1)
+      model.tutorialIndex = model.menuIndex
+    }
+    if (isDownKey(key) || isRightKey(key)) {
+      moveSelection(model, 1)
+      model.tutorialIndex = model.menuIndex
+    }
+    if (key.name === "pageup") model.tutorialIndex = clamp(model.tutorialIndex - 3, 0, tutorialTabCount() - 1)
+    if (key.name === "pagedown") model.tutorialIndex = clamp(model.tutorialIndex + 3, 0, tutorialTabCount() - 1)
+    model.menuIndex = model.tutorialIndex
+    if (key.name === "escape" || isConfirmKey(key)) {
+      setScreen("start", "Tutorial closed.")
       model.menuIndex = 0
     }
     return
@@ -465,8 +701,13 @@ function handleMenuKey(key: KeyEvent) {
   if (isDownKey(key)) moveSelection(model, 1)
   if (model.screen === "start" && key.name === "c") loadLatestSave()
   if (model.screen === "start" && key.name === "n") model.seed = randomSeed()
+  if (model.screen === "start" && key.name === "t") {
+    setScreen("tutorial", "Opening tutorial.")
+    model.menuIndex = model.tutorialIndex
+    return
+  }
   if (key.name === "escape") {
-    model.screen = "start"
+    setScreen("start", "Back to title.")
     model.menuIndex = 0
   }
   if (key.name === "?" || (key.shift && key.name === "/")) model.dialog = "help"
@@ -475,12 +716,37 @@ function handleMenuKey(key: KeyEvent) {
 
 function handleGameKey(key: KeyEvent) {
   if (model.session.status !== "running") {
+    if (key.name === "v") {
+      if (model.session.hub.unlocked) setScreen("village", "Village road opens.", "village")
+      else model.dialog = "hub"
+      return
+    }
     if (isConfirmKey(key)) startRun()
     if (key.name === "escape") {
-      model.screen = "start"
+      setScreen("start", "Returning to title.")
       model.menuIndex = 0
     }
     return
+  }
+
+  if (model.session.levelUp) {
+    handleLevelUpKey(key)
+    return
+  }
+
+  if (model.session.conversation && !model.session.combat.active && !model.session.skillCheck) {
+    if (/^[1-3]$/.test(key.name)) {
+      chooseConversationOption(model.session, Number(key.name) - 1)
+      return
+    }
+    if (isLeftKey(key) || isUpKey(key)) {
+      cycleConversationOption(model.session, -1)
+      return
+    }
+    if (isRightKey(key) || isDownKey(key)) {
+      cycleConversationOption(model.session, 1)
+      return
+    }
   }
 
   if (key.name === "escape") {
@@ -495,6 +761,22 @@ function handleGameKey(key: KeyEvent) {
   }
   if (key.name === "l") {
     model.dialog = "log"
+    return
+  }
+  if (key.name === "b") {
+    model.dialog = "book"
+    model.bookIndex = clamp(model.bookIndex, 0, Math.max(0, model.session.knowledge.length - 1))
+    return
+  }
+  if (key.name === "v") {
+    if (!model.session.hub.unlocked && model.session.knowledge.some((entry) => entry.title.includes("Village Deed"))) unlockHub(model.session, "Village deed opened the portal room.")
+    if (model.session.hub.unlocked) {
+      model.dialog = null
+      setScreen("village", "Village road opens.", "village")
+      return
+    }
+    startScreenTransition(model.screen, model.screen, "Village path is still locked.", "village")
+    model.dialog = "hub"
     return
   }
   if (key.name === "o" || (key.name === "j" && model.settings.controlScheme !== "vim")) {
@@ -537,16 +819,36 @@ function handleGameKey(key: KeyEvent) {
   }
 
   const move = movementForKey(key, model.settings)
-  if (move) tryMove(model.session, move.dx, move.dy)
+  if (move) {
+    const before = { ...model.session.player }
+    tryMove(model.session, move.dx, move.dy)
+    if (before.x !== model.session.player.x || before.y !== model.session.player.y) startPlayerMoveAnimation(moveDirection(move.dx, move.dy))
+  }
+}
+
+function handleLevelUpKey(key: KeyEvent) {
+  if (/^[1-3]$/.test(key.name)) {
+    chooseLevelUpTalent(model.session, Number(key.name) - 1)
+    return
+  }
+  if (isConfirmKey(key)) chooseLevelUpTalent(model.session, 0)
 }
 
 function handleCombatKey(key: KeyEvent) {
-  if (key.name === "tab" || isRightKey(key)) {
+  if (key.name === "tab" || isRightKey(key) || key.name === "d") {
     cycleTarget(model.session, 1)
     return
   }
-  if (isLeftKey(key)) {
+  if (isLeftKey(key) || key.name === "a") {
     cycleTarget(model.session, -1)
+    return
+  }
+  if (isDownKey(key) || key.name === "s") {
+    cycleCombatSkill(1)
+    return
+  }
+  if (isUpKey(key) || key.name === "w") {
+    cycleCombatSkill(-1)
     return
   }
   if (/^[1-6]$/.test(key.name)) {
@@ -566,27 +868,42 @@ function handleCombatKey(key: KeyEvent) {
   }
 }
 
+function cycleCombatSkill(delta: number) {
+  const count = 6
+  const current = model.session.combat.selectedSkill
+  selectSkill(model.session, ((current + delta) % count + count) % count)
+}
+
 function confirmMenu() {
   if (model.screen === "start") {
+    if (currentStartItemDisabled(model)) {
+      model.saveStatus = model.internetStatus === "checking" ? "Checking internet before enabling network features." : "Offline: multiplayer, cloud, and AI admin sync are disabled."
+      void refreshInternetStatus()
+      return
+    }
     const item = currentStartItem(model)
     if (item === "Continue last") loadLatestSave()
     if (item === "New descent") startRun()
     if (item === "Load save") openSaveBrowser()
     if (item === "Character") {
-      model.screen = "character"
+      setScreen("character", "Choosing crawler.")
       model.menuIndex = model.classIndex
     }
     if (item === "Multiplayer") {
-      model.screen = "mode"
+      setScreen("mode", "Choosing run mode.")
       model.menuIndex = model.modeIndex
     }
     if (item === "Cloud login") {
-      model.screen = "cloud"
+      setScreen("cloud", "Opening cloud profile.")
       model.menuIndex = 0
+    }
+    if (item === "Tutorial") {
+      setScreen("tutorial", "Opening tutorial.")
+      model.menuIndex = model.tutorialIndex
     }
     if (item === "Settings") openSettings("start")
     if (item === "Controls") {
-      model.screen = "controls"
+      setScreen("controls", "Opening controls.")
       model.menuIndex = 0
       model.settingsReturnScreen = "start"
     }
@@ -597,14 +914,14 @@ function confirmMenu() {
   if (model.screen === "character") {
     model.classIndex = model.menuIndex
     model.session.hero.appearance = normalizeHeroAppearance(currentClass(model).id, model.session.hero.appearance)
-    model.screen = "start"
+    setScreen("start", "Crawler selected.")
     model.menuIndex = 0
     return
   }
 
   if (model.screen === "mode") {
     model.modeIndex = model.menuIndex
-    model.screen = "start"
+    setScreen("start", "Run mode selected.")
     model.menuIndex = 0
   }
 }
@@ -612,16 +929,18 @@ function confirmMenu() {
 function startRun() {
   model.session = createSession(model.seed, currentMode(model).id, currentClass(model).id, model.session.hero.name, model.session.hero.appearance)
   submittedSession = null
-  model.screen = "game"
+  setScreen("game", "The descent opens.", "portal")
   model.dialog = null
   model.uiHidden = !model.settings.showUi
+  model.bookIndex = 0
   model.saveStatus = "New run started. Press Ctrl+S or F5 to save locally."
-  autosaveCurrentRun()
+  lastManualSaveSignature = ""
+  autosaveCurrentRun("new-run")
 }
 
 function openSaveBrowser() {
   refreshSaveList()
-  model.screen = "saves"
+  setScreen("saves", "Opening local saves.")
   model.menuIndex = 0
 }
 
@@ -647,13 +966,14 @@ function loadSelectedSave() {
     model.seed = session.seed
     model.classIndex = classIndexFor(session.hero.classId)
     model.modeIndex = modeIndexFor(session.mode)
-    model.screen = "game"
+    setScreen("game", "Loaded run opens.", "portal")
     model.dialog = null
     model.diceRollAnimation = null
     model.uiHidden = !model.settings.showUi
     model.saveStatus = `Loaded ${summary.name}.`
     submittedSession = null
     lastAutosaveSignature = autosaveSignature(model.session)
+    lastManualSaveSignature = summary.slot === "autosave" ? "" : lastAutosaveSignature
   } catch (error) {
     const status = error instanceof Error ? error.message : "Save failed to load."
     refreshSaveList()
@@ -685,6 +1005,25 @@ function deleteSelectedSave() {
   }
 }
 
+function exportSelectedSaveBackup() {
+  const summary = model.saves[model.saveIndex]
+  if (!summary) {
+    model.saveStatus = "No local save selected."
+    return
+  }
+
+  try {
+    const exported = exportSave(summary.id, `${summary.path}.backup.json`)
+    model.saveStatus = `Exported backup for ${exported.name}.`
+  } catch (error) {
+    model.saveStatus = error instanceof Error ? error.message : "Save export failed."
+  }
+}
+
+function wrapSaveIndex(index: number) {
+  return ((index % Math.max(1, model.saves.length)) + Math.max(1, model.saves.length)) % Math.max(1, model.saves.length)
+}
+
 function loadLatestSave() {
   refreshSaveList()
   if (!model.saves.length) {
@@ -697,25 +1036,34 @@ function loadLatestSave() {
   loadSelectedSave()
 }
 
-function saveCurrentRun() {
+function saveCurrentRun(skipFollowupAutosave = false) {
   if (model.screen !== "game") return
-  const summary = saveSession(model.session)
-  model.saves = listSaves()
-  model.saveIndex = indexForSave(model.saves, summary)
-  model.saveStatus = `Saved locally: ${summary.name}.`
-  model.session.log.unshift(`Saved locally: ${summary.name}.`)
-  while (model.session.log.length > 8) model.session.log.pop()
-  autosaveCurrentRun()
+  try {
+    const summary = saveSession(model.session)
+    model.saves = listSaves()
+    model.saveIndex = indexForSave(model.saves, summary)
+    model.saveStatus = `Saved locally: ${summary.name}.`
+    model.session.log.unshift(`Saved locally: ${summary.name}.`)
+    while (model.session.log.length > 8) model.session.log.pop()
+    lastManualSaveSignature = autosaveSignature(model.session)
+    if (!skipFollowupAutosave) autosaveCurrentRun("manual-save")
+  } catch (error) {
+    model.saveStatus = error instanceof Error ? error.message : "Manual save failed."
+  }
 }
 
-function autosaveCurrentRun() {
+function autosaveCurrentRun(_reason = "change") {
   if (model.screen !== "game") return
   const signature = autosaveSignature(model.session)
   if (signature === lastAutosaveSignature) return
-  const summary = saveAutosave(model.session)
-  lastAutosaveSignature = signature
-  model.saves = listSaves()
-  model.saveIndex = indexForSave(model.saves, summary)
+  try {
+    const summary = saveAutosave(model.session)
+    lastAutosaveSignature = signature
+    model.saves = listSaves()
+    model.saveIndex = indexForSave(model.saves, summary)
+  } catch (error) {
+    model.saveStatus = error instanceof Error ? error.message : "Autosave failed."
+  }
 }
 
 function confirmCloud() {
@@ -735,12 +1083,12 @@ function confirmCloud() {
     return
   }
 
-  model.screen = "start"
+  setScreen("start", "Cloud profile closed.")
   model.menuIndex = 0
 }
 
 function openSettings(returnScreen: AppModel["settingsReturnScreen"]) {
-  model.screen = "settings"
+  setScreen("settings", "Opening settings.")
   model.settingsReturnScreen = returnScreen
   model.settingsIndex = 0
   model.menuIndex = model.settingsIndex
@@ -748,7 +1096,7 @@ function openSettings(returnScreen: AppModel["settingsReturnScreen"]) {
 
 function closeSettings() {
   model.inputMode = null
-  model.screen = model.settingsReturnScreen === "game" ? "game" : "start"
+  setScreen(model.settingsReturnScreen === "game" ? "game" : "start", "Settings closed.")
   model.menuIndex = 0
 }
 
@@ -769,6 +1117,7 @@ function changeCurrentSetting() {
     model.settings.showUi = !model.settings.showUi
     model.uiHidden = !model.settings.showUi
   }
+  if (item.id === "showMinimap") model.settings.showMinimap = !model.settings.showMinimap
   if (item.id === "diceSkin") model.settings.diceSkin = cycleValue(model.settings.diceSkin, diceSkinIds)
   if (item.id === "backgroundFx") model.settings.backgroundFx = cycleValue(model.settings.backgroundFx, ["low", "normal", "dense"])
   if (item.id === "tileScale") model.settings.tileScale = cycleValue(model.settings.tileScale, mapScaleOptions)
@@ -852,8 +1201,45 @@ function adjustMapScale(delta: number) {
   saveUserSettings(`Camera FOV set to ${next}.`)
 }
 
+function setScreen(screen: ScreenId, label: string, kind: ScreenTransition["kind"] = "screen") {
+  const from = model.screen
+  if (from === screen) return
+  model.screen = screen
+  startScreenTransition(from, screen, label, kind)
+}
+
+function startScreenTransition(from: ScreenId, to: ScreenId, label: string, kind: ScreenTransition["kind"]) {
+  if (model.settings.reduceMotion) {
+    model.screenTransition = null
+    return
+  }
+  model.screenTransition = {
+    from,
+    to,
+    label,
+    kind,
+    startedAt: Date.now(),
+    durationMs: kind === "portal" || kind === "village" ? 620 : 420,
+  }
+  queueScreenTransitionFrame()
+}
+
+function queueScreenTransitionFrame() {
+  if (transitionTimer || destroyed) return
+  transitionTimer = setTimeout(() => {
+    transitionTimer = null
+    const transition = model.screenTransition
+    if (!transition || destroyed) return
+    const done = Date.now() - transition.startedAt >= transition.durationMs
+    if (done) model.screenTransition = null
+    refresh()
+    if (!done) queueScreenTransitionFrame()
+  }, 33)
+}
+
 function refresh() {
   if (destroyed) return
+  syncToastLifetimes()
   const width = renderer.terminalWidth
   const height = renderer.terminalHeight
   if (screen.width !== width) screen.width = width
@@ -861,6 +1247,32 @@ function refresh() {
   if (screen.frameBuffer.width !== width || screen.frameBuffer.height !== height) screen.frameBuffer.resize(width, height)
   paint(model, width, height, screen.frameBuffer)
   renderer.requestRender()
+  if (model.screen === "game" && model.session.toasts.length) queueToastFrame()
+}
+
+function syncToastLifetimes() {
+  const now = Date.now()
+  for (const toast of model.session.toasts) {
+    if (!toastCreatedAt.has(toast.id)) toastCreatedAt.set(toast.id, now)
+  }
+  model.session.toasts = model.session.toasts.filter((toast, index) => {
+    const created = toastCreatedAt.get(toast.id) ?? now
+    return now - created < toastTtlMs + index * 450
+  })
+  const activeIds = new Set(model.session.toasts.map((toast) => toast.id))
+  for (const id of toastCreatedAt.keys()) {
+    if (!activeIds.has(id)) toastCreatedAt.delete(id)
+  }
+}
+
+function queueToastFrame() {
+  if (toastTimer || destroyed) return
+  toastTimer = setTimeout(() => {
+    toastTimer = null
+    syncToastLifetimes()
+    refresh()
+    if (model.session.toasts.length) queueToastFrame()
+  }, 250)
 }
 
 function startDiceRollAnimation(result: number) {
@@ -886,11 +1298,67 @@ function queueDiceAnimationFrame() {
   }, 33)
 }
 
+function startPlayerMoveAnimation(direction: PlayerMoveAnimation["direction"]) {
+  if (model.settings.reduceMotion) return
+  model.animationFrame = 0
+  model.playerMoveAnimation = {
+    startedAt: Date.now(),
+    durationMs: 320,
+    direction,
+  }
+  queuePlayerMoveAnimationFrame()
+}
+
+function queuePlayerMoveAnimationFrame() {
+  if (moveTimer || destroyed) return
+  moveTimer = setTimeout(() => {
+    moveTimer = null
+    const animation = model.playerMoveAnimation
+    if (!animation || destroyed) return
+
+    const done = Date.now() - animation.startedAt >= animation.durationMs
+    if (done) model.playerMoveAnimation = null
+    else model.animationFrame = (model.animationFrame + 1) % 100000
+    refresh()
+    if (!done) queuePlayerMoveAnimationFrame()
+  }, 70)
+}
+
+function requestQuit() {
+  if (model.screen === "game" && model.session.status === "running" && hasUnsavedManualChanges()) {
+    model.dialog = "quit"
+    model.saveStatus = lastAutosaveSignature === autosaveSignature(model.session) ? "Autosave is current; manual save is older." : "This run has not been saved yet."
+    refresh()
+    return
+  }
+  destroyApp()
+}
+
+function hasUnsavedManualChanges() {
+  return lastManualSaveSignature !== autosaveSignature(model.session)
+}
+
 function destroyApp() {
   destroyed = true
   if (diceTimer) clearTimeout(diceTimer)
   diceTimer = null
+  if (moveTimer) clearTimeout(moveTimer)
+  moveTimer = null
+  if (transitionTimer) clearTimeout(transitionTimer)
+  transitionTimer = null
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = null
+  if (autosaveTimer) clearInterval(autosaveTimer)
+  autosaveTimer = null
   renderer.destroy()
+}
+
+async function refreshInternetStatus() {
+  const status = await checkInternetConnectivity()
+  if (destroyed) return
+  model.internetStatus = status
+  if (model.internetStatus !== "online" && model.session.mode !== "solo" && model.screen === "start") model.modeIndex = 0
+  refresh()
 }
 
 function maybeSubmitLobbyResult() {
@@ -1007,6 +1475,13 @@ function movementForKey(key: KeyEvent, settings: UserSettings) {
   if (key.name === "left" || (settings.controlScheme !== "arrows" && key.name === "a") || (settings.controlScheme === "vim" && key.name === "h")) return { dx: -1, dy: 0 }
   if (key.name === "right" || (settings.controlScheme !== "arrows" && key.name === "d") || (settings.controlScheme === "vim" && key.name === "l")) return { dx: 1, dy: 0 }
   return null
+}
+
+function moveDirection(dx: number, dy: number): PlayerMoveAnimation["direction"] {
+  if (dx < 0) return "left"
+  if (dx > 0) return "right"
+  if (dy < 0) return "up"
+  return "down"
 }
 
 function indexForSave(saves: SaveSummary[], summary: SaveSummary) {

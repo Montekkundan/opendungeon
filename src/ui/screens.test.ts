@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { createSession, selectSkill, tryMove } from "../game/session.js"
+import { createSession, selectSkill, tryMove, unlockHub } from "../game/session.js"
 import { setTile } from "../game/dungeon.js"
 import { defaultSettings } from "../game/settingsStore.js"
 import { hashText } from "../shared/hash.js"
-import { draw, type AppModel, type ScreenId } from "./screens.js"
+import { currentStartItemDisabled, draw, type AppModel, type ScreenId } from "./screens.js"
 
 type RenderCase = {
   name: string
@@ -21,7 +21,7 @@ describe("terminal renderer snapshots", () => {
       width: 80,
       height: 24,
       model: modelFor("start", createSession(1234)),
-      expectedHash: "0e5daf94",
+      expectedHash: "12ea9ef8",
       requiredText: ["OPENDUNGEON", "New descent", "Settings"],
     },
     {
@@ -29,7 +29,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("character", createSession(1234, "solo", "ranger", "Nyx Prime")),
-      expectedHash: "3558cd99",
+      expectedHash: "47b2a6f5",
       requiredText: ["Choose Your Crawler", "Name", "Nyx Prime", "Ranger"],
     },
     {
@@ -37,7 +37,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: skillCheckModel(),
-      expectedHash: "4122cc6d",
+      expectedHash: "e3c0ab52",
       requiredText: ["Talent Check", "Whispering Relic", "Roll"],
     },
     {
@@ -45,7 +45,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: combatModel(),
-      expectedHash: "e3bab913",
+      expectedHash: "3239e2eb",
       requiredText: ["Turn Combat", "Order", "Shado", "Necroman"],
     },
     {
@@ -53,8 +53,32 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("settings", createSession(4321), { settingsTabIndex: 3 }),
-      expectedHash: "d526523a",
+      expectedHash: "d7e3d2b0",
       requiredText: ["Settings", "Visuals", "Camera FOV"],
+    },
+    {
+      name: "tutorial",
+      width: 100,
+      height: 32,
+      model: modelFor("tutorial", createSession(1234), { tutorialIndex: 1, menuIndex: 1 }),
+      expectedHash: "11cff4fc",
+      requiredText: ["Tutorial", "Combat", "Initiative", "d20"],
+    },
+    {
+      name: "book",
+      width: 100,
+      height: 32,
+      model: modelFor("game", createSession(1234), { dialog: "book" }),
+      expectedHash: "6fb11055",
+      requiredText: ["BOOK", "Known", "Waking Cell", "Portal Room"],
+    },
+    {
+      name: "village",
+      width: 120,
+      height: 40,
+      model: villageModel(),
+      expectedHash: "d6b0d4e7",
+      requiredText: ["Village", "Walkable Village", "NPC Schedule", "Market and Balance"],
     },
   ]
 
@@ -72,6 +96,12 @@ describe("terminal renderer snapshots", () => {
       expect(hashText(styledSignature(output.chunks))).toBe(renderCase.expectedHash)
     })
   }
+})
+
+test("title disables internet-only entries while offline", () => {
+  expect(currentStartItemDisabled(modelFor("start", createSession(1234), { menuIndex: 4, internetStatus: "offline" }))).toBe(true)
+  expect(currentStartItemDisabled(modelFor("start", createSession(1234), { menuIndex: 5, internetStatus: "checking" }))).toBe(true)
+  expect(currentStartItemDisabled(modelFor("start", createSession(1234), { menuIndex: 1, internetStatus: "offline" }))).toBe(false)
 })
 
 function skillCheckModel() {
@@ -98,6 +128,12 @@ function combatModel() {
   return modelFor("game", session)
 }
 
+function villageModel() {
+  const session = createSession(1234, "coop", "ranger", "Nyx Prime")
+  unlockHub(session)
+  return modelFor("village", session)
+}
+
 function modelFor(screen: ScreenId, session = createSession(1234), overrides: Partial<AppModel> = {}): AppModel {
   return {
     screen,
@@ -121,8 +157,14 @@ function modelFor(screen: ScreenId, session = createSession(1234), overrides: Pa
     uiHidden: false,
     inventoryIndex: 0,
     inventoryDragIndex: null,
+    bookIndex: 0,
     questIndex: 0,
+    tutorialIndex: 0,
+    internetStatus: "online",
+    animationFrame: 0,
+    playerMoveAnimation: null,
     diceRollAnimation: null,
+    screenTransition: null,
     ...overrides,
   }
 }
