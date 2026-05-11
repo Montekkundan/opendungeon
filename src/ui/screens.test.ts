@@ -240,6 +240,25 @@ test("minimap renders a local radar with objective direction", () => {
   expect(text).not.toContain("Mini map")
 })
 
+test("full map dialog shows dungeon overview and run counts", () => {
+  const session = createSession(1234)
+  session.kills = 2
+  session.inventory.push("Moon shard")
+  const output = draw(modelFor("game", session, { dialog: "map" }), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("DUNGEON MAP")
+  expect(text).toContain("Full Map")
+  expect(text).toContain("Run Stats")
+  expect(text).toContain("Rooms")
+  expect(text).toContain("Enemies")
+  expect(text).toContain("Killed")
+  expect(text).toContain("?? hidden")
+  expect(text).toContain("Acquired")
+  expect(text).toContain("@ you")
+  expect(text).toContain("M or Esc close")
+})
+
 function skillCheckModel() {
   const session = createSession(1234)
   const target = { x: session.player.x + 1, y: session.player.y }

@@ -300,6 +300,12 @@ function handleDialogKey(key: KeyEvent) {
     return
   }
 
+  if (model.dialog === "map") {
+    if (key.name === "m") model.dialog = null
+    else if (key.name === "escape" || isConfirmKey(key)) model.dialog = null
+    return
+  }
+
   if (model.dialog === "hub") {
     handleHubKey(key)
     return
@@ -784,6 +790,10 @@ function handleGameKey(key: KeyEvent) {
   }
   if (key.name === "l") {
     model.dialog = "log"
+    return
+  }
+  if (key.name === "m") {
+    model.dialog = "map"
     return
   }
   if (key.name === "b") {

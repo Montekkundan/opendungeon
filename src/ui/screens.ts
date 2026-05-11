@@ -52,7 +52,7 @@ type PanelBounds = {
 }
 
 export type ScreenId = "start" | "character" | "mode" | "saves" | "cloud" | "settings" | "controls" | "tutorial" | "game" | "village"
-export type DialogId = "settings" | "inventory" | "book" | "quests" | "hub" | "saveManager" | "cutscene" | "help" | "log" | "pause" | "quit" | null
+export type DialogId = "settings" | "inventory" | "book" | "quests" | "hub" | "saveManager" | "cutscene" | "help" | "log" | "map" | "pause" | "quit" | null
 export type InputMode = { field: "username" | "githubUsername" | "saveName" | "characterName"; draft: string } | null
 export type InternetStatus = "checking" | "online" | "offline"
 
@@ -192,6 +192,7 @@ const tutorialTabs = [
       "J opens the quest journal, or O when Vim movement is active. Each quest links to generated world events anchored to rooms, biomes, and floors.",
       "Friendly NPCs open conversation instead of combat. Talking to cartographers, surgeons, shrine keepers, jailers, and merchants can advance quest or lore events.",
       "The minimap marks the focused quest objective when it can be mapped to this floor. Completed events update world progress and can queue later AI-admin milestones.",
+      "M opens the full dungeon map with total room, enemy, hidden-artifact, acquired-item, and kill counts for the current run.",
     ],
   },
   {
@@ -276,6 +277,7 @@ const cleanPanel2 = "#15212b"
 const cleanPanel3 = "#1b2a35"
 const cleanLine = "#35424d"
 const cleanLineHot = "#d6a85c"
+const mapCollectibleTiles = new Set<TileId>(["potion", "relic", "chest", "note", "recipe", "tool", "deed", "fossil", "boss-memory", "keepsake", "story-relic"])
 
 type QuickbarItem = {
   key: string
@@ -722,7 +724,8 @@ function drawControls(canvas: Canvas, model: AppModel) {
     ["Inventory", "I opens pack. Arrows select. Enter applies. Mouse can drag slots."],
     ["Book", "B opens memory, note, NPC, tutorial, and hub discoveries."],
     ["Quests", "J opens the quest journal. Use O instead when Vim movement is active."],
-    ["Run", "R rests outside combat. Esc pauses. M from pause opens run saves."],
+    ["Map", "M opens the full dungeon map and current run stats."],
+    ["Run", "R rests outside combat. Esc pauses. Save manager is inside Pause."],
     ["Accessibility", accessibilitySummary(model.settings)],
     ["Visuals", `Camera ${model.settings.tileScale}. UI ${onOff(model.settings.showUi)}. Dice ${diceSkinName(model.settings.diceSkin)}.`],
     ["Audio", `Music ${onOff(model.settings.music)}. SFX ${onOff(model.settings.sound)}.`],
@@ -1038,6 +1041,187 @@ function drawMinimap(canvas: Canvas, session: GameSession) {
   const detail = objective ? `Goal ${objectiveDistanceText(session.player, objective)}  floor ${session.floor}` : `Floor ${session.floor}`
   canvas.write(x + 1, y + height - 3, trim(detail, width - 2), UI.brass, bg)
   canvas.write(x + 1, y + height - 2, trim("@you !foe nNPC $shop >exit ◆", width - 2), UI.soft, bg)
+}
+
+function drawRunMapDialog(canvas: Canvas, model: AppModel, x: number, y: number, width: number, height: number) {
+  const session = model.session
+  const stats = runMapStats(session)
+  const mapX = x + 3
+  const mapY = y + 4
+  const statsW = Math.min(36, Math.max(28, Math.floor(width * 0.31)))
+  const mapW = Math.max(28, width - statsW - 9)
+  const mapH = Math.max(10, height - 9)
+  const statsX = mapX + mapW + 3
+
+  drawPanel(canvas, mapX, mapY, mapW, mapH, "Full Map", UI.edge)
+  drawFullDungeonMap(canvas, session, mapX + 2, mapY + 2, mapW - 4, mapH - 4)
+
+  drawPanel(canvas, statsX, mapY, statsW, mapH, "Run Stats", UI.edgeDim)
+  const rows: Array<[string, string, string?]> = [
+    ["Floor", `${session.floor}/${session.finalFloor}`, UI.gold],
+    ["Rooms", `${stats.roomsSeen}/${stats.roomsTotal}`, UI.ink],
+    ["Enemies", `${stats.enemiesRemaining}/${stats.enemyKnownTotal}`, UI.ruby],
+    ["Killed", String(session.kills), UI.ruby],
+    ["?? hidden", String(stats.hiddenArtifacts), UI.cyan],
+    ["Artifacts", `${stats.visibleArtifacts} visible`, UI.cyan],
+    ["Acquired", `${stats.acquiredItems} items`, UI.focus],
+    ["Book", `${stats.bookEntries} entries`, UI.focus],
+    ["Secrets", `${stats.secretsFound}/${stats.secretsTotal}`, UI.brass],
+    ["Gold", String(session.gold), UI.gold],
+    ["Turns", String(session.turn), UI.soft],
+    ["XP", `${session.xp}/${session.level * 10}`, UI.soft],
+  ]
+
+  rows.slice(0, Math.max(0, mapH - 6)).forEach(([labelText, value, color], index) => {
+    drawMapStatRow(canvas, statsX + 2, mapY + 2 + index, statsW - 4, labelText, value, color ?? UI.ink)
+  })
+
+  const objective = activeQuestObjectivePoint(session)
+  const objectiveText = objective ? `Goal ${objectiveDistanceText(session.player, objective)}` : "Goal none on this floor"
+  const legendY = mapY + mapH - 4
+  canvas.write(statsX + 2, legendY, trim(objectiveText, statsW - 4), objective ? UI.gold : UI.muted, UI.panel)
+  canvas.write(statsX + 2, legendY + 2, trim("@ you  ! enemy  n npc  ? artifact  > exit", statsW - 4), UI.soft, UI.panel)
+  canvas.write(x + 4, y + height - 4, trim("M or Esc close. Unseen artifact and secret counts stay as ?? until discovered.", width - 8), UI.muted, UI.panel)
+}
+
+function drawMapStatRow(canvas: Canvas, x: number, y: number, width: number, labelText: string, value: string, valueColor: string) {
+  canvas.fill(x, y, width, 1, " ", UI.panel2, UI.panel2)
+  canvas.write(x + 2, y, trim(labelText, 12), UI.brass, UI.panel2)
+  canvas.write(x + 16, y, trim(value, width - 18), valueColor, UI.panel2)
+}
+
+function drawFullDungeonMap(canvas: Canvas, session: GameSession, x: number, y: number, width: number, height: number) {
+  const bg = "#0b1218"
+  canvas.fill(x, y, width, height, " ", bg, bg)
+  if (width <= 0 || height <= 0) return
+
+  for (let row = 0; row < height; row++) {
+    for (let col = 0; col < width; col++) {
+      const bounds = sourceBoundsForMapCell(session, col, row, width, height)
+      const marker = fullMapTileMarker(session, bounds)
+      canvas.write(x + col, y + row, marker.ch, marker.fg, bg)
+    }
+  }
+
+  for (const secret of session.dungeon.secrets ?? []) {
+    if (!secret.discovered) drawScaledMapPoint(canvas, session, secret.door, x, y, width, height, "?", UI.cyan, bg)
+  }
+  for (let tileY = 0; tileY < session.dungeon.height; tileY++) {
+    for (let tileX = 0; tileX < session.dungeon.width; tileX++) {
+      const tile = session.dungeon.tiles[tileY]?.[tileX]
+      if (!tile || !mapCollectibleTiles.has(tile)) continue
+      const point = { x: tileX, y: tileY }
+      drawScaledMapPoint(canvas, session, point, x, y, width, height, fullMapCollectibleMarker(tile, session.seen.has(pointKey(point))), fullMapCollectibleColor(tile, session.seen.has(pointKey(point))), bg)
+    }
+  }
+  for (const actor of session.dungeon.actors) {
+    const marker = fullMapActorMarker(actor.kind)
+    drawScaledMapPoint(canvas, session, actor.position, x, y, width, height, marker.ch, marker.fg, bg)
+  }
+  const objective = activeQuestObjectivePoint(session)
+  if (objective) drawScaledMapPoint(canvas, session, objective, x, y, width, height, "◆", UI.gold, bg)
+  drawScaledMapPoint(canvas, session, session.player, x, y, width, height, "@", UI.focus, bg)
+}
+
+function runMapStats(session: GameSession) {
+  let visibleArtifacts = 0
+  let hiddenArtifacts = 0
+  let roomsSeen = 0
+  for (let y = 0; y < session.dungeon.height; y++) {
+    for (let x = 0; x < session.dungeon.width; x++) {
+      const tile = session.dungeon.tiles[y]?.[x]
+      if (!tile || !mapCollectibleTiles.has(tile)) continue
+      if (session.seen.has(pointKey({ x, y }))) visibleArtifacts += 1
+      else hiddenArtifacts += 1
+    }
+  }
+  for (const anchor of session.dungeon.anchors) {
+    if (session.seen.has(pointKey(anchor.position))) roomsSeen += 1
+  }
+  const secretsFound = (session.dungeon.secrets ?? []).filter((secret) => secret.discovered).length
+  const secretsHidden = (session.dungeon.secrets ?? []).length - secretsFound
+  const enemiesRemaining = session.dungeon.actors.filter((actor) => isEnemyActorId(actor.kind)).length
+  const acquiredItems = Math.max(0, session.inventory.length - startingLoadout(session.hero.classId).length)
+  const bookEntries = session.knowledge.filter((entry) => entry.kind !== "tutorial").length
+
+  return {
+    roomsSeen,
+    roomsTotal: session.dungeon.anchors.length,
+    enemiesRemaining,
+    enemyKnownTotal: enemiesRemaining + session.kills,
+    hiddenArtifacts: hiddenArtifacts + secretsHidden,
+    visibleArtifacts,
+    acquiredItems,
+    bookEntries,
+    secretsFound,
+    secretsTotal: (session.dungeon.secrets ?? []).length,
+  }
+}
+
+function sourceBoundsForMapCell(session: GameSession, col: number, row: number, width: number, height: number) {
+  const startX = Math.floor((col / width) * session.dungeon.width)
+  const endX = Math.max(startX + 1, Math.floor(((col + 1) / width) * session.dungeon.width))
+  const startY = Math.floor((row / height) * session.dungeon.height)
+  const endY = Math.max(startY + 1, Math.floor(((row + 1) / height) * session.dungeon.height))
+  return { startX, endX: Math.min(session.dungeon.width, endX), startY, endY: Math.min(session.dungeon.height, endY) }
+}
+
+function fullMapTileMarker(session: GameSession, bounds: { startX: number; endX: number; startY: number; endY: number }) {
+  let walls = 0
+  let floors = 0
+  let seen = false
+  let visible = false
+  let special: TileId | null = null
+
+  for (let y = bounds.startY; y < bounds.endY; y++) {
+    for (let x = bounds.startX; x < bounds.endX; x++) {
+      const tile = session.dungeon.tiles[y]?.[x] ?? "void"
+      const key = pointKey({ x, y })
+      seen ||= session.seen.has(key)
+      visible ||= session.visible.has(key)
+      if (tile === "stairs" || tile === "door" || mapCollectibleTiles.has(tile)) special ??= tile
+      else if (tile === "wall" || tile === "void") walls += 1
+      else floors += 1
+    }
+  }
+
+  const dim = visible ? 1 : seen ? 0.68 : 0.46
+  if (special === "stairs") return { ch: ">", fg: tint(UI.focus, dim) }
+  if (special === "door") return { ch: "+", fg: tint(UI.gold, dim) }
+  if (special && mapCollectibleTiles.has(special)) return { ch: seen ? fullMapCollectibleMarker(special, true) : "?", fg: fullMapCollectibleColor(special, seen) }
+  if (floors >= walls) return { ch: seen ? "." : "·", fg: tint("#78b28f", dim) }
+  return { ch: "#", fg: tint("#87919b", dim) }
+}
+
+function drawScaledMapPoint(canvas: Canvas, session: GameSession, point: { x: number; y: number }, x: number, y: number, width: number, height: number, marker: string, fg: string, bg: string) {
+  const col = clamp(Math.floor((point.x / Math.max(1, session.dungeon.width - 1)) * (width - 1)), 0, width - 1)
+  const row = clamp(Math.floor((point.y / Math.max(1, session.dungeon.height - 1)) * (height - 1)), 0, height - 1)
+  canvas.write(x + col, y + row, marker, fg, bg)
+}
+
+function fullMapCollectibleMarker(tile: TileId, seen: boolean) {
+  if (!seen) return "?"
+  if (tile === "potion") return "p"
+  if (tile === "chest") return "$"
+  if (tile === "relic") return "r"
+  if (tile === "recipe") return "R"
+  if (tile === "tool") return "t"
+  if (tile === "deed") return "d"
+  return "?"
+}
+
+function fullMapCollectibleColor(tile: TileId, seen: boolean) {
+  if (!seen) return UI.cyan
+  if (tile === "potion") return UI.focus
+  if (tile === "chest") return UI.gold
+  if (tile === "relic" || tile === "deed" || tile === "story-relic") return UI.brass
+  return UI.cyan
+}
+
+function fullMapActorMarker(kind: string) {
+  if (isEnemyActorId(kind)) return { ch: "!", fg: UI.ruby }
+  if (isNpcActorId(kind)) return { ch: kind === "merchant" ? "$" : "n", fg: kind === "merchant" ? UI.gold : UI.cyan }
+  return { ch: "?", fg: UI.soft }
 }
 
 function minimapTileMarker(tile: TileId, visible: boolean, seen: boolean) {
@@ -2078,6 +2262,17 @@ function dialogMetrics(dialog: NonNullable<DialogId>, canvasWidth: number, canva
     }
   }
 
+  if (dialog === "map") {
+    const width = Math.min(118, Math.max(72, canvasWidth - 8))
+    const height = Math.min(36, Math.max(24, canvasHeight - 4))
+    return {
+      x: Math.floor((canvasWidth - width) / 2),
+      y: Math.floor((canvasHeight - height) / 2),
+      width,
+      height,
+    }
+  }
+
   const wide = dialog === "log" || dialog === "settings" || dialog === "quests" || dialog === "book" || dialog === "hub" || dialog === "saveManager" || dialog === "cutscene"
   const width = Math.min(wide ? 88 : 74, Math.max(20, canvasWidth - 10))
   const height = Math.min(Math.max(10, canvasHeight - 2), dialog === "log" ? 18 : dialog === "quests" || dialog === "book" || dialog === "hub" || dialog === "saveManager" ? 22 : dialog === "cutscene" ? 18 : dialog === "settings" ? 20 : dialog === "help" ? 21 : dialog === "pause" ? 18 : dialog === "quit" ? 18 : 14)
@@ -2139,6 +2334,7 @@ function dialogTitle(dialog: NonNullable<DialogId>) {
   if (dialog === "cutscene") return "Story Scene"
   if (dialog === "help") return "Controls"
   if (dialog === "log") return "Run Log"
+  if (dialog === "map") return "Dungeon Map"
   if (dialog === "quit") return "Unsaved Run"
   return "Paused"
 }
@@ -2153,6 +2349,7 @@ function dialogIcon(dialog: NonNullable<DialogId>): PixelSpriteId | "d20" {
   if (dialog === "cutscene") return "focus-gem"
   if (dialog === "help") return "sword"
   if (dialog === "log") return "coin"
+  if (dialog === "map") return "map"
   if (dialog === "quit") return "scroll"
   return "scroll"
 }
@@ -2574,6 +2771,10 @@ function drawDialog(canvas: Canvas, model: AppModel) {
     drawQuestsDialog(canvas, model, x, y, width, height)
   }
 
+  if (model.dialog === "map") {
+    drawRunMapDialog(canvas, model, x, y, width, height)
+  }
+
   if (model.dialog === "hub") {
     drawHubDialog(canvas, model, x, y, width, height)
   }
@@ -2600,7 +2801,7 @@ function drawDialog(canvas: Canvas, model: AppModel) {
       ["Move", "Arrows / WASD"],
       ["Confirm", "Enter / Space"],
       ["Save", "Ctrl+S or F5 saves locally; Esc then M opens run saves"],
-      ["Pack", "I inventory, B book, V village, J quests, O quests in Vim mode, H potion, L log"],
+      ["Pack", "I inventory, B book, M map, V village, J quests, O quests in Vim mode, H potion, L log"],
       ["Combat", "Tab target, 1-6 skill, F flee, Enter rolls d20"],
       ["Camera", "- wider FOV, = closer view"],
       ["Overlay", "U hides or shows the UI for this run"],
