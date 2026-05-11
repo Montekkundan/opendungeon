@@ -467,18 +467,15 @@ function drawCharacter(canvas: Canvas, model: AppModel) {
   const visibleRows = clamp(Math.floor((height - 10) / 4), 3, classOptions.length)
   const rowStep = 4
   const cardH = 4
-  const spriteW = cardH >= 6 ? 15 : 12
-  const spriteH = cardH >= 6 ? 5 : 4
-  const textX = x + spriteW + 12
+  const textX = x + 22
   const offset = scrollOffset(model.classIndex, visibleRows, classOptions.length)
   classOptions.slice(offset, offset + visibleRows).forEach((option, visibleIndex) => {
     const index = offset + visibleIndex
     const selected = model.classIndex === index
     const row = listY + visibleIndex * rowStep
-    const sprite = classSprite(option.id)
     const bg = selected ? UI.panel3 : UI.panel2
     drawSelectCard(canvas, x + 3, row - 1, width - 6, cardH, selected)
-    drawPixelBlock(canvas, x + 6, row, animatedPixelSprite(sprite, "idle", model.seed + index, spriteW, spriteH), selected ? 1 : 0.68)
+    drawMiniIcon(canvas, x + 7, row, classOptionIcon(option.id), 10, 3, selected ? 1 : 0.7)
     canvas.write(textX, row, `${selected ? ">" : " "} ${option.name}`, selected ? UI.gold : UI.ink, bg)
     canvas.write(textX + 2, row + 1, trim(option.text, width - (textX - x) - 7), selected ? UI.ink : UI.soft, bg)
     if (selected && row + 3 < y + height - 2) canvas.write(textX + 2, row + 3, trim(statLine(statsForClass(option.id)), width - (textX - x) - 7), UI.muted, bg)
@@ -605,20 +602,26 @@ function drawCloud(canvas: Canvas, model: AppModel) {
   const inputY = brandY + brandHeight + 3
   const editing = model.inputMode?.field === "githubUsername"
   const githubName = editing ? model.inputMode?.draft ?? "" : model.settings.githubUsername
-  const shownName = githubName || "github username"
+  const shownName = githubName || "not set"
   const auth = authStatusReport()
   const cloudBrowser = buildCloudSaveBrowserState(model.saves, [], auth)
 
-  drawCommandBox(canvas, x, inputY, width, shownName, "GitHub cloud identity")
-  canvas.write(x + 3, inputY + 1, editing ? ">" : " ", editing ? UI.gold : UI.muted, UI.panel2)
-  canvas.write(x + 5, inputY + 1, editing ? `${shownName}_` : shownName, editing ? UI.ink : UI.soft, UI.panel2)
+  drawInputField(canvas, x, inputY + 1, width, "GitHub", editing ? `${githubName}_` : shownName, editing)
 
-  const statusY = inputY + 4
+  const statusY = inputY + 5
   canvas.center(statusY, trim(formatAuthStatus(auth), width), auth.kind === "expired" ? UI.ruby : auth.kind === "expiring" ? UI.gold : UI.soft, UI.bg)
 
-  const rowY = inputY + (compact ? 6 : 7)
-  drawPlainSelectRow(canvas, x, rowY, width, "Sign in with GitHub", model.menuIndex === 0, auth.loggedIn ? `status ${auth.kind}; refresh ${auth.canRefresh ? "ready" : "missing"}` : "not signed in; saves stay local")
-  drawPlainSelectRow(canvas, x, rowY + 2, width, "Use local profile", model.menuIndex === 1, `profile @${model.settings.username}`)
+  const rowY = inputY + (compact ? 7 : 8)
+  drawPlainSelectRow(
+    canvas,
+    x,
+    rowY,
+    width,
+    "Sign in with GitHub",
+    model.menuIndex === 0,
+    auth.loggedIn ? `status ${auth.kind}; refresh ${auth.canRefresh ? "ready" : "missing"}` : model.settings.githubUsername ? `profile @${model.settings.githubUsername}` : "enter username first",
+  )
+  drawPlainSelectRow(canvas, x, rowY + 2, width, "Keep saves local", model.menuIndex === 1, "turn off cloud sync")
   drawPlainSelectRow(canvas, x, rowY + 4, width, "Back to title", model.menuIndex === 2, "return without syncing")
 
   if (!compact) {
@@ -773,9 +776,7 @@ function drawTutorial(canvas: Canvas, model: AppModel) {
   const detailW = width - (detailX - x) - 4
   const detailH = height - 9
   drawPanel(canvas, detailX, listY - 1, detailW, detailH, active.name, UI.edge)
-  const icon = active.name === "Combat" ? "sword" : active.name === "Items" ? "scroll" : active.name === "Cloud" ? "focus-gem" : "map"
-  drawMiniIcon(canvas, detailX + detailW - 12, listY + 1, icon, 8, 2)
-  canvas.write(detailX + 3, listY + 1, trim(active.description, detailW - 18), UI.brass, UI.panel)
+  canvas.write(detailX + 3, listY + 1, trim(active.description, detailW - 6), UI.brass, UI.panel)
   writeWrapped(canvas, detailX + 3, listY + 4, detailW - 6, active.body, detailH - 7, UI.ink, UI.panel)
 
   if (model.saveStatus && height > 24) canvas.write(x + 4, y + height - 4, trim(model.saveStatus, width - 8), UI.focus, UI.panel)
@@ -2513,6 +2514,17 @@ function actorAnimation(selected: boolean, session: GameSession): SpriteAnimatio
 
 function classSprite(classId: HeroClass, appearance?: HeroAppearance): PixelSpriteId {
   return heroSpriteForAppearance(classId, appearance) as PixelSpriteId
+}
+
+function classOptionIcon(classId: HeroClass): PixelSpriteId {
+  if (classId === "warden") return "shield"
+  if (classId === "arcanist") return "staff"
+  if (classId === "ranger") return "bow"
+  if (classId === "duelist") return "dagger"
+  if (classId === "cleric") return "focus-gem"
+  if (classId === "engineer") return "lockpick"
+  if (classId === "witch") return "ember"
+  return "armor"
 }
 
 function actorSpriteId(kind: string): PixelSpriteId {

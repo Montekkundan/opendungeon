@@ -1118,7 +1118,9 @@ function confirmCloud() {
 
   if (model.menuIndex === 1) {
     model.settings.cloudProvider = "local"
-    saveUserSettings("Local profile selected. Cloud sync remains off.")
+    saveUserSettings("Using local saves only. Cloud sync remains off.")
+    setScreen("start", "Using local saves only.")
+    model.menuIndex = 1
     return
   }
 

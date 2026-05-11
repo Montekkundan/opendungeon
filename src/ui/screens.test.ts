@@ -30,7 +30,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("character", createSession(1234, "solo", "ranger", "Nyx Prime")),
-      expectedHash: "47b2a6f5",
+      expectedHash: "b7c5aec2",
       requiredText: ["Choose Your Crawler", "Name", "Nyx Prime", "Ranger"],
     },
     {
@@ -62,7 +62,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("tutorial", createSession(1234), { tutorialIndex: 1, menuIndex: 1 }),
-      expectedHash: "11cff4fc",
+      expectedHash: "ec3501a6",
       requiredText: ["Tutorial", "Combat", "Initiative", "d20"],
     },
     {
@@ -171,6 +171,25 @@ test("title menu keeps only the clean padded item list", () => {
   expect(text).not.toContain("local saves")
   expect(text).not.toContain("internet online")
   expect(text).not.toContain("> New descent")
+})
+
+test("cloud profile screen draws account once and names local-only action clearly", () => {
+  const output = draw(
+    modelFor("cloud", createSession(1234), {
+      menuIndex: 1,
+      settings: { ...defaultSettings, username: "Mira", githubUsername: "montek", cloudProvider: "github" },
+    }),
+    120,
+    40,
+  )
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("GitHub")
+  expect(text).toContain("montek")
+  expect(text).toContain("Keep saves local")
+  expect(text).not.toContain("mmontek")
+  expect(text).not.toContain("ggithub username")
+  expect(text).not.toContain("Use local profile")
 })
 
 test("new descent story scene shows narrator text and cutscene controls", () => {
