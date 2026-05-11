@@ -1,78 +1,63 @@
-# opendungeon
+<h1 align="center">opendungeon</h1>
 
-Terminal roguelike RPG built with OpenTUI.
+<p align="center">A terminal roguelike RPG built with OpenTUI.</p>
 
-## Features
+<p align="center">
+  <a href="https://www.npmjs.com/package/@montekkundan/opendungeon"><img alt="npm" src="https://img.shields.io/npm/v/@montekkundan/opendungeon?style=flat-square" /></a>
+  <a href="https://github.com/Montekkundan/opendungeon/actions/workflows/release.yml"><img alt="Release" src="https://img.shields.io/github/actions/workflow/status/Montekkundan/opendungeon/release.yml?style=flat-square" /></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/Montekkundan/opendungeon?style=flat-square" /></a>
+</p>
 
-- Full-screen terminal UI
-- Full-screen map with overlay HUD panels
-- Start, character, settings, controls, saves, and cloud-login screens
-- OpenTUI ASCII title, tabbed settings, sliders, switches, inputs, and scrollbars
-- Top-down procedurally generated dungeons
-- Single-player runs with co-op/race mode hooks
-- Local save/load system
-- Local profile and accessibility settings
-- Runtime `opendungeon-assets` actor sprites with no generated actor fallback
-- Procedural terminal terrain, item, and dice sprites
-- Adjustable camera FOV
-- Persistent and runtime UI hide/show controls
-- Animated crawler, enemy, item, terrain, and dice sprites
-- Multiple animated d20 dice skins
-- Turn-based d20 combat
-- Enemy targeting and skill selection
-- Stat-based flee rolls
-- Enemy patrol, chase, aggro radius, and leash behavior
-- RPG stats: vigor, mind, endurance, strength, dexterity, intelligence, faith, luck
-- Stat-based combat modifiers
-- Talent-check event popups
-- Success/failure consequences for loot and NPC events
-- Inventory, potion, relic, gold, XP, and leveling systems
-- Fog of war and enemy movement
-- Debug view behind an environment flag
+<p align="center">
+  <img src="assets/readme/opendungeon-cmux.png" alt="opendungeon terminal title screen">
+</p>
 
-## Run
+---
+
+### Installation
 
 ```bash
-bun run dev
+# npm
+npm i -g @montekkundan/opendungeon
+opendungeon
+
+# Bun uses the npm registry too
+bun add -g @montekkundan/opendungeon
+opendungeon
 ```
 
-## Install
-
-Source checkout:
+### Source Checkout
 
 ```bash
 bun install
 bun run dev
 ```
 
-npm package:
+### Multiplayer
+
+Start a local lobby:
 
 ```bash
-npm i -g @montekkundan/opendungeon
-opendungeon
+opendungeon-host --mode coop --seed 2423368 --port 3737
 ```
 
-Bun global package:
+Share the printed lobby URL and command with friends on the same network. For local source testing:
 
 ```bash
-bun add -g @montekkundan/opendungeon
-opendungeon
+bun run host -- --mode coop --seed 2423368 --port 3737
 ```
 
-GitHub Release installer:
+### Publish
 
 ```bash
-curl -fsSL https://opendungeon.sh/install | bash
-opendungeon
+bun install --frozen-lockfile
+bun run package:check
+npm publish --access public
 ```
 
-Homebrew and AUR packaging templates are under `packaging/`. Generated release formulas are written by:
+For Bun players, publish to npm. Bun installs global packages from the npm registry, so there is no separate Bun registry step.
 
-```bash
-bun run package:release
-```
-
-## Release
+### Release
 
 ```bash
 bun run package:check
@@ -80,4 +65,13 @@ git tag v0.1.0
 git push origin main --tags
 ```
 
-Publishing a GitHub release builds standalone macOS/Linux archives, `SHA256SUMS`, a Homebrew formula, and an AUR `PKGBUILD`. npm publishing runs from the release workflow when `NPM_TOKEN` is configured.
+The release workflow builds standalone macOS and Linux archives, checksums, a Homebrew formula, and an AUR `PKGBUILD`. The npm publish workflow runs when a GitHub release is published and `NPM_TOKEN` is configured.
+
+### Features
+
+- Procedural dungeon runs with fog of war, traps, secrets, NPCs, merchants, and bosses.
+- Turn-based d20 combat with initiative, skills, status effects, reactions, and boss phases.
+- RPG classes, stats, talents, equipment rarity, run mutators, and meta-progression.
+- Local story, notes, collectibles, Book entries, cutscenes, and alternate ending hooks.
+- Portal room and village systems for houses, farming, shops, trust, upgrades, and replayable runs.
+- Local save management, autosave, export/import, cloud hooks, and multiplayer lobby state.
