@@ -22,8 +22,8 @@
   ],
   "type": "module",
   "bin": {
-    "opendungeon": "./bin/opendungeon",
-    "opendungeon-host": "./bin/opendungeon-host"
+    "opendungeon": "bin/opendungeon",
+    "opendungeon-host": "bin/opendungeon-host"
   },
   "files": [
     "assets",

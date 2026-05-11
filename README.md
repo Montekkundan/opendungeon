@@ -52,7 +52,7 @@ bun run host -- --mode coop --seed 2423368 --port 3737
 ```bash
 bun install --frozen-lockfile
 bun run package:check
-npm publish --access public
+npm publish --access public --otp <6-digit-code>
 ```
 
 For Bun players, publish to npm. Bun installs global packages from the npm registry, so there is no separate Bun registry step.
