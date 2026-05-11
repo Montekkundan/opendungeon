@@ -71,6 +71,7 @@ import { formatServerSetupReport, serverSetupReport } from "./system/serverSetup
 import { handleSetupCommand } from "./system/firstRunSetup.js"
 import { debugOverlaysEnabled } from "./system/debugFlags.js"
 import { checkInternetConnectivity } from "./net/connectivity.js"
+import { checkForUpdate, checkingUpdateStatus, handleUpdateCommand } from "./system/updateCheck.js"
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`opendungeon ${version}
@@ -83,6 +84,7 @@ Usage:
   opendungeon --login github    Open Supabase GitHub OAuth
   opendungeon saves list        List local saves for backup or maintenance
   opendungeon assets generate   Generate and store a sprite asset
+  opendungeon update            Check npm for a newer game version
   opendungeon setup             Create local first-run directories/profile
   opendungeon doctor            Check terminal size/color and recommended tile scale
   opendungeon setup-check       Check Supabase, AI Gateway, and asset storage env
@@ -114,6 +116,8 @@ const saveExitCode = await handleSaveCommand(process.argv.slice(2))
 if (saveExitCode !== null) process.exit(saveExitCode)
 const assetsExitCode = await handleAssetsCommand(process.argv.slice(2))
 if (assetsExitCode !== null) process.exit(assetsExitCode)
+const updateExitCode = await handleUpdateCommand(process.argv.slice(2), version)
+if (updateExitCode !== null) process.exit(updateExitCode)
 const setupExitCode = await handleSetupCommand(process.argv.slice(2))
 if (setupExitCode !== null) process.exit(setupExitCode)
 
@@ -157,6 +161,8 @@ const model: AppModel = {
   questIndex: 0,
   tutorialIndex: 0,
   internetStatus: "checking",
+  currentVersion: version,
+  updateStatus: checkingUpdateStatus(version),
   animationFrame: 0,
   playerMoveAnimation: null,
   diceRollAnimation: null,
@@ -203,6 +209,7 @@ const screen = new FrameBufferRenderable(renderer, {
 renderer.root.add(screen)
 renderer.on("resize", refresh)
 void refreshInternetStatus()
+void refreshUpdateStatus()
 autosaveTimer = setInterval(() => autosaveCurrentRun("timer"), 30_000)
 refresh()
 
@@ -1364,6 +1371,13 @@ async function refreshInternetStatus() {
   if (destroyed) return
   model.internetStatus = status
   if (model.internetStatus !== "online" && model.session.mode !== "solo" && model.screen === "start") model.modeIndex = 0
+  refresh()
+}
+
+async function refreshUpdateStatus() {
+  const status = await checkForUpdate(version)
+  if (destroyed) return
+  model.updateStatus = status
   refresh()
 }
 

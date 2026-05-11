@@ -3,6 +3,7 @@ import { createSession, selectSkill, tryMove, unlockHub } from "../game/session.
 import { setTile } from "../game/dungeon.js"
 import { defaultSettings } from "../game/settingsStore.js"
 import { hashText } from "../shared/hash.js"
+import { checkingUpdateStatus } from "../system/updateCheck.js"
 import { currentStartItemDisabled, draw, type AppModel, type ScreenId } from "./screens.js"
 
 type RenderCase = {
@@ -21,8 +22,8 @@ describe("terminal renderer snapshots", () => {
       width: 80,
       height: 24,
       model: modelFor("start", createSession(1234)),
-      expectedHash: "12ea9ef8",
-      requiredText: ["OPENDUNGEON", "New descent", "Settings"],
+      expectedHash: "1e0eb95b",
+      requiredText: ["OPENDUNGEON", "New descent", "Settings", "v0.1.0"],
     },
     {
       name: "character",
@@ -137,6 +138,27 @@ test("normal screen changes do not draw transition banners", () => {
   expect(text).not.toContain("Opening tutorial.")
 })
 
+test("title shows update command when a newer version is available", () => {
+  const output = draw(
+    modelFor("start", createSession(1234), {
+      updateStatus: {
+        state: "available",
+        current: "0.1.0",
+        latest: "0.2.0",
+        command: "opendungeon update",
+        npmCommand: "npm i -g @montekkundan/opendungeon@latest",
+        bunCommand: "bun add -g @montekkundan/opendungeon@latest",
+      },
+    }),
+    100,
+    32,
+  )
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("v0.1.0")
+  expect(text).toContain("Update 0.2.0 available. Run opendungeon update.")
+})
+
 function skillCheckModel() {
   const session = createSession(1234)
   const target = { x: session.player.x + 1, y: session.player.y }
@@ -194,6 +216,8 @@ function modelFor(screen: ScreenId, session = createSession(1234), overrides: Pa
     questIndex: 0,
     tutorialIndex: 0,
     internetStatus: "online",
+    currentVersion: "0.1.0",
+    updateStatus: checkingUpdateStatus("0.1.0"),
     animationFrame: 0,
     playerMoveAnimation: null,
     diceRollAnimation: null,

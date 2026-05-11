@@ -34,6 +34,7 @@ import { saveDirectory, type SaveSummary } from "../game/saveStore.js"
 import { profilePath, type UserSettings } from "../game/settingsStore.js"
 import { formatModifier, statAbbreviations, statLabels, statLine, statsForClass } from "../game/stats.js"
 import { clamp, wrap } from "../shared/numeric.js"
+import { titleUpdateNotice, type UpdateStatus } from "../system/updateCheck.js"
 import { Canvas } from "./canvas.js"
 
 type TileRenderStyle = {
@@ -101,6 +102,8 @@ export type AppModel = {
   questIndex: number
   tutorialIndex: number
   internetStatus: InternetStatus
+  currentVersion: string
+  updateStatus: UpdateStatus
   animationFrame: number
   playerMoveAnimation?: PlayerMoveAnimation | null
   diceRollAnimation?: DiceRollAnimation | null
@@ -413,6 +416,7 @@ function drawStart(canvas: Canvas, model: AppModel) {
   if (offset + visibleRows < startItems.length) canvas.write(cardX + cardW - 4, listY + visibleRows, "↓", UI.muted, UI.bg)
 
   if (model.saveStatus && canvas.height > 30) canvas.center(canvas.height - 5, trim(model.saveStatus, canvas.width - 4), UI.focus, UI.bg)
+  drawTitleVersionStatus(canvas, model)
   drawFooter(canvas, [
     ["Enter", "select"],
     ["↑↓", "navigate"],
@@ -421,6 +425,13 @@ function drawStart(canvas: Canvas, model: AppModel) {
     ["?", "help"],
     ["q", "quit"],
   ])
+}
+
+function drawTitleVersionStatus(canvas: Canvas, model: AppModel) {
+  const versionText = `v${model.currentVersion}`
+  const updateNotice = titleUpdateNotice(model.updateStatus)
+  canvas.write(1, canvas.height - 1, trim(versionText, Math.max(0, canvas.width - 2)), UI.muted, UI.bg)
+  if (updateNotice && canvas.height >= 7) canvas.write(1, canvas.height - 3, trim(updateNotice, canvas.width - 2), UI.gold, UI.bg)
 }
 
 function drawCharacter(canvas: Canvas, model: AppModel) {

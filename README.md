@@ -26,6 +26,12 @@ bun add -g @montekkundan/opendungeon
 opendungeon
 ```
 
+Check for upgrades:
+
+```bash
+opendungeon update
+```
+
 ### Source Checkout
 
 ```bash
