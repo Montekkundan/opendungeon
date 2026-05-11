@@ -1,6 +1,6 @@
 {
   "name": "@montekkundan/opendungeon",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Terminal roguelike RPG built with OpenTUI.",
   "license": "MIT",
   "homepage": "https://github.com/Montekkundan/opendungeon#readme",
