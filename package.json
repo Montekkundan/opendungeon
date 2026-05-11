@@ -31,7 +31,6 @@
     "src/**/*.ts",
     "!src/**/*.test.ts",
     "README.md",
-    "supabase",
     "LICENSE",
     "package.json"
   ],

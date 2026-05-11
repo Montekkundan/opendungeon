@@ -62,7 +62,7 @@ bun run changeset
 git push origin main
 ```
 
-The main-branch npm workflow opens a Changesets version PR. Merging that PR updates `package.json`, `src/version.ts`, and publishes the new npm version with the `NPM_TOKEN` GitHub secret. For Bun players, publish to npm; Bun installs global packages from the npm registry, so there is no separate Bun registry step.
+The main-branch npm workflow opens a Changesets version PR. Merging that PR updates `package.json`, `src/version.ts`, and publishes the new npm version through npm Trusted Publishing. For Bun players, publish to npm; Bun installs global packages from the npm registry, so there is no separate Bun registry step.
 
 ### Release
 
@@ -72,7 +72,7 @@ git tag v0.1.0
 git push origin main --tags
 ```
 
-The release workflow builds standalone macOS and Linux archives, checksums, a Homebrew formula, and an AUR `PKGBUILD`. The npm publish workflow runs when a GitHub release is published and `NPM_TOKEN` is configured.
+The release workflow builds standalone macOS and Linux archives, checksums, a Homebrew formula, and an AUR `PKGBUILD`. npm package publishing is handled by the main-branch Changesets workflow.
 
 ### Features
 
