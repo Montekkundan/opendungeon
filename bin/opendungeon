@@ -1,3 +1,61 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
-import "../src/main.ts"
+import { constants, accessSync, realpathSync } from "node:fs"
+import { spawn } from "node:child_process"
+import { basename, dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
+
+launch("dist/main.js")
+
+function launch(entry) {
+  const packageRoot = dirname(dirname(realpathSync(fileURLToPath(import.meta.url))))
+  const runtime = bunRuntime(packageRoot)
+  const child = spawn(runtime, [join(packageRoot, entry), ...process.argv.slice(2)], {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: "inherit",
+  })
+  child.on("error", (error) => {
+    console.error(`opendungeon could not start the bundled Bun runtime: ${error.message}`)
+    process.exit(1)
+  })
+  child.on("exit", (code, signal) => {
+    if (signal) process.kill(process.pid, signal)
+    process.exit(code ?? 1)
+  })
+}
+
+function bunRuntime(packageRoot) {
+  const packageNodeModules = join(packageRoot, "node_modules")
+  const globalNodeModules = nearestNodeModules(packageRoot)
+  const candidates = [
+    join(packageNodeModules, "bun", "bin", "bun.exe"),
+    join(packageNodeModules, ".bin", process.platform === "win32" ? "bun.cmd" : "bun"),
+    join(globalNodeModules, "bun", "bin", "bun.exe"),
+    join(globalNodeModules, ".bin", process.platform === "win32" ? "bun.cmd" : "bun"),
+    join(packageNodeModules, "bun", "bin", "bun"),
+    join(globalNodeModules, "bun", "bin", "bun"),
+  ]
+  for (const candidate of candidates) {
+    try {
+      accessSync(candidate, constants.X_OK)
+      return candidate
+    } catch {
+      // Try the next package-manager layout.
+    }
+  }
+  if (process.env.OPENDUNGEON_REQUIRE_BUNDLED_BUN === "1") {
+    console.error(`opendungeon expected a bundled Bun runtime at one of:\n${candidates.map((candidate) => `  ${candidate}`).join("\n")}`)
+    process.exit(1)
+  }
+  return "bun"
+}
+
+function nearestNodeModules(packageRoot) {
+  let current = packageRoot
+  while (current !== dirname(current)) {
+    if (basename(current) === "node_modules") return current
+    current = dirname(current)
+  }
+  return join(packageRoot, "node_modules")
+}

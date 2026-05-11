@@ -1,4 +1,5 @@
 import { FrameBufferRenderable, createCliRenderer, type KeyEvent, type MouseEvent as OpenTuiMouseEvent } from "@opentui/core"
+import WebSocket from "ws"
 import {
   addToast,
   createSession,
@@ -71,7 +72,9 @@ import { formatServerSetupReport, serverSetupReport } from "./system/serverSetup
 import { handleSetupCommand } from "./system/firstRunSetup.js"
 import { debugOverlaysEnabled } from "./system/debugFlags.js"
 import { checkInternetConnectivity } from "./net/connectivity.js"
+import { normalizeLobbyBaseUrl } from "./net/hostConfig.js"
 import { checkForUpdate, checkingUpdateStatus, handleUpdateCommand } from "./system/updateCheck.js"
+import { easeInOutCubic, lerp } from "./shared/numeric.js"
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`opendungeon ${version}
@@ -80,6 +83,7 @@ Terminal roguelike RPG built with OpenTUI.
 
 Usage:
   opendungeon                   Start the game
+  opendungeon join <lobby-url>  Join a hosted lobby URL
   opendungeon login <username>  Prompt for a password and save an auth session
   opendungeon --login github    Open Supabase GitHub OAuth
   opendungeon saves list        List local saves for backup or maintenance
@@ -97,6 +101,7 @@ Environment:
   OPENDUNGEON_ASSET_DIR    Override bundled asset directory
   OPENDUNGEON_TILE_SCALE   overview | wide | medium | close
   OPENDUNGEON_DEBUG_OVERLAY=1 enables debug map/console overlays
+  OPENDUNGEON_LOBBY_URL    Hosted lobby URL for co-op/race result sync
 
 ${authHelpText()}
 ${saveCommandHelp()}
@@ -120,6 +125,7 @@ const updateExitCode = await handleUpdateCommand(process.argv.slice(2), version)
 if (updateExitCode !== null) process.exit(updateExitCode)
 const setupExitCode = await handleSetupCommand(process.argv.slice(2))
 if (setupExitCode !== null) process.exit(setupExitCode)
+const cliJoin = await resolveJoinCommand(process.argv.slice(2))
 
 if (process.argv[2] === "doctor" || process.argv.includes("--doctor")) {
   console.log(formatTerminalCapabilityReport(terminalCapabilityReport()))
@@ -146,7 +152,7 @@ const model: AppModel = {
   message: "",
   saves: initialSaves,
   saveIndex: 0,
-  saveStatus: "",
+  saveStatus: cliJoin?.status ?? "",
   debugView: debugOverlaysEnabled(),
   rendererBackend: shouldUseThreeRenderer() ? "three" : "terminal",
   settings: initialSettings,
@@ -166,18 +172,29 @@ const model: AppModel = {
   animationFrame: 0,
   playerMoveAnimation: null,
   diceRollAnimation: null,
+  cameraFocus: null,
   screenTransition: null,
 }
 let submittedSession: GameSession | null = null
 let diceTimer: ReturnType<typeof setTimeout> | null = null
 let moveTimer: ReturnType<typeof setTimeout> | null = null
+let cameraTimer: ReturnType<typeof setTimeout> | null = null
 let transitionTimer: ReturnType<typeof setTimeout> | null = null
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 let autosaveTimer: ReturnType<typeof setInterval> | null = null
 let destroyed = false
+let cameraReturnAnimation: {
+  from: { x: number; y: number }
+  to: { x: number; y: number }
+  startedAt: number
+  durationMs: number
+} | null = null
 let pendingDeleteSaveId: string | null = null
 let lastAutosaveSignature = ""
 let lastManualSaveSignature = ""
+let lobbySocket: WebSocket | null = null
+let lobbySocketUrl = ""
+let lobbyConnectedPlayers = 0
 const toastCreatedAt = new Map<string, number>()
 const toastTtlMs = 3200
 
@@ -211,6 +228,7 @@ renderer.on("resize", refresh)
 void refreshInternetStatus()
 void refreshUpdateStatus()
 autosaveTimer = setInterval(() => autosaveCurrentRun("timer"), 30_000)
+if (cliJoin?.autoStart) startRun()
 refresh()
 
 renderer.keyInput.on("keypress", (key: KeyEvent) => {
@@ -234,13 +252,24 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
   if (model.screen === "game" && model.session.skillCheck) {
     handleSkillCheckKey(key)
     autosaveCurrentRun()
+    syncLobbyState()
     refresh()
     return
   }
 
   if (model.dialog) {
     handleDialogKey(key)
-    if (model.screen === "game") autosaveCurrentRun()
+    if (model.screen === "game") {
+      autosaveCurrentRun()
+      syncLobbyState()
+    }
+    refresh()
+    return
+  }
+
+  if (key.name === "q" && model.screen === "game" && model.session.conversation && !model.session.combat.active && !model.session.skillCheck) {
+    model.session.conversation = null
+    model.saveStatus = "Conversation closed."
     refresh()
     return
   }
@@ -253,6 +282,7 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
   if (model.screen === "village") {
     handleVillageKey(key)
     autosaveCurrentRun()
+    syncLobbyState()
     maybeSubmitLobbyResult()
     refresh()
     return
@@ -261,6 +291,7 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
   if (model.screen === "game") {
     handleGameKey(key)
     autosaveCurrentRun()
+    syncLobbyState()
   } else handleMenuKey(key)
 
   maybeSubmitLobbyResult()
@@ -270,12 +301,11 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
 function handleDialogKey(key: KeyEvent) {
   if (model.dialog === "quit") {
     if (key.name === "s") {
-      saveCurrentRun(true)
-      destroyApp()
+      if (saveCurrentRun(true)) closeRunToTitle("Saved run and returned to title.")
       return
     }
     if (key.name === "q") {
-      destroyApp()
+      closeRunToTitle("Run closed. Autosave remains available.")
       return
     }
     if (key.name === "escape") {
@@ -297,6 +327,12 @@ function handleDialogKey(key: KeyEvent) {
 
   if (model.dialog === "quests") {
     handleQuestsKey(key)
+    return
+  }
+
+  if (model.dialog === "map") {
+    if (key.name === "m") model.dialog = null
+    else if (key.name === "escape" || isConfirmKey(key)) model.dialog = null
     return
   }
 
@@ -322,16 +358,26 @@ function handleDialogKey(key: KeyEvent) {
     model.diceRollAnimation = null
     return
   }
-  if (model.dialog === "pause" && key.name === "q") {
-    requestQuit()
-    return
-  }
   if (model.dialog === "pause" && key.name === "m") {
     refreshSaveList()
     model.dialog = "saveManager"
     return
   }
-  if (key.name === "escape" || key.name === "return" || key.name === "enter" || key.name === "linefeed") model.dialog = null
+  if (model.dialog === "cutscene") {
+    if (key.name === "escape") {
+      model.dialog = null
+      clearCameraReturnAnimation()
+      return
+    }
+    if (isConfirmKey(key)) {
+      model.dialog = null
+      startCameraReturnAnimation()
+      return
+    }
+  }
+  if (key.name === "escape" || key.name === "return" || key.name === "enter" || key.name === "linefeed") {
+    model.dialog = null
+  }
 }
 
 function handleInventoryKey(key: KeyEvent) {
@@ -349,7 +395,7 @@ function handleInventoryKey(key: KeyEvent) {
 }
 
 function handleQuestsKey(key: KeyEvent) {
-  const max = Math.max(0, model.session.world.quests.length - 1)
+  const max = Math.max(0, visibleQuestCount(model.session) - 1)
   if (key.name === "escape" || isConfirmKey(key)) {
     model.dialog = null
     return
@@ -358,6 +404,11 @@ function handleQuestsKey(key: KeyEvent) {
   if (isDownKey(key)) model.questIndex = clamp(model.questIndex + 1, 0, max)
   if (key.name === "pageup") model.questIndex = clamp(model.questIndex - 5, 0, max)
   if (key.name === "pagedown") model.questIndex = clamp(model.questIndex + 5, 0, max)
+}
+
+function visibleQuestCount(session: GameSession) {
+  const unlocked = session.world.quests.filter((quest) => quest.status !== "locked").length
+  return unlocked || Math.min(session.world.quests.length, 1)
 }
 
 function handleBookKey(key: KeyEvent) {
@@ -394,6 +445,7 @@ function handleHubKey(key: KeyEvent) {
   }
   if (key.name === "n") {
     playLocalCutscene(model.session)
+    model.cameraFocus = null
     model.dialog = "cutscene"
     return
   }
@@ -744,6 +796,20 @@ function handleGameKey(key: KeyEvent) {
   }
 
   if (model.session.conversation && !model.session.combat.active && !model.session.skillCheck) {
+    if (key.name === "escape") {
+      model.session.conversation = null
+      model.saveStatus = "Conversation closed."
+      return
+    }
+    if (isConfirmKey(key)) {
+      if (model.session.conversation.status === "completed") {
+        model.session.conversation = null
+        model.saveStatus = "Conversation closed."
+      } else {
+        interactWithWorld(model.session)
+      }
+      return
+    }
     if (/^[1-3]$/.test(key.name)) {
       chooseConversationOption(model.session, Number(key.name) - 1)
       return
@@ -772,6 +838,10 @@ function handleGameKey(key: KeyEvent) {
     model.dialog = "log"
     return
   }
+  if (key.name === "m") {
+    model.dialog = "map"
+    return
+  }
   if (key.name === "b") {
     model.dialog = "book"
     model.bookIndex = clamp(model.bookIndex, 0, Math.max(0, model.session.knowledge.length - 1))
@@ -790,7 +860,7 @@ function handleGameKey(key: KeyEvent) {
   }
   if (key.name === "o" || (key.name === "j" && model.settings.controlScheme !== "vim")) {
     model.dialog = "quests"
-    model.questIndex = clamp(model.questIndex, 0, Math.max(0, model.session.world.quests.length - 1))
+    model.questIndex = clamp(model.questIndex, 0, Math.max(0, visibleQuestCount(model.session) - 1))
     return
   }
   if (key.name === "r") {
@@ -938,13 +1008,30 @@ function confirmMenu() {
 function startRun() {
   model.session = createSession(model.seed, currentMode(model).id, currentClass(model).id, model.session.hero.name, model.session.hero.appearance)
   submittedSession = null
+  clearCameraReturnAnimation(false)
   setScreen("game", "The descent opens.", "portal")
-  model.dialog = null
+  playLocalCutscene(model.session, "waking-cell")
+  model.dialog = "cutscene"
+  model.cameraFocus = introCameraPoint(model.session)
   model.uiHidden = !model.settings.showUi
   model.bookIndex = 0
   model.saveStatus = `${currentMode(model).name} run started. Press Ctrl+S or F5 to save locally.`
   lastManualSaveSignature = ""
+  connectLobby()
   autosaveCurrentRun("new-run")
+}
+
+function introCameraPoint(session: GameSession) {
+  const quest = session.world.quests.find((candidate) => candidate.status === "active")
+  const candidates =
+    quest?.objectiveEventIds
+      .flatMap((id) => {
+        const event = session.world.events.find((candidate) => candidate.id === id)
+        if (!event || event.status === "completed") return []
+        const anchor = session.world.anchors.find((candidate) => candidate.id === event.anchorId && candidate.floor === session.floor)
+        return anchor ? [anchor.position] : []
+      }) ?? []
+  return candidates.find((point) => Math.abs(point.x - session.player.x) + Math.abs(point.y - session.player.y) > 0) ?? candidates[0] ?? null
 }
 
 function openSaveBrowser() {
@@ -1046,7 +1133,7 @@ function loadLatestSave() {
 }
 
 function saveCurrentRun(skipFollowupAutosave = false) {
-  if (model.screen !== "game") return
+  if (model.screen !== "game") return false
   try {
     const summary = saveSession(model.session)
     model.saves = listSaves()
@@ -1056,8 +1143,10 @@ function saveCurrentRun(skipFollowupAutosave = false) {
     while (model.session.log.length > 8) model.session.log.pop()
     lastManualSaveSignature = autosaveSignature(model.session)
     if (!skipFollowupAutosave) autosaveCurrentRun("manual-save")
+    return true
   } catch (error) {
     model.saveStatus = error instanceof Error ? error.message : "Manual save failed."
+    return false
   }
 }
 
@@ -1088,7 +1177,9 @@ function confirmCloud() {
 
   if (model.menuIndex === 1) {
     model.settings.cloudProvider = "local"
-    saveUserSettings("Local profile selected. Cloud sync remains off.")
+    saveUserSettings("Using local saves only. Cloud sync remains off.")
+    setScreen("start", "Using local saves only.")
+    model.menuIndex = 1
     return
   }
 
@@ -1232,9 +1323,74 @@ function startScreenTransition(from: ScreenId, to: ScreenId, label: string, kind
     label,
     kind,
     startedAt: Date.now(),
-    durationMs: kind === "portal" || kind === "village" ? 620 : 420,
+    durationMs: kind === "portal" ? 1150 : kind === "village" ? 1000 : 520,
   }
   queueScreenTransitionFrame()
+}
+
+function startCameraReturnAnimation() {
+  const from = model.cameraFocus
+  clearCameraReturnAnimation(false)
+  if (!from || model.session.status !== "running") {
+    model.cameraFocus = null
+    return
+  }
+
+  const to = { ...model.session.player }
+  if (from.x === to.x && from.y === to.y) {
+    model.cameraFocus = null
+    return
+  }
+
+  if (model.settings.reduceMotion) {
+    model.cameraFocus = null
+    return
+  }
+
+  const distance = Math.abs(from.x - to.x) + Math.abs(from.y - to.y)
+  cameraReturnAnimation = {
+    from: { ...from },
+    to,
+    startedAt: Date.now(),
+    durationMs: Math.min(1700, Math.max(900, 760 + distance * 44)),
+  }
+  applyCameraReturnFrame()
+}
+
+function clearCameraReturnAnimation(clearFocus = true) {
+  if (cameraTimer) clearTimeout(cameraTimer)
+  cameraTimer = null
+  cameraReturnAnimation = null
+  if (clearFocus) model.cameraFocus = null
+}
+
+function applyCameraReturnFrame() {
+  const animation = cameraReturnAnimation
+  if (!animation || destroyed) return
+
+  const progress = Math.min(1, Math.max(0, (Date.now() - animation.startedAt) / animation.durationMs))
+  const eased = easeInOutCubic(progress)
+  model.cameraFocus = {
+    x: Math.round(lerp(animation.from.x, animation.to.x, eased)),
+    y: Math.round(lerp(animation.from.y, animation.to.y, eased)),
+  }
+
+  if (progress >= 1) {
+    clearCameraReturnAnimation()
+    refresh()
+    return
+  }
+
+  refresh()
+  queueCameraReturnFrame()
+}
+
+function queueCameraReturnFrame() {
+  if (cameraTimer || destroyed) return
+  cameraTimer = setTimeout(() => {
+    cameraTimer = null
+    applyCameraReturnFrame()
+  }, 50)
 }
 
 function queueScreenTransitionFrame() {
@@ -1338,10 +1494,14 @@ function queuePlayerMoveAnimationFrame() {
 }
 
 function requestQuit() {
-  if (model.screen === "game" && model.session.status === "running" && hasUnsavedManualChanges()) {
+  if ((model.screen === "game" || model.screen === "village") && model.session.status === "running" && hasUnsavedManualChanges()) {
     model.dialog = "quit"
     model.saveStatus = lastAutosaveSignature === autosaveSignature(model.session) ? "Autosave is current; manual save is older." : "This run has not been saved yet."
     refresh()
+    return
+  }
+  if (model.screen === "game" || model.screen === "village") {
+    closeRunToTitle("Run closed. Terminal remains open.")
     return
   }
   destroyApp()
@@ -1353,10 +1513,14 @@ function hasUnsavedManualChanges() {
 
 function destroyApp() {
   destroyed = true
+  closeLobbySocket()
   if (diceTimer) clearTimeout(diceTimer)
   diceTimer = null
   if (moveTimer) clearTimeout(moveTimer)
   moveTimer = null
+  if (cameraTimer) clearTimeout(cameraTimer)
+  cameraTimer = null
+  cameraReturnAnimation = null
   if (transitionTimer) clearTimeout(transitionTimer)
   transitionTimer = null
   if (toastTimer) clearTimeout(toastTimer)
@@ -1364,6 +1528,18 @@ function destroyApp() {
   if (autosaveTimer) clearInterval(autosaveTimer)
   autosaveTimer = null
   renderer.destroy()
+}
+
+function closeRunToTitle(status: string) {
+  closeLobbySocket()
+  model.dialog = null
+  model.diceRollAnimation = null
+  model.playerMoveAnimation = null
+  clearCameraReturnAnimation()
+  model.screenTransition = null
+  setScreen("start", status)
+  model.menuIndex = model.saves.length ? 0 : 1
+  model.saveStatus = status
 }
 
 async function refreshInternetStatus() {
@@ -1381,8 +1557,88 @@ async function refreshUpdateStatus() {
   refresh()
 }
 
+function connectLobby() {
+  const lobbyUrl = lobbyUrlFromConfig()
+  if (!lobbyUrl || lobbySocketUrl === lobbyUrl) return
+  closeLobbySocket()
+  lobbySocketUrl = lobbyUrl
+
+  try {
+    const socketUrl = new URL("/ws", lobbyUrl)
+    socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:"
+    socketUrl.searchParams.set("name", env("OPENDUNGEON_PLAYER_NAME", "DUNGEON_PLAYER_NAME") || model.session.hero.name)
+    socketUrl.searchParams.set("role", "player")
+    const socket = new WebSocket(socketUrl)
+    lobbySocket = socket
+    socket.on("open", () => {
+      model.session.log.unshift(`Connected to lobby ${lobbyUrl}.`)
+      syncLobbyState()
+      refresh()
+    })
+    socket.on("message", (message) => updateLobbyStatus(message.toString()))
+    socket.on("close", () => {
+      if (lobbySocket === socket) lobbySocket = null
+      lobbyConnectedPlayers = 0
+    })
+    socket.on("error", () => {
+      model.session.log.unshift("Lobby connection failed.")
+      refresh()
+    })
+  } catch {
+    model.session.log.unshift("Lobby URL is invalid.")
+  }
+}
+
+function syncLobbyState() {
+  if (!lobbySocket || lobbySocket.readyState !== WebSocket.OPEN) return
+  lobbySocket.send(
+    JSON.stringify({
+      type: "sync",
+      state: {
+        floor: model.session.floor,
+        turn: model.session.turn,
+        hp: model.session.hp,
+        level: model.session.level,
+        unspentStatPoints: model.session.levelUp ? 1 : 0,
+        inventoryCount: model.session.inventory.length,
+        gold: model.session.gold,
+        saveRevision: model.session.turn,
+        x: model.session.player.x,
+        y: model.session.player.y,
+        combatActive: model.session.combat.active,
+      },
+    }),
+  )
+}
+
+function updateLobbyStatus(text: string) {
+  try {
+    const snapshot = JSON.parse(text) as { players?: unknown[]; syncWarnings?: string[] }
+    const players = Array.isArray(snapshot.players) ? snapshot.players.length : 0
+    if (players && players !== lobbyConnectedPlayers) {
+      lobbyConnectedPlayers = players
+      model.session.log.unshift(`Lobby players online: ${players}.`)
+      refresh()
+    }
+    const warning = Array.isArray(snapshot.syncWarnings) ? snapshot.syncWarnings[0] : ""
+    if (warning && model.session.log[0] !== warning) {
+      model.session.log.unshift(warning)
+      refresh()
+    }
+  } catch {
+    return
+  }
+}
+
+function closeLobbySocket() {
+  if (lobbySocket) lobbySocket.close()
+  lobbySocket = null
+  lobbySocketUrl = ""
+  lobbyConnectedPlayers = 0
+}
+
 function maybeSubmitLobbyResult() {
-  const lobbyUrl = env("OPENDUNGEON_LOBBY_URL", "DUNGEON_LOBBY_URL")
+  const lobbyUrl = lobbyUrlFromConfig()
   if (!lobbyUrl || model.session.status === "running" || submittedSession === model.session) return
   submittedSession = model.session
   const result = {
@@ -1411,7 +1667,12 @@ function maybeSubmitLobbyResult() {
     })
 }
 
+function lobbyUrlFromConfig() {
+  return cliJoin?.lobbyUrl || normalizeLobbyBaseUrl(env("OPENDUNGEON_LOBBY_URL", "DUNGEON_LOBBY_URL") || "")
+}
+
 function seedFromEnv() {
+  if (cliJoin?.seed) return cliJoin.seed
   const value = Number(env("OPENDUNGEON_SEED", "DUNGEON_SEED"))
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 2423368
 }
@@ -1421,6 +1682,7 @@ function randomSeed() {
 }
 
 function modeFromEnv(): MultiplayerMode {
+  if (cliJoin?.mode) return cliJoin.mode
   const value = env("OPENDUNGEON_MODE", "DUNGEON_MODE")
   return value === "coop" || value === "race" || value === "solo" ? value : "solo"
 }
@@ -1517,6 +1779,47 @@ function modeIndexFor(mode: MultiplayerMode) {
   if (mode === "coop") return 1
   if (mode === "race") return 2
   return 0
+}
+
+type CliJoin = {
+  lobbyUrl: string
+  seed?: number
+  mode?: MultiplayerMode
+  status: string
+  autoStart: boolean
+}
+
+async function resolveJoinCommand(args: string[]): Promise<CliJoin | null> {
+  if (args[0] !== "join") return null
+  const lobbyUrl = normalizeLobbyBaseUrl(args[1] || "")
+  if (!lobbyUrl) {
+    console.error("Usage: opendungeon join <lobby-url>")
+    process.exit(1)
+  }
+
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 3500)
+    const response = await fetch(new URL("/invite", lobbyUrl), { signal: controller.signal }).finally(() => clearTimeout(timer))
+    if (!response.ok) throw new Error(`Lobby returned ${response.status}`)
+    const invite = (await response.json()) as { mode?: string; seed?: number; url?: string }
+    const mode = invite.mode === "coop" || invite.mode === "race" ? invite.mode : undefined
+    const seed = Number.isFinite(Number(invite.seed)) ? Math.floor(Number(invite.seed)) : undefined
+    const url = normalizeLobbyBaseUrl(invite.url || lobbyUrl) || lobbyUrl
+    return {
+      lobbyUrl: url,
+      seed,
+      mode,
+      status: `Joining lobby ${url}.`,
+      autoStart: Boolean(seed && mode),
+    }
+  } catch {
+    return {
+      lobbyUrl,
+      status: `Could not read lobby invite at ${lobbyUrl}. Check the server URL and port.`,
+      autoStart: false,
+    }
+  }
 }
 
 function env(primary: string, fallback: string) {

@@ -29,11 +29,12 @@ import {
   type MultiplayerMode,
 } from "../game/session.js"
 import { appearanceLabel, heroSpriteForAppearance, normalizeHeroAppearance, weaponSpriteForAppearance, type HeroAppearance } from "../game/appearance.js"
+import { isEnemyActorId, isNpcActorId, type TileId } from "../game/domainTypes.js"
 import { actorLabel } from "../game/glyphs.js"
 import { saveDirectory, type SaveSummary } from "../game/saveStore.js"
 import { profilePath, type UserSettings } from "../game/settingsStore.js"
 import { formatModifier, statAbbreviations, statLabels, statLine, statsForClass } from "../game/stats.js"
-import { clamp, wrap } from "../shared/numeric.js"
+import { clamp, easeOutCubic, wrap } from "../shared/numeric.js"
 import { titleUpdateNotice, type UpdateStatus } from "../system/updateCheck.js"
 import { Canvas } from "./canvas.js"
 
@@ -51,7 +52,7 @@ type PanelBounds = {
 }
 
 export type ScreenId = "start" | "character" | "mode" | "saves" | "cloud" | "settings" | "controls" | "tutorial" | "game" | "village"
-export type DialogId = "settings" | "inventory" | "book" | "quests" | "hub" | "saveManager" | "cutscene" | "help" | "log" | "pause" | "quit" | null
+export type DialogId = "settings" | "inventory" | "book" | "quests" | "hub" | "saveManager" | "cutscene" | "help" | "log" | "map" | "pause" | "quit" | null
 export type InputMode = { field: "username" | "githubUsername" | "saveName" | "characterName"; draft: string } | null
 export type InternetStatus = "checking" | "online" | "offline"
 
@@ -66,6 +67,8 @@ export type PlayerMoveAnimation = {
   durationMs: number
   direction: "up" | "down" | "left" | "right"
 }
+
+export type CameraFocus = { x: number; y: number } | null
 
 export type ScreenTransition = {
   from: ScreenId
@@ -107,6 +110,7 @@ export type AppModel = {
   animationFrame: number
   playerMoveAnimation?: PlayerMoveAnimation | null
   diceRollAnimation?: DiceRollAnimation | null
+  cameraFocus?: CameraFocus
   screenTransition?: ScreenTransition | null
 }
 
@@ -188,6 +192,7 @@ const tutorialTabs = [
       "J opens the quest journal, or O when Vim movement is active. Each quest links to generated world events anchored to rooms, biomes, and floors.",
       "Friendly NPCs open conversation instead of combat. Talking to cartographers, surgeons, shrine keepers, jailers, and merchants can advance quest or lore events.",
       "The minimap marks the focused quest objective when it can be mapped to this floor. Completed events update world progress and can queue later AI-admin milestones.",
+      "M opens the full dungeon map with total room, enemy, hidden-artifact, acquired-item, and kill counts for the current run.",
     ],
   },
   {
@@ -205,7 +210,7 @@ const tutorialTabs = [
     body: [
       "Ctrl+S or F5 writes a manual local save. The title Save screen lets you load, rename, delete, and inspect thumbnails for local runs.",
       "Autosave keeps one rolling slot after important run changes and on a timer while you play. It is separate from manual saves so quick recovery stays simple.",
-      "If you quit a run with newer changes than the last manual save, the game asks whether to Save & Quit, Quit Anyway, or Cancel.",
+      "If you close a run with newer changes than the last manual save, the game asks whether to Save & Close, Close Anyway, or Cancel.",
     ],
   },
   {
@@ -272,6 +277,7 @@ const cleanPanel2 = "#15212b"
 const cleanPanel3 = "#1b2a35"
 const cleanLine = "#35424d"
 const cleanLineHot = "#d6a85c"
+const mapCollectibleTiles = new Set<TileId>(["potion", "relic", "chest", "note", "recipe", "tool", "deed", "fossil", "boss-memory", "keepsake", "story-relic"])
 
 type QuickbarItem = {
   key: string
@@ -391,29 +397,20 @@ function drawStart(canvas: Canvas, model: AppModel) {
   const compact = canvas.height < 30
   const brandY = compact ? 3 : Math.max(3, Math.floor(canvas.height * 0.23))
   const brandHeight = compact ? drawCompactBrand(canvas, brandY, width) : drawBrand(canvas, x, brandY, width, UI.bg)
-  const summaryY = brandY + brandHeight + 1
-  const profile = model.settings.username || "local-crawler"
-  canvas.center(summaryY, trim(`${model.session.hero.name}  @${profile}  ${currentClass(model).name}  ${currentMode(model).name}  seed ${model.seed}`, width), UI.brass, UI.bg)
-  if (!compact) {
-    const net = model.internetStatus === "online" ? "internet online" : model.internetStatus === "checking" ? "checking internet" : "offline local-only"
-    canvas.center(summaryY + 2, trim(`local saves ${model.saves.length}   ${net}   art ${activeAssetPack.name}`, width), model.internetStatus === "online" ? UI.focus : UI.soft, UI.bg)
-  }
 
-  const cardW = Math.min(72, width)
+  const cardW = Math.min(76, width)
   const cardX = Math.floor((canvas.width - cardW) / 2)
-  const cardY = compact ? summaryY + 3 : Math.min(canvas.height - 14, summaryY + 5)
-  drawCommandBox(canvas, cardX, cardY, cardW, startItems[model.menuIndex], startHint(model))
-
-  const listY = cardY + 4
-  const visibleRows = Math.max(4, Math.min(startItems.length, canvas.height - listY - 4))
+  const listY = compact ? brandY + brandHeight + 2 : brandY + brandHeight + 5
+  const rowH = compact || canvas.height < 34 ? 1 : 2
+  const visibleRows = Math.max(4, Math.min(startItems.length, Math.floor((canvas.height - listY - 4) / rowH)))
   const offset = scrollOffset(model.menuIndex, visibleRows, startItems.length)
   startItems.slice(offset, offset + visibleRows).forEach((item, visibleIndex) => {
     const index = offset + visibleIndex
     const selected = model.menuIndex === index
-    drawPlainSelectRow(canvas, cardX, listY + visibleIndex, cardW, item, selected, startItemMeta(item, model), startItemDisabled(item, model))
+    drawStartMenuRow(canvas, cardX, listY + visibleIndex * rowH, cardW, rowH, item, selected, startItemDisabled(item, model))
   })
   if (offset > 0) canvas.write(cardX + cardW - 4, listY - 1, "↑", UI.muted, UI.bg)
-  if (offset + visibleRows < startItems.length) canvas.write(cardX + cardW - 4, listY + visibleRows, "↓", UI.muted, UI.bg)
+  if (offset + visibleRows < startItems.length) canvas.write(cardX + cardW - 4, listY + visibleRows * rowH, "↓", UI.muted, UI.bg)
 
   if (model.saveStatus && canvas.height > 30) canvas.center(canvas.height - 5, trim(model.saveStatus, canvas.width - 4), UI.focus, UI.bg)
   drawTitleVersionStatus(canvas, model)
@@ -425,6 +422,29 @@ function drawStart(canvas: Canvas, model: AppModel) {
     ["?", "help"],
     ["q", "quit"],
   ])
+}
+
+function drawStartMenuRow(canvas: Canvas, x: number, y: number, width: number, height: number, labelText: string, selected: boolean, disabled: boolean) {
+  const bg = selected ? cleanPanel2 : undefined
+  const fg = disabled ? UI.muted : selected ? UI.gold : UI.ink
+  const hint = selected ? startMenuHint(labelText) : ""
+  const lineY = y + (height > 1 ? 1 : 0)
+  if (selected) canvas.fill(x, y, width, height, " ", cleanPanel2, cleanPanel2)
+  writeCentered(canvas, x, lineY, width, trim(labelText, Math.max(4, width - 28)), fg, bg)
+  if (hint) canvas.write(x + Math.max(18, width - hint.length - 5), lineY, hint, disabled ? UI.muted : UI.focus, bg)
+}
+
+function startMenuHint(item: string) {
+  if (item === "New descent") return "play"
+  if (item === "Continue last") return "continue"
+  if (item === "Load save") return "manage"
+  if (item === "Character") return "crawler"
+  if (item === "Multiplayer") return "online"
+  if (item === "Cloud login") return "sync"
+  if (item === "Tutorial") return "learn"
+  if (item === "Settings") return "tune"
+  if (item === "Controls") return "keys"
+  return ""
 }
 
 function drawTitleVersionStatus(canvas: Canvas, model: AppModel) {
@@ -449,18 +469,15 @@ function drawCharacter(canvas: Canvas, model: AppModel) {
   const visibleRows = clamp(Math.floor((height - 10) / 4), 3, classOptions.length)
   const rowStep = 4
   const cardH = 4
-  const spriteW = cardH >= 6 ? 15 : 12
-  const spriteH = cardH >= 6 ? 5 : 4
-  const textX = x + spriteW + 12
+  const textX = x + 22
   const offset = scrollOffset(model.classIndex, visibleRows, classOptions.length)
   classOptions.slice(offset, offset + visibleRows).forEach((option, visibleIndex) => {
     const index = offset + visibleIndex
     const selected = model.classIndex === index
     const row = listY + visibleIndex * rowStep
-    const sprite = classSprite(option.id)
     const bg = selected ? UI.panel3 : UI.panel2
     drawSelectCard(canvas, x + 3, row - 1, width - 6, cardH, selected)
-    drawPixelBlock(canvas, x + 6, row, animatedPixelSprite(sprite, "idle", model.seed + index, spriteW, spriteH), selected ? 1 : 0.68)
+    drawMiniIcon(canvas, x + 7, row, classOptionIcon(option.id), 10, 3, selected ? 1 : 0.7)
     canvas.write(textX, row, `${selected ? ">" : " "} ${option.name}`, selected ? UI.gold : UI.ink, bg)
     canvas.write(textX + 2, row + 1, trim(option.text, width - (textX - x) - 7), selected ? UI.ink : UI.soft, bg)
     if (selected && row + 3 < y + height - 2) canvas.write(textX + 2, row + 3, trim(statLine(statsForClass(option.id)), width - (textX - x) - 7), UI.muted, bg)
@@ -587,20 +604,26 @@ function drawCloud(canvas: Canvas, model: AppModel) {
   const inputY = brandY + brandHeight + 3
   const editing = model.inputMode?.field === "githubUsername"
   const githubName = editing ? model.inputMode?.draft ?? "" : model.settings.githubUsername
-  const shownName = githubName || "github username"
+  const shownName = githubName || "not set"
   const auth = authStatusReport()
   const cloudBrowser = buildCloudSaveBrowserState(model.saves, [], auth)
 
-  drawCommandBox(canvas, x, inputY, width, shownName, "GitHub cloud identity")
-  canvas.write(x + 3, inputY + 1, editing ? ">" : " ", editing ? UI.gold : UI.muted, UI.panel2)
-  canvas.write(x + 5, inputY + 1, editing ? `${shownName}_` : shownName, editing ? UI.ink : UI.soft, UI.panel2)
+  drawInputField(canvas, x, inputY + 1, width, "GitHub", editing ? `${githubName}_` : shownName, editing)
 
-  const statusY = inputY + 4
+  const statusY = inputY + 5
   canvas.center(statusY, trim(formatAuthStatus(auth), width), auth.kind === "expired" ? UI.ruby : auth.kind === "expiring" ? UI.gold : UI.soft, UI.bg)
 
-  const rowY = inputY + (compact ? 6 : 7)
-  drawPlainSelectRow(canvas, x, rowY, width, "Sign in with GitHub", model.menuIndex === 0, auth.loggedIn ? `status ${auth.kind}; refresh ${auth.canRefresh ? "ready" : "missing"}` : "not signed in; saves stay local")
-  drawPlainSelectRow(canvas, x, rowY + 2, width, "Use local profile", model.menuIndex === 1, `profile @${model.settings.username}`)
+  const rowY = inputY + (compact ? 7 : 8)
+  drawPlainSelectRow(
+    canvas,
+    x,
+    rowY,
+    width,
+    "Sign in with GitHub",
+    model.menuIndex === 0,
+    auth.loggedIn ? `status ${auth.kind}; refresh ${auth.canRefresh ? "ready" : "missing"}` : model.settings.githubUsername ? `profile @${model.settings.githubUsername}` : "enter username first",
+  )
+  drawPlainSelectRow(canvas, x, rowY + 2, width, "Keep saves local", model.menuIndex === 1, "turn off cloud sync")
   drawPlainSelectRow(canvas, x, rowY + 4, width, "Back to title", model.menuIndex === 2, "return without syncing")
 
   if (!compact) {
@@ -701,7 +724,8 @@ function drawControls(canvas: Canvas, model: AppModel) {
     ["Inventory", "I opens pack. Arrows select. Enter applies. Mouse can drag slots."],
     ["Book", "B opens memory, note, NPC, tutorial, and hub discoveries."],
     ["Quests", "J opens the quest journal. Use O instead when Vim movement is active."],
-    ["Run", "R rests outside combat. Esc pauses. M from pause opens run saves."],
+    ["Map", "M opens the full dungeon map and current run stats."],
+    ["Run", "R rests outside combat. Esc pauses. Save manager is inside Pause."],
     ["Accessibility", accessibilitySummary(model.settings)],
     ["Visuals", `Camera ${model.settings.tileScale}. UI ${onOff(model.settings.showUi)}. Dice ${diceSkinName(model.settings.diceSkin)}.`],
     ["Audio", `Music ${onOff(model.settings.music)}. SFX ${onOff(model.settings.sound)}.`],
@@ -755,9 +779,7 @@ function drawTutorial(canvas: Canvas, model: AppModel) {
   const detailW = width - (detailX - x) - 4
   const detailH = height - 9
   drawPanel(canvas, detailX, listY - 1, detailW, detailH, active.name, UI.edge)
-  const icon = active.name === "Combat" ? "sword" : active.name === "Items" ? "scroll" : active.name === "Cloud" ? "focus-gem" : "map"
-  drawMiniIcon(canvas, detailX + detailW - 12, listY + 1, icon, 8, 2)
-  canvas.write(detailX + 3, listY + 1, trim(active.description, detailW - 18), UI.brass, UI.panel)
+  canvas.write(detailX + 3, listY + 1, trim(active.description, detailW - 6), UI.brass, UI.panel)
   writeWrapped(canvas, detailX + 3, listY + 4, detailW - 6, active.body, detailH - 7, UI.ink, UI.panel)
 
   if (model.saveStatus && height > 24) canvas.write(x + 4, y + height - 4, trim(model.saveStatus, width - 8), UI.focus, UI.panel)
@@ -771,7 +793,7 @@ function drawTutorial(canvas: Canvas, model: AppModel) {
 function drawGame(canvas: Canvas, model: AppModel) {
   const session = model.session
   const moveAnimation = activePlayerMoveAnimation(model)
-  drawMap(canvas, session, model.debugView, model.settings, model.animationFrame, moveAnimation)
+  drawMap(canvas, session, model.debugView, model.settings, model.animationFrame, moveAnimation, model.cameraFocus ?? null)
   if (!model.uiHidden) {
     drawHud(canvas, session)
     if (!model.debugView && model.settings.showMinimap) drawMinimap(canvas, session)
@@ -892,24 +914,28 @@ function drawMap(
   settings: UserSettings,
   animationFrame = session.turn,
   playerMoveAnimation: PlayerMoveAnimation | null = null,
+  cameraFocus: CameraFocus = null,
 ) {
   const tileSize = mapTileSize(canvas, debugView, settings.tileScale)
   const tileWidth = tileSize.width
   const tileHeight = tileSize.height
   const viewWidth = Math.max(1, Math.ceil(canvas.width / tileWidth))
   const viewHeight = Math.max(4, Math.ceil(canvas.height / tileHeight))
-  const startX = session.player.x - Math.floor(viewWidth / 2)
-  const startY = session.player.y - Math.floor(viewHeight / 2)
+  const center = cameraFocus ?? session.player
+  const startX = center.x - Math.floor(viewWidth / 2)
+  const startY = center.y - Math.floor(viewHeight / 2)
   const targets = combatTargets(session)
   const selectedTargetId = session.combat.active ? targets[session.combat.selectedTarget]?.id : undefined
+  const previewRadius = cameraFocus ? Math.max(4, Math.floor(Math.min(viewWidth, viewHeight) * 0.3)) : 0
 
   for (let sy = 0; sy < viewHeight; sy++) {
     for (let sx = 0; sx < viewWidth; sx++) {
       const x = startX + sx
       const y = startY + sy
       const point = { x, y }
-      const visible = session.visible.has(pointKey(point))
-      const seen = session.seen.has(pointKey(point))
+      const previewVisible = Boolean(cameraFocus && Math.abs(cameraFocus.x - x) + Math.abs(cameraFocus.y - y) <= previewRadius)
+      const visible = session.visible.has(pointKey(point)) || previewVisible
+      const seen = session.seen.has(pointKey(point)) || previewVisible
       const actor = visible ? actorAt(session.dungeon.actors, point) : undefined
       const screenX = sx * tileWidth
       const screenY = sy * tileHeight
@@ -937,7 +963,11 @@ function drawMap(
       }
       else if (actor) {
         drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, actorSpriteId(actor.kind), debugView, actorAnimation(actor.id === selectedTargetId, session), actor.id === selectedTargetId ? animationFrame : 0)
-        if (actor.id === selectedTargetId) drawTargetFrame(canvas, screenX, screenY, tileWidth, tileHeight, debugView)
+        if (actor.id === selectedTargetId || (cameraFocus && cameraFocus.x === x && cameraFocus.y === y)) drawTargetFrame(canvas, screenX, screenY, tileWidth, tileHeight, debugView)
+      }
+      else if (cameraFocus && cameraFocus.x === x && cameraFocus.y === y) {
+        drawTargetFrame(canvas, screenX, screenY, tileWidth, tileHeight, debugView)
+        canvas.write(screenX + Math.max(1, Math.floor(tileWidth / 2) - 1), screenY + Math.max(1, Math.floor(tileHeight / 2)), "◆", UI.gold)
       }
     }
   }
@@ -963,66 +993,290 @@ function mapTileSize(canvas: Canvas, debugView: boolean, preference: UserSetting
 
 function drawMinimap(canvas: Canvas, session: GameSession) {
   if (canvas.width < 96 || canvas.height < 28) return
-  const width = Math.min(24, Math.max(18, Math.floor(canvas.width * 0.14)))
-  const height = Math.min(10, Math.max(8, Math.floor(canvas.height * 0.18)))
+  const width = Math.min(38, Math.max(32, Math.floor(canvas.width * 0.22)))
+  const availableHeight = canvas.height - gameQuickbarHeight(canvas) - gameHudHeight(canvas) - 4
+  const height = Math.min(15, Math.max(11, Math.min(availableHeight, Math.floor(canvas.height * 0.28))))
   const x = 2
   const y = canvas.height - gameQuickbarHeight(canvas) - height - 1
-  if (y <= gameHudHeight(canvas) + 1) return
+  if (height < 10 || y <= gameHudHeight(canvas) + 1) return
 
-  canvas.fill(x, y, width, height, " ", "#0b1218", "#0b1218")
+  const bg = "#0b1218"
+  canvas.fill(x, y, width, height, " ", bg, bg)
   canvas.border(x, y, width, height, UI.edge)
-  canvas.write(x + 2, y, "Mini map", UI.gold, "#0b1218")
 
   const innerX = x + 1
   const innerY = y + 1
   const innerW = width - 2
-  const innerH = height - 3
-  const dungeonW = session.dungeon.width
-  const dungeonH = session.dungeon.height
+  const innerH = height - 4
   const objective = activeQuestObjectivePoint(session)
-  const objectiveCell =
-    objective &&
-    objective.x >= 0 &&
-    objective.y >= 0 &&
-    objective.x < dungeonW &&
-    objective.y < dungeonH
-      ? {
-          x: clamp(Math.round((objective.x / Math.max(1, dungeonW - 1)) * (innerW - 1)), 0, innerW - 1),
-          y: clamp(Math.round((objective.y / Math.max(1, dungeonH - 1)) * (innerH - 1)), 0, innerH - 1),
-        }
-      : null
+  const startX = session.player.x - Math.floor(innerW / 2)
+  const startY = session.player.y - Math.floor(innerH / 2)
+  let objectiveVisible = false
+  const title = objective ? `Radar  goal ${objectiveDirectionLabel(session.player, objective)}` : "Radar"
+  canvas.write(x + 2, y, trim(title, width - 4), UI.gold, bg)
 
   for (let row = 0; row < innerH; row++) {
     for (let col = 0; col < innerW; col++) {
-      const mapX = clamp(Math.floor((col / Math.max(1, innerW - 1)) * (dungeonW - 1)), 0, dungeonW - 1)
-      const mapY = clamp(Math.floor((row / Math.max(1, innerH - 1)) * (dungeonH - 1)), 0, dungeonH - 1)
-      const key = pointKey({ x: mapX, y: mapY })
-      const seen = session.seen.has(key)
+      const mapX = startX + col
+      const mapY = startY + row
+      const point = { x: mapX, y: mapY }
+      const key = pointKey(point)
       const visible = session.visible.has(key)
-      const tile = session.dungeon.tiles[mapY]?.[mapX] ?? "void"
-      let fg = seen ? (tile === "wall" ? "#7f8a94" : visible ? "#86d9ad" : "#416b5f") : "#101820"
-      let ch = seen ? (tile === "wall" ? "#" : ".") : " "
+      const seen = session.seen.has(key)
+      let marker = minimapTileMarker(session.dungeon.tiles[mapY]?.[mapX] ?? "void", visible, seen)
+      const actor = visible ? actorAt(session.dungeon.actors, point) : undefined
 
-      if (objectiveCell && col === objectiveCell.x && row === objectiveCell.y) {
-        ch = "◆"
-        fg = UI.gold
+      if (actor) marker = minimapActorMarker(actor.kind)
+      if (objective && objective.x === mapX && objective.y === mapY) {
+        marker = { ch: "◆", fg: UI.gold }
+        objectiveVisible = true
       }
       if (session.player.x === mapX && session.player.y === mapY) {
-        ch = "@"
-        fg = UI.focus
+        marker = { ch: "@", fg: UI.focus }
       }
-      canvas.write(innerX + col, innerY + row, ch, fg, "#0b1218")
+      canvas.write(innerX + col, innerY + row, marker.ch, marker.fg, bg)
     }
   }
-  canvas.write(x + 1, y + height - 2, trim("@ you  ◆ quest", width - 2), UI.soft, "#0b1218")
+  if (objective && !objectiveVisible) drawMinimapObjectivePointer(canvas, objective, startX, startY, innerX, innerY, innerW, innerH, bg)
+  const detail = objective ? `Goal ${objectiveDistanceText(session.player, objective)}  floor ${session.floor}` : `Floor ${session.floor}`
+  canvas.write(x + 1, y + height - 3, trim(detail, width - 2), UI.brass, bg)
+  canvas.write(x + 1, y + height - 2, trim("@you !foe nNPC $shop >exit ◆", width - 2), UI.soft, bg)
+}
+
+function drawRunMapDialog(canvas: Canvas, model: AppModel, x: number, y: number, width: number, height: number) {
+  const session = model.session
+  const stats = runMapStats(session)
+  const mapX = x + 3
+  const mapY = y + 4
+  const statsW = Math.min(36, Math.max(28, Math.floor(width * 0.31)))
+  const mapW = Math.max(28, width - statsW - 9)
+  const mapH = Math.max(10, height - 9)
+  const statsX = mapX + mapW + 3
+
+  drawPanel(canvas, mapX, mapY, mapW, mapH, "Full Map", UI.edge)
+  drawFullDungeonMap(canvas, session, mapX + 2, mapY + 2, mapW - 4, mapH - 4)
+
+  drawPanel(canvas, statsX, mapY, statsW, mapH, "Run Stats", UI.edgeDim)
+  const rows: Array<[string, string, string?]> = [
+    ["Floor", `${session.floor}/${session.finalFloor}`, UI.gold],
+    ["Rooms", `${stats.roomsSeen}/${stats.roomsTotal}`, UI.ink],
+    ["Enemies", `${stats.enemiesRemaining}/${stats.enemyKnownTotal}`, UI.ruby],
+    ["Killed", String(session.kills), UI.ruby],
+    ["?? hidden", String(stats.hiddenArtifacts), UI.cyan],
+    ["Artifacts", `${stats.visibleArtifacts} visible`, UI.cyan],
+    ["Acquired", `${stats.acquiredItems} items`, UI.focus],
+    ["Book", `${stats.bookEntries} entries`, UI.focus],
+    ["Secrets", `${stats.secretsFound}/${stats.secretsTotal}`, UI.brass],
+    ["Gold", String(session.gold), UI.gold],
+    ["Turns", String(session.turn), UI.soft],
+    ["XP", `${session.xp}/${session.level * 10}`, UI.soft],
+  ]
+
+  rows.slice(0, Math.max(0, mapH - 6)).forEach(([labelText, value, color], index) => {
+    drawMapStatRow(canvas, statsX + 2, mapY + 2 + index, statsW - 4, labelText, value, color ?? UI.ink)
+  })
+
+  const objective = activeQuestObjectivePoint(session)
+  const objectiveText = objective ? `Goal ${objectiveDistanceText(session.player, objective)}` : "Goal none on this floor"
+  const legendY = mapY + mapH - 4
+  canvas.write(statsX + 2, legendY, trim(objectiveText, statsW - 4), objective ? UI.gold : UI.muted, UI.panel)
+  canvas.write(statsX + 2, legendY + 2, trim("@ you  ! enemy  n npc  ? artifact  > exit", statsW - 4), UI.soft, UI.panel)
+  canvas.write(x + 4, y + height - 4, trim("M or Esc close. Unseen artifact and secret counts stay as ?? until discovered.", width - 8), UI.muted, UI.panel)
+}
+
+function drawMapStatRow(canvas: Canvas, x: number, y: number, width: number, labelText: string, value: string, valueColor: string) {
+  canvas.fill(x, y, width, 1, " ", UI.panel2, UI.panel2)
+  canvas.write(x + 2, y, trim(labelText, 12), UI.brass, UI.panel2)
+  canvas.write(x + 16, y, trim(value, width - 18), valueColor, UI.panel2)
+}
+
+function drawFullDungeonMap(canvas: Canvas, session: GameSession, x: number, y: number, width: number, height: number) {
+  const bg = "#0b1218"
+  canvas.fill(x, y, width, height, " ", bg, bg)
+  if (width <= 0 || height <= 0) return
+
+  for (let row = 0; row < height; row++) {
+    for (let col = 0; col < width; col++) {
+      const bounds = sourceBoundsForMapCell(session, col, row, width, height)
+      const marker = fullMapTileMarker(session, bounds)
+      canvas.write(x + col, y + row, marker.ch, marker.fg, bg)
+    }
+  }
+
+  for (const secret of session.dungeon.secrets ?? []) {
+    if (!secret.discovered) drawScaledMapPoint(canvas, session, secret.door, x, y, width, height, "?", UI.cyan, bg)
+  }
+  for (let tileY = 0; tileY < session.dungeon.height; tileY++) {
+    for (let tileX = 0; tileX < session.dungeon.width; tileX++) {
+      const tile = session.dungeon.tiles[tileY]?.[tileX]
+      if (!tile || !mapCollectibleTiles.has(tile)) continue
+      const point = { x: tileX, y: tileY }
+      drawScaledMapPoint(canvas, session, point, x, y, width, height, fullMapCollectibleMarker(tile, session.seen.has(pointKey(point))), fullMapCollectibleColor(tile, session.seen.has(pointKey(point))), bg)
+    }
+  }
+  for (const actor of session.dungeon.actors) {
+    const marker = fullMapActorMarker(actor.kind)
+    drawScaledMapPoint(canvas, session, actor.position, x, y, width, height, marker.ch, marker.fg, bg)
+  }
+  const objective = activeQuestObjectivePoint(session)
+  if (objective) drawScaledMapPoint(canvas, session, objective, x, y, width, height, "◆", UI.gold, bg)
+  drawScaledMapPoint(canvas, session, session.player, x, y, width, height, "@", UI.focus, bg)
+}
+
+function runMapStats(session: GameSession) {
+  let visibleArtifacts = 0
+  let hiddenArtifacts = 0
+  let roomsSeen = 0
+  for (let y = 0; y < session.dungeon.height; y++) {
+    for (let x = 0; x < session.dungeon.width; x++) {
+      const tile = session.dungeon.tiles[y]?.[x]
+      if (!tile || !mapCollectibleTiles.has(tile)) continue
+      if (session.seen.has(pointKey({ x, y }))) visibleArtifacts += 1
+      else hiddenArtifacts += 1
+    }
+  }
+  for (const anchor of session.dungeon.anchors) {
+    if (session.seen.has(pointKey(anchor.position))) roomsSeen += 1
+  }
+  const secretsFound = (session.dungeon.secrets ?? []).filter((secret) => secret.discovered).length
+  const secretsHidden = (session.dungeon.secrets ?? []).length - secretsFound
+  const enemiesRemaining = session.dungeon.actors.filter((actor) => isEnemyActorId(actor.kind)).length
+  const acquiredItems = Math.max(0, session.inventory.length - startingLoadout(session.hero.classId).length)
+  const bookEntries = session.knowledge.filter((entry) => entry.kind !== "tutorial").length
+
+  return {
+    roomsSeen,
+    roomsTotal: session.dungeon.anchors.length,
+    enemiesRemaining,
+    enemyKnownTotal: enemiesRemaining + session.kills,
+    hiddenArtifacts: hiddenArtifacts + secretsHidden,
+    visibleArtifacts,
+    acquiredItems,
+    bookEntries,
+    secretsFound,
+    secretsTotal: (session.dungeon.secrets ?? []).length,
+  }
+}
+
+function sourceBoundsForMapCell(session: GameSession, col: number, row: number, width: number, height: number) {
+  const startX = Math.floor((col / width) * session.dungeon.width)
+  const endX = Math.max(startX + 1, Math.floor(((col + 1) / width) * session.dungeon.width))
+  const startY = Math.floor((row / height) * session.dungeon.height)
+  const endY = Math.max(startY + 1, Math.floor(((row + 1) / height) * session.dungeon.height))
+  return { startX, endX: Math.min(session.dungeon.width, endX), startY, endY: Math.min(session.dungeon.height, endY) }
+}
+
+function fullMapTileMarker(session: GameSession, bounds: { startX: number; endX: number; startY: number; endY: number }) {
+  let walls = 0
+  let floors = 0
+  let seen = false
+  let visible = false
+  let special: TileId | null = null
+
+  for (let y = bounds.startY; y < bounds.endY; y++) {
+    for (let x = bounds.startX; x < bounds.endX; x++) {
+      const tile = session.dungeon.tiles[y]?.[x] ?? "void"
+      const key = pointKey({ x, y })
+      seen ||= session.seen.has(key)
+      visible ||= session.visible.has(key)
+      if (tile === "stairs" || tile === "door" || mapCollectibleTiles.has(tile)) special ??= tile
+      else if (tile === "wall" || tile === "void") walls += 1
+      else floors += 1
+    }
+  }
+
+  const dim = visible ? 1 : seen ? 0.68 : 0.46
+  if (special === "stairs") return { ch: ">", fg: tint(UI.focus, dim) }
+  if (special === "door") return { ch: "+", fg: tint(UI.gold, dim) }
+  if (special && mapCollectibleTiles.has(special)) return { ch: seen ? fullMapCollectibleMarker(special, true) : "?", fg: fullMapCollectibleColor(special, seen) }
+  if (floors >= walls) return { ch: seen ? "." : "·", fg: tint("#78b28f", dim) }
+  return { ch: "#", fg: tint("#87919b", dim) }
+}
+
+function drawScaledMapPoint(canvas: Canvas, session: GameSession, point: { x: number; y: number }, x: number, y: number, width: number, height: number, marker: string, fg: string, bg: string) {
+  const col = clamp(Math.floor((point.x / Math.max(1, session.dungeon.width - 1)) * (width - 1)), 0, width - 1)
+  const row = clamp(Math.floor((point.y / Math.max(1, session.dungeon.height - 1)) * (height - 1)), 0, height - 1)
+  canvas.write(x + col, y + row, marker, fg, bg)
+}
+
+function fullMapCollectibleMarker(tile: TileId, seen: boolean) {
+  if (!seen) return "?"
+  if (tile === "potion") return "p"
+  if (tile === "chest") return "$"
+  if (tile === "relic") return "r"
+  if (tile === "recipe") return "R"
+  if (tile === "tool") return "t"
+  if (tile === "deed") return "d"
+  return "?"
+}
+
+function fullMapCollectibleColor(tile: TileId, seen: boolean) {
+  if (!seen) return UI.cyan
+  if (tile === "potion") return UI.focus
+  if (tile === "chest") return UI.gold
+  if (tile === "relic" || tile === "deed" || tile === "story-relic") return UI.brass
+  return UI.cyan
+}
+
+function fullMapActorMarker(kind: string) {
+  if (isEnemyActorId(kind)) return { ch: "!", fg: UI.ruby }
+  if (isNpcActorId(kind)) return { ch: kind === "merchant" ? "$" : "n", fg: kind === "merchant" ? UI.gold : UI.cyan }
+  return { ch: "?", fg: UI.soft }
+}
+
+function minimapTileMarker(tile: TileId, visible: boolean, seen: boolean) {
+  if (!seen && !visible) return { ch: " ", fg: "#101820" }
+  const dim = visible ? 1 : 0
+  if (tile === "wall") return { ch: "#", fg: dim ? "#a7b0ba" : "#52606b" }
+  if (tile === "door") return { ch: "+", fg: dim ? UI.gold : "#7d6b42" }
+  if (tile === "stairs") return { ch: ">", fg: dim ? UI.focus : "#4f8d70" }
+  if (tile === "trap") return { ch: "^", fg: dim ? UI.hp : "#724654" }
+  if (tile === "potion") return { ch: "p", fg: dim ? UI.focus : "#4f8d70" }
+  if (tile === "chest") return { ch: "$", fg: dim ? UI.gold : "#7d6b42" }
+  if (tile === "relic") return { ch: "r", fg: dim ? UI.brass : "#7d6b42" }
+  if (tile === "note" || tile === "recipe" || tile === "tool" || tile === "deed" || tile === "fossil" || tile === "boss-memory" || tile === "keepsake" || tile === "story-relic") {
+    return { ch: "?", fg: dim ? UI.cyan : "#466f78" }
+  }
+  if (tile === "void") return { ch: " ", fg: "#101820" }
+  return { ch: visible ? "." : "·", fg: visible ? "#86d9ad" : "#416b5f" }
+}
+
+function minimapActorMarker(kind: string) {
+  if (isEnemyActorId(kind)) return { ch: "!", fg: UI.hp }
+  if (isNpcActorId(kind)) return { ch: kind === "merchant" ? "$" : "n", fg: kind === "merchant" ? UI.gold : UI.cyan }
+  return { ch: "?", fg: UI.soft }
+}
+
+function drawMinimapObjectivePointer(canvas: Canvas, objective: { x: number; y: number }, startX: number, startY: number, innerX: number, innerY: number, innerW: number, innerH: number, bg: string) {
+  const col = clamp(objective.x - startX, 0, innerW - 1)
+  const row = clamp(objective.y - startY, 0, innerH - 1)
+  canvas.write(innerX + col, innerY + row, "◆", UI.gold, bg)
+}
+
+function objectiveDirectionLabel(from: { x: number; y: number }, to: { x: number; y: number }) {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const horizontal = dx > 0 ? `E${dx}` : dx < 0 ? `W${Math.abs(dx)}` : ""
+  const vertical = dy > 0 ? `S${dy}` : dy < 0 ? `N${Math.abs(dy)}` : ""
+  return [horizontal, vertical].filter(Boolean).join(" ") || "here"
+}
+
+function objectiveDistanceText(from: { x: number; y: number }, to: { x: number; y: number }) {
+  const distance = Math.abs(to.x - from.x) + Math.abs(to.y - from.y)
+  return `${objectiveDirectionLabel(from, to)} (${distance} steps)`
 }
 
 function activeQuestObjectivePoint(session: GameSession) {
-  const quest = focusedQuest(session)
-  const eventId = quest?.objectiveEventIds.find((id) => session.world.events.find((event) => event.id === id)?.status !== "completed") ?? quest?.objectiveEventIds[0]
-  const event = eventId ? session.world.events.find((candidate) => candidate.id === eventId) : undefined
-  const anchor = event ? session.world.anchors.find((candidate) => candidate.id === event.anchorId && candidate.floor === session.floor) : undefined
-  return anchor?.position ?? null
+  const quest = session.world.quests.find((candidate) => candidate.status === "active") ?? null
+  const candidates =
+    quest?.objectiveEventIds
+      .flatMap((id) => {
+        const event = session.world.events.find((candidate) => candidate.id === id)
+        if (!event || event.status === "completed") return []
+        const anchor = session.world.anchors.find((candidate) => candidate.id === event.anchorId && candidate.floor === session.floor)
+        return anchor ? [anchor.position] : []
+      }) ?? []
+  return candidates.find((point) => Math.abs(point.x - session.player.x) + Math.abs(point.y - session.player.y) > 0) ?? candidates[0] ?? null
 }
 
 function drawAssetTile(
@@ -1214,7 +1468,7 @@ function drawHud(canvas: Canvas, session: GameSession) {
   if (canvas.width < 96 || height < 5) {
     canvas.fill(0, 0, canvas.width, Math.min(4, canvas.height), " ", cleanPanel, cleanPanel)
     if (canvas.height > 4) canvas.fill(0, 4, canvas.width, 1, " ", "#0b1118", "#0b1118")
-    const hero = trim(`${session.hero.name} · ${formatBiome(currentBiome(session))} · ${session.floorModifier.name}`, Math.max(16, canvas.width - 34))
+    const hero = trim(`${session.hero.name} · ${formatBiome(currentBiome(session))} · ${session.floorModifier.name} · ${session.gold}g`, Math.max(16, canvas.width - 34))
     canvas.write(1, 0, hero, UI.ink, cleanPanel)
     drawHudBar(canvas, 1, 1, Math.max(12, Math.floor(canvas.width * 0.32)), "HP", session.hp, session.maxHp, UI.hp, UI.hpBack)
     drawHudBar(canvas, Math.floor(canvas.width * 0.43), 1, Math.max(10, Math.floor(canvas.width * 0.25)), "FOCUS", session.focus, session.maxFocus, UI.focus, UI.focusBack)
@@ -1229,7 +1483,7 @@ function drawHud(canvas: Canvas, session: GameSession) {
 
   const infoX = x + 14
   const contentW = width - 17
-  canvas.write(infoX, 1, trim(`${session.hero.name}  LV ${session.level}  XP ${session.xp}/${session.level * 10}`, Math.floor(contentW * 0.48)), UI.gold, UI.panel)
+  canvas.write(infoX, 1, trim(`${session.hero.name}  LV ${session.level}  XP ${session.xp}/${session.level * 10}  ${session.gold}g`, Math.floor(contentW * 0.48)), UI.gold, UI.panel)
   canvas.write(infoX + Math.floor(contentW * 0.5), 1, trim(`${session.hero.title} · ${formatBiome(currentBiome(session))} · ${session.floorModifier.name}`, Math.floor(contentW * 0.48)), UI.soft, UI.panel)
   drawHudBar(canvas, infoX, 2, Math.max(20, Math.floor(contentW * 0.42)), "HP", session.hp, session.maxHp, UI.hp, UI.hpBack)
   drawHudBar(canvas, infoX + Math.floor(contentW * 0.48), 2, Math.max(20, Math.floor(contentW * 0.42)), "FOCUS", session.focus, session.maxFocus, UI.focus, UI.focusBack)
@@ -1330,9 +1584,13 @@ function focusedQuest(session: GameSession) {
   return (
     session.world.quests.find((quest) => quest.status === "active") ??
     session.world.quests.find((quest) => quest.status === "completed") ??
-    session.world.quests.find((quest) => quest.status === "locked") ??
     null
   )
+}
+
+function visibleQuestList(session: GameSession) {
+  const unlocked = session.world.quests.filter((quest) => quest.status !== "locked")
+  return unlocked.length ? unlocked : session.world.quests.slice(0, 1)
 }
 
 function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollAnimation | null | undefined, settings: UserSettings) {
@@ -1354,7 +1612,7 @@ function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollA
         { key: "Ent", label: "Roll", custom: "d20", active: true },
       ]
     : [
-        { key: "1", label: "Strike", sprite: "sword" },
+        { key: "E", label: "Use", sprite: "quest-marker", active: Boolean(session.conversation || session.skillCheck) },
         {
           key: "H",
           label: "Potion",
@@ -1362,10 +1620,10 @@ function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollA
           count: String(countInventory(session, "Deploy nerve potion")),
           active: session.hp < session.maxHp,
         },
-        { key: "G", label: "Gold", sprite: "coin", count: String(session.gold) },
+        { key: "R", label: "Rest", sprite: "food" },
         { key: "J", label: "Quest", sprite: "quest-marker", count: String(session.world.quests.filter((quest) => quest.status !== "locked").length) },
         { key: "B", label: "Book", sprite: "scroll", count: String(session.knowledge.length) },
-        { key: "D", label: "Roll", custom: "d20" },
+        { key: "L", label: "Log", sprite: "scroll" },
         { key: "I", label: "Pack", sprite: "pack", count: String(session.inventory.length) },
       ]
   const slotCount = items.length
@@ -1509,7 +1767,8 @@ function drawConversationPanel(canvas: Canvas, session: GameSession) {
   if (!conversation) return
 
   const width = Math.min(78, canvas.width - 6)
-  const height = conversation.options.length ? 12 : 9
+  const hasChoices = conversation.options.length > 0 && conversation.status === "open"
+  const height = hasChoices ? 13 : 10
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.max(1, canvas.height - gameQuickbarHeight(canvas) - height - 2)
   const trade = conversation.trade
@@ -1524,9 +1783,9 @@ function drawConversationPanel(canvas: Canvas, session: GameSession) {
   writeWrapped(canvas, x + 14, y + 4, width - 18, [conversation.text], 2, UI.ink, UI.panel)
   if (trade) {
     const tradeText = trade.purchased ? `${trade.item} in pack` : `${trade.item}  ${trade.price}g`
-    canvas.write(x + 14, y + height - 2, trim(tradeText, width - 26), trade.purchased ? UI.focus : UI.brass, UI.panel)
+    canvas.write(x + 14, y + height - 4, trim(tradeText, width - 26), trade.purchased ? UI.focus : UI.brass, UI.panel)
   }
-  if (conversation.options.length && conversation.status === "open") {
+  if (hasChoices) {
     const optionY = y + 8
     conversation.options.slice(0, 3).forEach((option, index) => {
       const selected = index === conversation.selectedOption
@@ -1534,7 +1793,9 @@ function drawConversationPanel(canvas: Canvas, session: GameSession) {
       canvas.write(optionX, optionY, `${index + 1}`, selected ? UI.gold : UI.muted, UI.panel)
       canvas.write(optionX + 2, optionY, trim(option.label, 12), selected ? UI.focus : UI.soft, UI.panel)
     })
-    canvas.write(x + 14, y + height - 2, trim("1-3 choose dialogue, Enter confirms selected option", width - 18), UI.muted, UI.panel)
+    canvas.write(x + 14, y + height - 2, trim("1-3 choose  Enter confirm  Esc leave", width - 18), UI.muted, UI.panel)
+  } else {
+    canvas.write(x + 14, y + height - 2, trim("Enter close  Esc leave", width - 18), UI.muted, UI.panel)
   }
 }
 
@@ -1631,21 +1892,8 @@ function writeCentered(canvas: Canvas, x: number, y: number, width: number, text
 }
 
 function writeWrapped(canvas: Canvas, x: number, y: number, width: number, paragraphs: readonly string[], maxRows: number, fg: string, bg?: string) {
-  const words = paragraphs.join(" ").split(/\s+/).filter(Boolean)
-  const rows: string[] = []
-  let current = ""
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word
-    if (next.length <= width) {
-      current = next
-      continue
-    }
-    if (current) rows.push(current)
-    current = word
-    if (rows.length >= maxRows) break
-  }
-  if (current && rows.length < maxRows) rows.push(current)
-  rows.slice(0, maxRows).forEach((row, index) => canvas.write(x, y + index, trim(row, width), fg, bg))
+  const rows = wrappedRows(paragraphs.join(" "), width, maxRows)
+  rows.forEach((row, index) => canvas.write(x, y + index, trim(row, width), fg, bg))
 }
 
 function gameHudHeight(canvas: Canvas) {
@@ -2001,9 +2249,21 @@ function dialogMetrics(dialog: NonNullable<DialogId>, canvasWidth: number, canva
     }
   }
 
+  if (dialog === "map") {
+    const width = Math.min(118, Math.max(72, canvasWidth - 8))
+    const height = Math.min(36, Math.max(24, canvasHeight - 4))
+    return {
+      x: Math.floor((canvasWidth - width) / 2),
+      y: Math.floor((canvasHeight - height) / 2),
+      width,
+      height,
+    }
+  }
+
   const wide = dialog === "log" || dialog === "settings" || dialog === "quests" || dialog === "book" || dialog === "hub" || dialog === "saveManager" || dialog === "cutscene"
-  const width = Math.min(wide ? 88 : 74, Math.max(20, canvasWidth - 10))
-  const height = Math.min(Math.max(10, canvasHeight - 2), dialog === "log" ? 18 : dialog === "quests" || dialog === "book" || dialog === "hub" || dialog === "saveManager" ? 22 : dialog === "cutscene" ? 18 : dialog === "settings" ? 20 : dialog === "help" ? 21 : dialog === "pause" ? 18 : dialog === "quit" ? 18 : 14)
+  const wideMax = dialog === "quests" || dialog === "book" || dialog === "hub" || dialog === "saveManager" ? 118 : dialog === "settings" || dialog === "cutscene" ? 104 : 96
+  const width = Math.min(wide ? wideMax : 74, Math.max(20, canvasWidth - 10))
+  const height = Math.min(Math.max(10, canvasHeight - 2), dialog === "log" ? 18 : dialog === "quests" || dialog === "book" ? 26 : dialog === "hub" || dialog === "saveManager" ? 24 : dialog === "cutscene" ? 18 : dialog === "settings" ? 20 : dialog === "help" ? 21 : dialog === "pause" ? 18 : dialog === "quit" ? 18 : 14)
   return {
     x: Math.floor((canvasWidth - width) / 2),
     y: Math.floor((canvasHeight - height) / 2),
@@ -2027,11 +2287,11 @@ function inventoryLayout(model: AppModel, width: number, height: number): Invent
     height: innerH - 4,
   }
   const details: Rect = { x: innerX, y: frame.y + frame.height - 7, width: innerW, height: 3 }
-  const apply: Rect = { x: frame.x + frame.width - 29, y: frame.y + frame.height - 3, width: 12, height: 1 }
-  const close: Rect = { x: frame.x + frame.width - 15, y: frame.y + frame.height - 3, width: 10, height: 1 }
+  const apply: Rect = { x: frame.x + frame.width - 34, y: frame.y + frame.height - 3, width: 14, height: 1 }
+  const close: Rect = { x: frame.x + frame.width - 18, y: frame.y + frame.height - 3, width: 12, height: 1 }
   const columns = clamp(Math.floor((pack.width - 4) / 12), 3, 6)
   const slotW = Math.max(9, Math.floor((pack.width - 4 - (columns - 1)) / columns))
-  const slotH = 4
+  const slotH = 5
   const rows = Math.max(2, Math.floor((pack.height - 5) / slotH))
   const slots: Rect[] = []
   for (let row = 0; row < rows; row++) {
@@ -2040,7 +2300,7 @@ function inventoryLayout(model: AppModel, width: number, height: number): Invent
         x: pack.x + 2 + col * (slotW + 1),
         y: pack.y + 3 + row * slotH,
         width: slotW,
-        height: 3,
+        height: 4,
       })
     }
   }
@@ -2062,6 +2322,7 @@ function dialogTitle(dialog: NonNullable<DialogId>) {
   if (dialog === "cutscene") return "Story Scene"
   if (dialog === "help") return "Controls"
   if (dialog === "log") return "Run Log"
+  if (dialog === "map") return "Dungeon Map"
   if (dialog === "quit") return "Unsaved Run"
   return "Paused"
 }
@@ -2076,6 +2337,7 @@ function dialogIcon(dialog: NonNullable<DialogId>): PixelSpriteId | "d20" {
   if (dialog === "cutscene") return "focus-gem"
   if (dialog === "help") return "sword"
   if (dialog === "log") return "coin"
+  if (dialog === "map") return "map"
   if (dialog === "quit") return "scroll"
   return "scroll"
 }
@@ -2133,15 +2395,16 @@ function drawInventoryDialog(canvas: Canvas, model: AppModel) {
   )
   canvas.write(layout.character.x + 17, layout.character.y + 3, trim(model.session.hero.name, layout.character.width - 20), UI.ink, UI.panel)
   canvas.write(layout.character.x + 17, layout.character.y + 4, trim(model.session.hero.title, layout.character.width - 20), UI.soft, UI.panel)
-  if (layout.character.height > 11) canvas.write(layout.character.x + 3, layout.character.y + 10, `Level ${model.session.level}`, UI.gold, UI.panel)
-  if (layout.character.height > 13) canvas.write(layout.character.x + 3, layout.character.y + 12, trim(statLine(model.session.stats), layout.character.width - 6), UI.soft, UI.panel)
-  if (layout.character.height > 16) drawEquipmentLine(canvas, layout.character.x + 3, layout.character.y + 15, layout.character.width - 6, "Weapon", findInventoryByKind(model.session.inventory, "weapon"))
-  if (layout.character.height > 17) drawMiniIcon(canvas, layout.character.x + layout.character.width - 9, layout.character.y + 15, weaponSpriteForAppearance(model.session.hero.classId, model.session.hero.appearance), 5, 1)
-  if (layout.character.height > 18) drawEquipmentLine(canvas, layout.character.x + 3, layout.character.y + 17, layout.character.width - 6, "Relic", findInventoryByKind(model.session.inventory, "relic"))
-  if (layout.character.height > 20) drawEquipmentLine(canvas, layout.character.x + 3, layout.character.y + 19, layout.character.width - 6, "Consumable", findInventoryByKind(model.session.inventory, "consumable"))
+  if (layout.character.height > 11) canvas.write(layout.character.x + 3, layout.character.y + 10, trim(`Level ${model.session.level}   Gold ${model.session.gold}`, layout.character.width - 6), UI.gold, UI.panel)
+  if (layout.character.height > 13) canvas.write(layout.character.x + 3, layout.character.y + 12, trim(`HP ${model.session.hp}/${model.session.maxHp}   Focus ${model.session.focus}/${model.session.maxFocus}`, layout.character.width - 6), UI.focus, UI.panel)
+  if (layout.character.height > 15) canvas.write(layout.character.x + 3, layout.character.y + 14, trim(statLine(model.session.stats), layout.character.width - 6), UI.soft, UI.panel)
+  if (layout.character.height > 18) drawEquipmentLine(canvas, layout.character.x + 3, layout.character.y + 17, layout.character.width - 6, "Weapon", findInventoryByKind(model.session.inventory, "weapon"))
+  if (layout.character.height > 19) drawMiniIcon(canvas, layout.character.x + layout.character.width - 9, layout.character.y + 17, weaponSpriteForAppearance(model.session.hero.classId, model.session.hero.appearance), 5, 1)
+  if (layout.character.height > 20) drawEquipmentLine(canvas, layout.character.x + 3, layout.character.y + 19, layout.character.width - 6, "Relic", findInventoryByKind(model.session.inventory, "relic"))
+  if (layout.character.height > 22) drawEquipmentLine(canvas, layout.character.x + 3, layout.character.y + 21, layout.character.width - 6, "Consumable", findInventoryByKind(model.session.inventory, "consumable"))
 
   drawPanel(canvas, layout.pack.x, layout.pack.y, layout.pack.width, layout.pack.height, "Pack", UI.edge)
-  canvas.write(layout.pack.x + 2, layout.pack.y + 1, trim(`${model.session.inventory.length}/${layout.slots.length} slots`, layout.pack.width - 4), UI.soft, UI.panel)
+  canvas.write(layout.pack.x + 2, layout.pack.y + 1, trim(`${model.session.inventory.length}/${layout.slots.length} slots   Gold ${model.session.gold}`, layout.pack.width - 4), UI.soft, UI.panel)
   layout.slots.forEach((slot, index) => drawInventorySlot(canvas, slot, model.session.inventory[index], index === selectedIndex, index === model.inventoryDragIndex))
 
   drawPanel(canvas, layout.details.x, layout.details.y, layout.details.width, layout.details.height, "Selection", UI.edgeDim)
@@ -2154,7 +2417,7 @@ function drawInventoryDialog(canvas: Canvas, model: AppModel) {
   }
 
   if (model.message) canvas.write(layout.details.x + 2, layout.details.y + 2, trim(model.message, layout.details.width - 4), UI.muted, UI.panel)
-  drawInventoryButton(canvas, layout.apply, "Enter apply", selectedItem ? UI.focus : UI.muted)
+  drawInventoryButton(canvas, layout.apply, "Enter use", selectedItem ? UI.focus : UI.muted)
   drawInventoryButton(canvas, layout.close, "Esc close", UI.gold)
 }
 
@@ -2169,9 +2432,14 @@ function drawInventorySlot(canvas: Canvas, rect: Rect, item: string | undefined,
   drawCleanBox(canvas, rect.x, rect.y, rect.width, rect.height, selected ? UI.gold : cleanLine, bg)
   if (selected || dragging) canvas.fill(rect.x, rect.y, 1, rect.height, " ", dragging ? UI.cyan : UI.gold, dragging ? UI.cyan : UI.gold)
   if (!item) return
-  drawMiniIcon(canvas, rect.x + 2, rect.y + 1, inventorySprite(item), 4, 1, dragging ? 0.65 : 1)
-  const labelWidth = Math.max(0, rect.width - 8)
-  if (labelWidth >= 5) canvas.write(rect.x + 7, rect.y + 1, trimInventoryLabel(item, labelWidth), selected ? UI.gold : UI.ink)
+  drawMiniIcon(canvas, rect.x + 2, rect.y + 1, inventorySprite(item), Math.min(5, Math.max(4, rect.width - 4)), 1, dragging ? 0.65 : 1)
+  const labelWidth = Math.max(0, rect.width - 2)
+  if (labelWidth >= 5) {
+    const labelY = rect.y + rect.height - 2
+    const labelBg = selected ? "#22303c" : "#111c25"
+    canvas.fill(rect.x + 1, labelY, rect.width - 2, 1, " ", labelBg, labelBg)
+    canvas.write(rect.x + 1, labelY, trimInventoryLabel(item, labelWidth), selected ? UI.gold : UI.ink, labelBg)
+  }
 }
 
 function drawInventoryButton(canvas: Canvas, rect: Rect, text: string, color: string) {
@@ -2205,7 +2473,7 @@ function drawBookDialog(canvas: Canvas, model: AppModel, x: number, y: number, w
   const entries = model.session.knowledge
   const listX = x + 4
   const listY = y + 4
-  const listW = Math.min(34, Math.floor((width - 10) * 0.4))
+  const listW = Math.min(42, Math.floor((width - 10) * 0.4))
   const rowH = 2
   const visibleRows = Math.max(4, Math.min(entries.length || 1, Math.floor((height - 8) / rowH)))
   const offset = scrollOffset(model.bookIndex, visibleRows, entries.length)
@@ -2258,22 +2526,26 @@ function bookEntryIcon(kind: GameSession["knowledge"][number]["kind"]): PixelSpr
 }
 
 function drawQuestsDialog(canvas: Canvas, model: AppModel, x: number, y: number, width: number, height: number) {
-  const quests = model.session.world.quests
+  const allQuests = model.session.world.quests
+  const quests = visibleQuestList(model.session)
+  const selectedIndex = clamp(model.questIndex, 0, Math.max(0, quests.length - 1))
+  const lockedCount = allQuests.filter((quest) => quest.status === "locked").length
   const listX = x + 4
   const listY = y + 4
-  const listW = Math.min(36, Math.floor((width - 10) * 0.42))
+  const listW = Math.min(44, Math.floor((width - 10) * 0.42))
   const rowH = 2
   const visibleRows = Math.max(4, Math.min(quests.length || 1, Math.floor((height - 8) / rowH)))
-  const offset = scrollOffset(model.questIndex, visibleRows, quests.length)
-  const selectedQuest = quests[clamp(model.questIndex, 0, Math.max(0, quests.length - 1))]
+  const offset = scrollOffset(selectedIndex, visibleRows, quests.length)
+  const selectedQuest = quests[selectedIndex]
 
   canvas.write(listX, y + 3, "Journal", UI.brass, UI.panel)
   drawScrollbar(canvas, listX + listW + 1, listY, visibleRows * rowH, offset, visibleRows, quests.length)
   quests.slice(offset, offset + visibleRows).forEach((quest, visibleIndex) => {
     const index = offset + visibleIndex
-    drawQuestListRow(canvas, listX, listY + visibleIndex * rowH, listW, model, quest, index === model.questIndex)
+    drawQuestListRow(canvas, listX, listY + visibleIndex * rowH, listW, model, quest, index === selectedIndex)
   })
   if (!quests.length) canvas.write(listX, listY, "No quests generated yet.", UI.soft, UI.panel)
+  if (lockedCount > 0) writeWrapped(canvas, listX, y + height - 6, listW, [`${lockedCount} locked quest chain${lockedCount === 1 ? "" : "s"} hidden until discovered.`], 2, UI.muted, UI.panel)
 
   const detailX = listX + listW + 4
   const detailW = width - (detailX - x) - 4
@@ -2288,13 +2560,18 @@ function drawQuestsDialog(canvas: Canvas, model: AppModel, x: number, y: number,
 
   const objectiveY = listY + 9
   canvas.write(detailX + 3, objectiveY, "Objectives", UI.brass, UI.panel)
-  selectedQuest.objectiveEventIds.slice(0, Math.max(1, detailH - 12)).forEach((eventId, index) => {
+  let objectiveRow = objectiveY + 2
+  const objectiveMaxY = listY + detailH - 2
+  selectedQuest.objectiveEventIds.forEach((eventId) => {
+    if (objectiveRow > objectiveMaxY) return
     const event = model.session.world.events.find((item) => item.id === eventId)
     const status = event?.status ?? "future"
     const marker = status === "completed" ? "✓" : status === "active" ? "◆" : "·"
     const color = status === "completed" ? UI.focus : status === "active" ? UI.gold : UI.muted
-    canvas.write(detailX + 3, objectiveY + 2 + index, marker, color, UI.panel)
-    canvas.write(detailX + 6, objectiveY + 2 + index, trim(event?.title ?? eventId, detailW - 9), color, UI.panel)
+    const rows = wrappedRows(event?.title ?? eventId, detailW - 9, Math.min(2, objectiveMaxY - objectiveRow + 1))
+    canvas.write(detailX + 3, objectiveRow, marker, color, UI.panel)
+    rows.forEach((row, rowIndex) => canvas.write(detailX + 6, objectiveRow + rowIndex, row, color, UI.panel))
+    objectiveRow += Math.max(1, rows.length)
   })
 }
 
@@ -2367,7 +2644,8 @@ function drawCutsceneDialog(canvas: Canvas, model: AppModel, x: number, y: numbe
   drawMiniIcon(canvas, x + width - 14, y + 4, "focus-gem", 10, 3)
   canvas.write(x + 4, y + 4, trim(scene.title, width - 22), UI.gold, UI.panel)
   writeWrapped(canvas, x + 4, y + 7, width - 8, scene.lines, height - 11, UI.ink, UI.panel)
-  canvas.write(x + 4, y + height - 4, trim("Scenes are stored in the Book so the local story stays replayable offline.", width - 8), UI.soft, UI.panel)
+  const hint = scene.id === "waking-cell" ? "Enter begin descent  Esc skip. Camera preview points to the first lead." : "Enter close  Esc close. Scenes are saved in the Book."
+  canvas.write(x + 4, y + height - 4, trim(hint, width - 8), UI.soft, UI.panel)
 }
 
 function runMutatorShortLabel(id: string) {
@@ -2428,6 +2706,17 @@ function classSprite(classId: HeroClass, appearance?: HeroAppearance): PixelSpri
   return heroSpriteForAppearance(classId, appearance) as PixelSpriteId
 }
 
+function classOptionIcon(classId: HeroClass): PixelSpriteId {
+  if (classId === "warden") return "shield"
+  if (classId === "arcanist") return "staff"
+  if (classId === "ranger") return "bow"
+  if (classId === "duelist") return "dagger"
+  if (classId === "cleric") return "focus-gem"
+  if (classId === "engineer") return "lockpick"
+  if (classId === "witch") return "ember"
+  return "armor"
+}
+
 function actorSpriteId(kind: string): PixelSpriteId {
   if (kind === "merchant" || kind === "wound-surgeon") return "npc-smith"
   if (kind === "cartographer" || kind === "shrine-keeper" || kind === "jailer") return "npc-oracle"
@@ -2475,6 +2764,10 @@ function drawDialog(canvas: Canvas, model: AppModel) {
     drawQuestsDialog(canvas, model, x, y, width, height)
   }
 
+  if (model.dialog === "map") {
+    drawRunMapDialog(canvas, model, x, y, width, height)
+  }
+
   if (model.dialog === "hub") {
     drawHubDialog(canvas, model, x, y, width, height)
   }
@@ -2501,11 +2794,11 @@ function drawDialog(canvas: Canvas, model: AppModel) {
       ["Move", "Arrows / WASD"],
       ["Confirm", "Enter / Space"],
       ["Save", "Ctrl+S or F5 saves locally; Esc then M opens run saves"],
-      ["Pack", "I inventory, B book, V village, J quests, O quests in Vim mode, H potion, L log"],
+      ["Pack", "I inventory, B book, M map, V village, J quests, O quests in Vim mode, H potion, L log"],
       ["Combat", "Tab target, 1-6 skill, F flee, Enter rolls d20"],
       ["Camera", "- wider FOV, = closer view"],
       ["Overlay", "U hides or shows the UI for this run"],
-      ["Run", "R rest, Esc pause, Q quit"],
+      ["Run", "R rest, Esc pause, Q quit prompt"],
     ]
     rows.forEach((row, index) => {
       const rowY = y + 4 + index * 2
@@ -2521,8 +2814,6 @@ function drawDialog(canvas: Canvas, model: AppModel) {
     drawPauseAction(canvas, x + 24, y + 8, width - 31, "M", "Save manager", UI.cyan)
     drawPauseAction(canvas, x + 24, y + 10, width - 31, "S", "Settings", UI.cyan)
     drawPauseAction(canvas, x + 24, y + 12, width - 31, "T", "Quit to title", UI.gold)
-    drawPauseAction(canvas, x + 24, y + 14, width - 31, "Q", "Exit game", UI.hp)
-    writeWrapped(canvas, x + 4, y + height - 5, width - 8, ["Race mode keeps the same seed so friends can replay this generated crawl."], 2, UI.soft, UI.panel)
   }
 
   if (model.dialog === "quit") {
@@ -2538,8 +2829,8 @@ function drawDialog(canvas: Canvas, model: AppModel) {
       UI.soft,
       UI.panel,
     )
-    drawPauseAction(canvas, x + 24, y + 9, width - 31, "S", "Save & Quit", UI.focus)
-    drawPauseAction(canvas, x + 24, y + 11, width - 31, "Q", "Quit Anyway", UI.hp)
+    drawPauseAction(canvas, x + 24, y + 9, width - 31, "S", "Save & Close", UI.focus)
+    drawPauseAction(canvas, x + 24, y + 11, width - 31, "Q", "Close Anyway", UI.hp)
     drawPauseAction(canvas, x + 24, y + 13, width - 31, "Esc", "Cancel", UI.gold)
     if (model.saveStatus) canvas.write(x + 4, y + height - 4, trim(model.saveStatus, width - 8), UI.muted, UI.panel)
   }
@@ -2599,8 +2890,7 @@ function drawScreenTransition(canvas: Canvas, transition: ScreenTransition) {
   const progress = clamp(elapsed / Math.max(1, transition.durationMs), 0, 1)
   if (progress >= 1) return
 
-  const close = progress < 0.5 ? progress * 2 : (1 - progress) * 2
-  const shadeRows = Math.ceil((1 - close) * canvas.height)
+  const shadeRows = Math.ceil((1 - easeOutCubic(progress)) * canvas.height)
   const color = transition.kind === "portal" ? "#152d32" : "#18291c"
   for (let row = 0; row < shadeRows; row++) {
     const top = row
@@ -2609,7 +2899,7 @@ function drawScreenTransition(canvas: Canvas, transition: ScreenTransition) {
     if (bottom !== top) canvas.fill(0, bottom, canvas.width, 1, " ", color, color)
   }
 
-  if (canvas.width >= 52 && canvas.height >= 18) {
+  if (progress < 0.72 && canvas.width >= 52 && canvas.height >= 18) {
     const width = Math.min(46, canvas.width - 8)
     const x = Math.floor((canvas.width - width) / 2)
     const y = Math.floor(canvas.height / 2) - 2
@@ -2653,32 +2943,6 @@ function formatInitiativeOrder(session: GameSession) {
     .slice(0, 4)
     .map((entry) => actorLabel(entry.kind))
   return ["You", ...enemies].join(" > ")
-}
-
-function startHint(model: AppModel) {
-  const item = currentStartItem(model)
-  if (startItemDisabled(item, model)) return model.internetStatus === "checking" ? "checking network" : "offline"
-  if (item === "Continue last") return model.saves.length ? "latest save" : "no saves yet"
-  if (item === "New descent") return `${currentClass(model).name} / ${currentMode(model).name}`
-  if (item === "Load save") return `${model.saves.length} local`
-  if (item === "Cloud login") return model.settings.githubUsername ? `@${model.settings.githubUsername}` : "local-only"
-  if (item === "Tutorial") return "mechanics guide"
-  if (item === "Settings") return "profile + accessibility"
-  if (item === "Controls") return model.settings.controlScheme
-  return "open"
-}
-
-function startItemMeta(item: string, model: AppModel) {
-  if (item === "Continue last") return model.saves.length ? "c" : "empty"
-  if (item === "New descent") return "play"
-  if (item === "Load save") return `${model.saves.length}`
-  if (item === "Character") return currentClass(model).name
-  if (item === "Multiplayer") return startItemDisabled(item, model) ? "offline" : currentMode(model).name
-  if (item === "Cloud login") return startItemDisabled(item, model) ? "offline" : model.settings.cloudProvider
-  if (item === "Tutorial") return "tabs"
-  if (item === "Settings") return "local"
-  if (item === "Controls") return model.settings.controlScheme
-  return ""
 }
 
 function startItemDisabled(item: string, model: AppModel) {

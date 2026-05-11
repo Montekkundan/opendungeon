@@ -129,6 +129,27 @@ describe("game session", () => {
     expect(unstable.hp).toBe(unstable.maxHp - 3)
   })
 
+  test("rest visibly recovers resources and still passes time when already steady", () => {
+    const wounded = createSession(1234)
+    wounded.focus = Math.max(0, wounded.maxFocus - 3)
+    wounded.hp = Math.max(1, wounded.maxHp - 2)
+    const turn = wounded.turn
+
+    rest(wounded)
+
+    expect(wounded.turn).toBe(turn + 1)
+    expect(wounded.focus).toBeGreaterThan(wounded.maxFocus - 3)
+    expect(wounded.hp).toBe(wounded.maxHp - 1)
+    expect(wounded.toasts[0]).toMatchObject({ title: "Rested", tone: "success" })
+
+    wounded.focus = wounded.maxFocus
+    wounded.hp = wounded.maxHp
+    rest(wounded)
+
+    expect(wounded.toasts[0]).toMatchObject({ title: "Rested", tone: "info" })
+    expect(wounded.log[0]).toContain("Already steady")
+  })
+
   test("uses potion to heal", () => {
     const session = createSession(1234)
     session.inventory.unshift("Deploy nerve potion")
@@ -186,6 +207,25 @@ describe("game session", () => {
     expect(session.gold).toBe(8)
     expect(session.inventory[0]).toBe("Merchant salve")
     expect(session.log[0]).toContain("purchased")
+  })
+
+  test("failed merchant trade closes on the next confirm instead of retrying", () => {
+    const session = createSession(1234)
+    addEnemyBesidePlayer(session, "test-merchant", "merchant", 1, 0)
+
+    tryMove(session, 1, 0)
+    const failed = interactWithWorld(session)
+    const toastCount = session.toasts.length
+
+    expect(failed?.status).toBe("completed")
+    expect(failed?.text).toContain("12 gold needed")
+    expect(session.conversation).not.toBeNull()
+
+    const closed = interactWithWorld(session)
+
+    expect(closed).toBeNull()
+    expect(session.conversation).toBeNull()
+    expect(session.toasts.length).toBe(toastCount)
   })
 
   test("NPC conversations expose selectable run-affecting options", () => {

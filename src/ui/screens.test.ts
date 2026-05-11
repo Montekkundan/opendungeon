@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createSession, selectSkill, tryMove, unlockHub } from "../game/session.js"
+import { createSession, playLocalCutscene, selectSkill, tryMove, unlockHub } from "../game/session.js"
 import { setTile } from "../game/dungeon.js"
 import { defaultSettings } from "../game/settingsStore.js"
 import { hashText } from "../shared/hash.js"
@@ -22,7 +22,7 @@ describe("terminal renderer snapshots", () => {
       width: 80,
       height: 24,
       model: modelFor("start", createSession(1234)),
-      expectedHash: "1e0eb95b",
+      expectedHash: "0dec2cde",
       requiredText: ["OPENDUNGEON", "New descent", "Settings", "v0.1.0"],
     },
     {
@@ -30,7 +30,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("character", createSession(1234, "solo", "ranger", "Nyx Prime")),
-      expectedHash: "47b2a6f5",
+      expectedHash: "b7c5aec2",
       requiredText: ["Choose Your Crawler", "Name", "Nyx Prime", "Ranger"],
     },
     {
@@ -38,15 +38,15 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: skillCheckModel(),
-      expectedHash: "e3c0ab52",
-      requiredText: ["Talent Check", "Whispering Relic", "Roll"],
+      expectedHash: "4022bae6",
+      requiredText: ["Talent Check", "Whispering Relic", "Enter roll d20"],
     },
     {
       name: "combat",
       width: 120,
       height: 40,
       model: combatModel(),
-      expectedHash: "3239e2eb",
+      expectedHash: "62186df1",
       requiredText: ["Turn Combat", "Order", "Shado", "Necroman"],
     },
     {
@@ -62,7 +62,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("tutorial", createSession(1234), { tutorialIndex: 1, menuIndex: 1 }),
-      expectedHash: "11cff4fc",
+      expectedHash: "ec3501a6",
       requiredText: ["Tutorial", "Combat", "Initiative", "d20"],
     },
     {
@@ -70,7 +70,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("game", createSession(1234), { dialog: "book" }),
-      expectedHash: "6fb11055",
+      expectedHash: "4b02cc09",
       requiredText: ["BOOK", "Known", "Waking Cell", "Portal Room"],
     },
     {
@@ -161,6 +161,142 @@ test("title shows update command when a newer version is available", () => {
   expect(text).toContain("Update 0.2.0 available. Run opendungeon update.")
 })
 
+test("title menu keeps only the clean padded item list", () => {
+  const output = draw(modelFor("start", createSession(1234), { saves: [saveSummaryFixture()] }), 120, 40)
+  const text = screenText(output.chunks)
+  const selectedRow = text.split("\n").find((row) => row.includes("New descent")) ?? ""
+  const selectedTextStart = selectedRow.indexOf("New descent")
+
+  expect(text).toContain("terminal dungeon crawler")
+  expect(text).toContain("New descent")
+  expect(selectedTextStart).toBeGreaterThanOrEqual(54)
+  expect(selectedTextStart).toBeLessThanOrEqual(56)
+  expect(text).not.toContain("@local-crawler")
+  expect(text).not.toContain("local saves")
+  expect(text).not.toContain("internet online")
+  expect(text).not.toContain("> New descent")
+})
+
+test("pause dialog keeps mode notes out of the action stack", () => {
+  const output = draw(modelFor("game", createSession(1234, "race"), { dialog: "pause" }), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("PAUSED")
+  expect(text).toContain("Resume")
+  expect(text).toContain("Quit to title")
+  expect(text).not.toContain("Close run")
+  expect(text).not.toContain("Race mode keeps")
+})
+
+test("cloud profile screen draws account once and names local-only action clearly", () => {
+  const output = draw(
+    modelFor("cloud", createSession(1234), {
+      menuIndex: 1,
+      settings: { ...defaultSettings, username: "Mira", githubUsername: "montek", cloudProvider: "github" },
+    }),
+    120,
+    40,
+  )
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("GitHub")
+  expect(text).toContain("montek")
+  expect(text).toContain("Keep saves local")
+  expect(text).not.toContain("mmontek")
+  expect(text).not.toContain("ggithub username")
+  expect(text).not.toContain("Use local profile")
+})
+
+test("new descent story scene shows narrator text and cutscene controls", () => {
+  const session = createSession(1234)
+  playLocalCutscene(session, "waking-cell")
+  const output = draw(modelFor("game", session, { dialog: "cutscene", cameraFocus: { x: session.player.x + 1, y: session.player.y } }), 100, 32)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Huh... where am I?")
+  expect(text).toContain("Enter begin descent")
+})
+
+test("quest journal only lists discovered chains at the start", () => {
+  const session = createSession(1234)
+  const lockedTitle = session.world.quests.find((quest) => quest.status === "locked")?.title
+  const output = draw(modelFor("game", session, { dialog: "quests" }), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Escort: crypt")
+  expect(text).toContain("locked quest chains hidden")
+  const firstObjective = session.world.events.find((event) => event.id === session.world.quests.find((quest) => quest.status === "active")?.objectiveEventIds[0])?.title
+  if (firstObjective) expect(text).toContain(firstObjective)
+  if (lockedTitle) expect(text).not.toContain(lockedTitle)
+})
+
+test("inventory presents gold and full action labels", () => {
+  const output = draw(modelFor("game", createSession(1234), { dialog: "inventory" }), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Gold 0")
+  expect(text).toContain("Enter use")
+  expect(text).toContain("Esc close")
+})
+
+test("quickbar does not expose gold as a dead G action", () => {
+  const output = draw(modelFor("game", createSession(1234)), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("0g")
+  expect(text).not.toContain("G────────")
+})
+
+test("minimap renders a local radar with objective direction", () => {
+  const output = draw(modelFor("game", createSession(1234)), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Radar  goal E15")
+  expect(text).toContain("Goal E15 (15 steps)")
+  expect(text).toContain("@you !foe nNPC $shop >exit")
+  expect(text).not.toContain("Mini map")
+})
+
+test("full map dialog shows dungeon overview and run counts", () => {
+  const session = createSession(1234)
+  session.kills = 2
+  session.inventory.push("Moon shard")
+  const output = draw(modelFor("game", session, { dialog: "map" }), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("DUNGEON MAP")
+  expect(text).toContain("Full Map")
+  expect(text).toContain("Run Stats")
+  expect(text).toContain("Rooms")
+  expect(text).toContain("Enemies")
+  expect(text).toContain("Killed")
+  expect(text).toContain("?? hidden")
+  expect(text).toContain("Acquired")
+  expect(text).toContain("@ you")
+  expect(text).toContain("M or Esc close")
+})
+
+test("merchant response footer does not offer close-run from conversation", () => {
+  const session = createSession(1234)
+  session.conversation = {
+    id: "merchant-test",
+    actorId: "merchant-test",
+    kind: "merchant",
+    speaker: "Ash Merchant Pell",
+    text: "12 gold needed for Merchant salve.",
+    status: "completed",
+    options: [],
+    selectedOption: 0,
+    trade: { item: "Merchant salve", price: 12, purchased: false },
+  }
+  const output = draw(modelFor("game", session), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Enter close")
+  expect(text).toContain("Esc leave")
+  expect(text).not.toContain("Q close run")
+})
+
 function skillCheckModel() {
   const session = createSession(1234)
   const target = { x: session.player.x + 1, y: session.player.y }
@@ -189,6 +325,28 @@ function villageModel() {
   const session = createSession(1234, "coop", "ranger", "Nyx Prime")
   unlockHub(session)
   return modelFor("village", session)
+}
+
+function saveSummaryFixture() {
+  return {
+    id: "local",
+    name: "Manual",
+    savedAt: "2026-05-11T12:00:00.000Z",
+    heroName: "Mira",
+    heroTitle: "Ranger of Hollow Paths",
+    classId: "ranger",
+    mode: "solo",
+    seed: 1234,
+    floor: 1,
+    finalFloor: 5,
+    turn: 0,
+    level: 1,
+    gold: 0,
+    status: "running",
+    path: "/tmp/manual.json",
+    slot: "manual" as const,
+    thumbnail: [],
+  }
 }
 
 function modelFor(screen: ScreenId, session = createSession(1234), overrides: Partial<AppModel> = {}): AppModel {
@@ -223,6 +381,7 @@ function modelFor(screen: ScreenId, session = createSession(1234), overrides: Pa
     animationFrame: 0,
     playerMoveAnimation: null,
     diceRollAnimation: null,
+    cameraFocus: null,
     screenTransition: null,
     ...overrides,
   }

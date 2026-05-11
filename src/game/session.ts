@@ -230,7 +230,7 @@ export const villageLocationIds = ["portal", "blacksmith", "market", "farm", "ho
 export type VillageLocationId = (typeof villageLocationIds)[number]
 export type VillageCustomerTaste = "relic" | "tool" | "food" | "material" | "memory"
 export type FarmPermission = "owner-only" | "friends" | "everyone"
-export type CutsceneId = "first-clear" | "village-unlock" | "ending-rooted" | "ending-remixed"
+export type CutsceneId = "waking-cell" | "first-clear" | "village-unlock" | "ending-rooted" | "ending-remixed"
 export const contentPackIds = ["opendungeon", "high-contrast", "mono-terminal"] as const
 export type ContentPackId = (typeof contentPackIds)[number]
 export type EquipmentSlot = "weapon" | "armor" | "relic"
@@ -1477,8 +1477,20 @@ export function rest(session: GameSession) {
     return
   }
   const focusGain = 1 + Math.max(0, session.floorModifier.restFocusBonus) + talentRestFocusBonus(session)
+  const beforeFocus = session.focus
+  const beforeHp = session.hp
   session.focus = Math.min(session.maxFocus, session.focus + focusGain)
-  session.log.unshift(focusGain > 1 ? `${session.floorModifier.name} carries your breath. Focus returns.` : "You steady your breath. Focus returns.")
+  if (session.hp < session.maxHp) session.hp = Math.min(session.maxHp, session.hp + 1)
+  const restoredFocus = session.focus - beforeFocus
+  const restoredHp = session.hp - beforeHp
+  const restored = [`${restoredFocus ? `+${restoredFocus} focus` : ""}`, `${restoredHp ? `+${restoredHp} HP` : ""}`].filter(Boolean).join(", ")
+  const message = restored
+    ? focusGain > 1
+      ? `${session.floorModifier.name} steadies you. ${restored}.`
+      : `You rest for a breath. ${restored}.`
+    : "You hold position and listen. Already steady."
+  session.log.unshift(message)
+  addToast(session, "Rested", restored || "Time passes; HP and focus are already full.", restored ? "success" : "info")
   advanceTurn(session)
 }
 
@@ -2138,6 +2150,13 @@ function continueConversation(session: GameSession): ConversationState | null {
   const conversation = session.conversation
   if (!conversation) return null
 
+  if (conversation.status === "completed") {
+    session.conversation = null
+    session.log.unshift(`${conversation.speaker} returns to the dark.`)
+    trimLog(session)
+    return null
+  }
+
   if (conversation.trade && !conversation.trade.purchased) {
     if (session.gold >= conversation.trade.price) {
       session.gold -= conversation.trade.price
@@ -2162,10 +2181,6 @@ function continueConversation(session: GameSession): ConversationState | null {
   }
 
   if (conversation.status === "open") return chooseConversationOption(session, conversation.selectedOption)
-
-  session.conversation = null
-  session.log.unshift(`${conversation.speaker} returns to the dark.`)
-  trimLog(session)
   return null
 }
 
@@ -2978,18 +2993,20 @@ function createVillageCustomers(): VillageCustomer[] {
 }
 
 function createCutscenes(heroName = "Mira"): CutsceneState[] {
-  return (["first-clear", "village-unlock", "ending-rooted", "ending-remixed"] as const).map((id) => createCutscene(id, heroName))
+  return (["waking-cell", "first-clear", "village-unlock", "ending-rooted", "ending-remixed"] as const).map((id) => createCutscene(id, heroName))
 }
 
 function createCutscene(id: CutsceneId, heroName = "Mira"): CutsceneState {
   const name = cleanHeroName(heroName)
   const titles: Record<CutsceneId, string> = {
+    "waking-cell": "Waking Cell",
     "first-clear": "First Clear",
     "village-unlock": "Village Route Opened",
     "ending-rooted": "Root Ending",
     "ending-remixed": "Remixed Ending",
   }
   const lines: Record<CutsceneId, string[]> = {
+    "waking-cell": [`${name}: "Huh... where am I?"`, "A note scratches itself into your book, and the dungeon camera drifts toward the first voice ahead.", "Move with WASD or arrows. Press E or Enter near people, doors, notes, and loot."],
     "first-clear": [`${name} reaches the final gate with no memory, but the dungeon finally answers.`, "A road appears where the last wall used to be."],
     "village-unlock": ["The portal room lights one stone at a time.", "Beyond it, a village waits for loot, trust, houses, and another run."],
     "ending-rooted": ["The grave-root admits it was guarding the first memory, not stealing it.", "The village survives because you choose what returns through the portal."],
@@ -3083,7 +3100,7 @@ function isFarmPermission(value: unknown): value is FarmPermission {
 }
 
 function isCutsceneId(value: unknown): value is CutsceneId {
-  return value === "first-clear" || value === "village-unlock" || value === "ending-rooted" || value === "ending-remixed"
+  return value === "waking-cell" || value === "first-clear" || value === "village-unlock" || value === "ending-rooted" || value === "ending-remixed"
 }
 
 function isContentPackId(value: unknown): value is ContentPackId {
