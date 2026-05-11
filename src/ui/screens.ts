@@ -488,7 +488,7 @@ function drawMode(canvas: Canvas, model: AppModel) {
   canvas.write(x + 4, y + height - 4, `Host lobby: bun run host -- --mode ${selectedMode.id} --seed ${model.seed}`, UI.soft, UI.panel)
   canvas.write(x + 4, y + height - 3, "Friends reuse the shared seed for co-op or race runs.", UI.muted, UI.panel)
   drawFooter(canvas, [
-    ["Enter", "confirm"],
+    ["Enter", "start"],
     ["Esc", "title"],
   ])
 }

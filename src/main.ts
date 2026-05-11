@@ -923,8 +923,8 @@ function confirmMenu() {
 
   if (model.screen === "mode") {
     model.modeIndex = modeIndexFor(multiplayerModeForSelection(model.menuIndex).id)
-    setScreen("start", "Run mode selected.")
-    model.menuIndex = 0
+    startRun()
+    return
   }
 }
 
@@ -935,7 +935,7 @@ function startRun() {
   model.dialog = null
   model.uiHidden = !model.settings.showUi
   model.bookIndex = 0
-  model.saveStatus = "New run started. Press Ctrl+S or F5 to save locally."
+  model.saveStatus = `${currentMode(model).name} run started. Press Ctrl+S or F5 to save locally.`
   lastManualSaveSignature = ""
   autosaveCurrentRun("new-run")
 }
