@@ -18,11 +18,20 @@ export type CoopSyncState = {
   floor: number
   turn: number
   hp: number
+  level: number
+  unspentStatPoints: number
+  inventoryCount: number
+  gold: number
+  saveRevision: number
+  connected: boolean
   x: number
   y: number
   combatActive: boolean
   updatedAt: number
 }
+
+type CoopSyncInput = Omit<CoopSyncState, "name" | "updatedAt" | "level" | "unspentStatPoints" | "inventoryCount" | "gold" | "saveRevision" | "connected"> &
+  Partial<Pick<CoopSyncState, "level" | "unspentStatPoints" | "inventoryCount" | "gold" | "saveRevision" | "connected">>
 
 export type CombatTurnState = {
   active: boolean
@@ -51,6 +60,7 @@ export type LobbySnapshot = {
   coopStates: CoopSyncState[]
   combat: CombatTurnState
   leaderboard: RaceResult[]
+  syncWarnings: string[]
 }
 
 export type LobbyStateOptions = {
@@ -97,7 +107,7 @@ export class MultiplayerLobbyState {
     if (this.combat.activePlayerId === id) this.combat.activePlayerId = this.combat.order[0]
   }
 
-  updateCoopState(input: Omit<CoopSyncState, "name" | "updatedAt">) {
+  updateCoopState(input: CoopSyncInput) {
     const player = this.players.get(input.playerId)
     if (!player || player.role === "spectator") throw new Error(`Unknown co-op player: ${input.playerId}`)
     const state: CoopSyncState = {
@@ -106,6 +116,12 @@ export class MultiplayerLobbyState {
       floor: positiveInt(input.floor),
       turn: positiveInt(input.turn),
       hp: positiveInt(input.hp),
+      level: Math.max(1, positiveInt(input.level) || 1),
+      unspentStatPoints: positiveInt(input.unspentStatPoints),
+      inventoryCount: positiveInt(input.inventoryCount),
+      gold: positiveInt(input.gold),
+      saveRevision: positiveInt(input.saveRevision),
+      connected: input.connected !== false,
       x: integer(input.x),
       y: integer(input.y),
       combatActive: Boolean(input.combatActive),
@@ -113,6 +129,13 @@ export class MultiplayerLobbyState {
     }
     this.coopStates.set(input.playerId, state)
     return state
+  }
+
+  markDisconnected(id: string) {
+    const state = this.coopStates.get(id)
+    if (state) this.coopStates.set(id, { ...state, connected: false, updatedAt: this.now() })
+    if (this.combat.activePlayerId === id) this.advanceCombatTurn()
+    return this.coopStates.get(id)
   }
 
   startCombatTurnOrder(order: string[]) {
@@ -160,6 +183,7 @@ export class MultiplayerLobbyState {
       coopStates: [...this.coopStates.values()].sort((left, right) => left.name.localeCompare(right.name)),
       combat: { ...this.combat, order: [...this.combat.order] },
       leaderboard: this.leaderboard(),
+      syncWarnings: coopSyncWarnings([...this.coopStates.values()]),
     }
   }
 }
@@ -190,6 +214,16 @@ function sortLeaderboard(results: RaceResult[]) {
     if (a.turns !== b.turns) return a.turns - b.turns
     return b.gold - a.gold
   })
+}
+
+function coopSyncWarnings(states: CoopSyncState[]) {
+  const warnings: string[] = []
+  if (new Set(states.map((state) => state.floor)).size > 1) warnings.push("Co-op players are split across floors.")
+  if (new Set(states.map((state) => state.saveRevision)).size > 1) warnings.push("Save revisions differ across clients.")
+  if (states.some((state) => !state.connected)) warnings.push("At least one player is disconnected.")
+  if (states.some((state) => state.unspentStatPoints > 0)) warnings.push("A player has unspent stat points.")
+  if (states.some((state) => state.inventoryCount > 24)) warnings.push("A player inventory is over the expected sync size.")
+  return warnings
 }
 
 export function loadRaceResults(path: string): RaceResult[] {

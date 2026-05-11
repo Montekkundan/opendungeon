@@ -8,6 +8,14 @@ const tileGlyphs: Record<string, string> = {
   relic: "*",
   chest: "$",
   trap: "^",
+  note: "?",
+  recipe: "%",
+  tool: "&",
+  deed: "~",
+  fossil: "f",
+  "boss-memory": "M",
+  keepsake: "k",
+  "story-relic": "?",
   floor: ".",
 }
 

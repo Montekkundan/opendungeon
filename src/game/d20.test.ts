@@ -227,6 +227,9 @@ describe("d20 combat and skill checks", () => {
     expect(roll?.hit).toBe(true)
     expect(session.combat.active).toBe(false)
     expect(session.turn).toBe(1)
+    const enemy = session.dungeon.actors.find((actor) => actor.id === "test-slime")
+    expect(enemy?.ai?.alerted).toBe(false)
+    expect(enemy?.ai?.stunnedTurns).toBeGreaterThanOrEqual(3)
   })
 
   test("loot tiles trigger stat checks with consequences", () => {

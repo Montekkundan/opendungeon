@@ -1,4 +1,5 @@
 import { resolve } from "node:path"
+import { runBalanceSuite } from "./balance.js"
 import { builtinScenario, loadScenarioFile, runScenario } from "./scenario.js"
 import { runHeadlessProtocol } from "./protocol.js"
 import { type HeadlessEnvOptions } from "./env.js"
@@ -13,10 +14,11 @@ Usage:
   bun run headless -- --scenario smoke
   bun run headless -- --scenario combat --seed 1234 --assert
   bun run headless -- --script tests/scenarios/save-load.jsonl --assert
+  bun run headless -- --balance-suite
   bun run headless -- --protocol
 
 Options:
-  --scenario <name>      Built-in scenario: smoke, combat, combat-skills, area-combat, boss-phase, status-effects, reaction-block, character-name, starting-loadout, biome, trap, secret-door, floor-modifier, skill-check, save-load, save-management, auth-local, auth-expired, map-generation, npc-event, npc-conversation, merchant, full-run
+  --scenario <name>      Built-in scenario: smoke, combat, combat-skills, area-combat, boss-phase, status-effects, reaction-block, character-name, starting-loadout, biome, trap, secret-door, floor-modifier, skill-check, note-collectible, collectible-variety, save-load, save-management, auth-local, auth-expired, map-generation, npc-event, npc-conversation, merchant, level-up-talent, dialogue-options, full-run
   --script <path>        JSONL scenario file
   --seed <number>        Deterministic seed
   --mode <mode>          solo | coop | race
@@ -24,8 +26,14 @@ Options:
   --hero-name <name>     Crawler name for reset/protocol sessions
   --max-steps <number>   Episode truncation limit
   --assert              Exit non-zero when scenario assertions fail
+  --balance-suite       Run multi-seed/class balance metrics for tuning
   --protocol            Start JSONL/stdin protocol for Python or other clients
 `)
+  process.exit(0)
+}
+
+if (args.includes("--balance-suite")) {
+  console.log(JSON.stringify({ type: "balance", report: runBalanceSuite() }, null, 2))
   process.exit(0)
 }
 

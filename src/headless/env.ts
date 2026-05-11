@@ -12,20 +12,44 @@ import {
   createSession,
   currentBiome,
   cycleTarget,
+  chooseConversationOption,
+  chooseLevelUpTalent,
+  buildHubStation,
+  cycleContentPack,
+  cycleSharedFarmPermission,
   dismissSkillCheck,
+  focusCostForSkill,
+  grantXp,
   heroClassIds,
+  harvestFarm,
   interactWithWorld,
+  customizeVillageHouse,
+  moveVillagePlayer,
+  plantCrop,
+  playLocalCutscene,
+  prepareFood,
   performCombatAction,
+  refreshBalanceDashboard,
   resolveSkillCheck,
   rest,
+  runVillageShopSale,
   selectSkill,
   statusEffectMagnitude,
   statusEffectsFor,
+  cycleConversationOption,
+  completeVillageQuest,
+  sellLootToVillage,
+  toggleRunMutator,
   tryMove,
+  upgradeWeapon,
+  unlockHub,
   usePotion,
+  visitVillageLocation,
   type GameSession,
   type HeroClass,
+  type HubStationId,
   type MultiplayerMode,
+  type RunMutatorId,
 } from "../game/session.js"
 import { defaultSettings, loadSettings } from "../game/settingsStore.js"
 import { deleteSave, exportSave, importSave, listSaves, loadSave, renameSave, saveAutosave, saveSession, validateSave, type SaveSummary } from "../game/saveStore.js"
@@ -50,14 +74,25 @@ export const headlessActionIds = [
   "select-skill-3",
   "select-skill-4",
   "select-skill-5",
+  "choose-levelup-0",
+  "choose-levelup-1",
+  "choose-levelup-2",
+  "dialogue-prev",
+  "dialogue-next",
+  "choose-dialogue-0",
+  "choose-dialogue-1",
+  "choose-dialogue-2",
   "combat-roll",
   "flee",
   "interact",
   "open-inventory",
+  "open-book",
   "open-quests",
   "open-saves",
   "open-cloud",
   "open-settings",
+  "open-hub",
+  "open-village",
   "close-panel",
   "save",
   "autosave",
@@ -67,11 +102,38 @@ export const headlessActionIds = [
   "check-latest-save",
   "load-latest-save",
   "delete-latest-save",
+  "unlock-hub",
+  "sell-loot",
+  "build-quarry",
+  "build-blacksmith",
+  "build-kitchen",
+  "build-storage",
+  "build-farm",
+  "build-upgrade-bench",
+  "prepare-food",
+  "upgrade-weapon",
+  "plant-crop",
+  "harvest-farm",
+  "complete-village-quest",
+  "village-north",
+  "village-south",
+  "village-west",
+  "village-east",
+  "visit-village",
+  "shop-price",
+  "customize-house",
+  "cycle-farm-permission",
+  "cycle-content-pack",
+  "refresh-balance-dashboard",
+  "play-cutscene",
+  "toggle-hard-mode",
+  "toggle-cursed-floors",
+  "toggle-boss-rush",
 ] as const
 
 export type HeadlessActionId = (typeof headlessActionIds)[number]
 export type ObservationMode = "test" | "agent"
-export type HeadlessPanel = "inventory" | "quests" | "saves" | "cloud" | "settings" | null
+export type HeadlessPanel = "inventory" | "book" | "quests" | "saves" | "cloud" | "settings" | "hub" | "village" | null
 export type HeadlessActionInput = HeadlessActionId | number | { id?: HeadlessActionId; index?: number }
 
 export type HeadlessEnvOptions = {
@@ -166,7 +228,14 @@ const movement: Partial<Record<HeadlessActionId, Point>> = {
   "move-east": { x: 1, y: 0 },
 }
 
-const passableTiles = new Set<TileId>(["floor", "door", "stairs", "potion", "relic", "chest", "trap"])
+const villageMovement: Partial<Record<HeadlessActionId, Point>> = {
+  "village-north": { x: 0, y: -1 },
+  "village-south": { x: 0, y: 1 },
+  "village-west": { x: -1, y: 0 },
+  "village-east": { x: 1, y: 0 },
+}
+
+const passableTiles = new Set<TileId>(["floor", "door", "stairs", "potion", "relic", "chest", "trap", "note", "recipe", "tool", "deed", "fossil", "boss-memory", "keepsake", "story-relic"])
 
 export class HeadlessGameEnv {
   session: GameSession
@@ -379,13 +448,16 @@ export class HeadlessGameEnv {
 
     if (this.session.status === "running") {
       actions.add("open-inventory")
+      actions.add("open-book")
       actions.add("open-quests")
       actions.add("open-saves")
       actions.add("open-cloud")
       actions.add("open-settings")
+      actions.add("open-hub")
       if (this.panel) actions.add("close-panel")
       actions.add("save")
       actions.add("autosave")
+      addHubLegalActions(actions, this.session)
 
       if (this.session.skillCheck?.status === "pending") {
         actions.add("resolve-skill-check")
@@ -395,6 +467,11 @@ export class HeadlessGameEnv {
       if (this.session.skillCheck?.status === "resolved") {
         actions.add("dismiss-skill-check")
         actions.add("interact")
+        return sortedActions(actions)
+      }
+
+      if (this.session.levelUp) {
+        for (let index = 0; index < this.session.levelUp.choices.length; index++) actions.add(`choose-levelup-${index}` as HeadlessActionId)
         return sortedActions(actions)
       }
 
@@ -409,8 +486,14 @@ export class HeadlessGameEnv {
         }
         for (let index = 0; index < combatSkills.length; index++) actions.add(`select-skill-${index}` as HeadlessActionId)
         const skill = combatSkills[this.session.combat.selectedSkill]
-        if (skill && this.session.focus >= skill.cost && this.session.combat.actorIds.length > 0) actions.add("combat-roll")
+        if (skill && this.session.focus >= focusCostForSkill(this.session, skill) && this.session.combat.actorIds.length > 0) actions.add("combat-roll")
         return sortedActions(actions)
+      }
+
+      if (this.session.conversation?.options.length) {
+        actions.add("dialogue-prev")
+        actions.add("dialogue-next")
+        for (let index = 0; index < this.session.conversation.options.length; index++) actions.add(`choose-dialogue-${index}` as HeadlessActionId)
       }
 
       for (const action of ["move-north", "move-south", "move-west", "move-east"] as const) {
@@ -419,6 +502,8 @@ export class HeadlessGameEnv {
       actions.add("rest")
       actions.add("interact")
     }
+
+    if (this.session.status !== "running") addHubLegalActions(actions, this.session)
 
     if (safeListSaves().length > 0) {
       actions.add("load-latest-save")
@@ -443,7 +528,7 @@ export class HeadlessGameEnv {
     rows.push(
       `opendungeon headless seed=${this.session.seed} floor=${this.session.floor}/${this.session.finalFloor} turn=${this.session.turn} status=${this.session.status} biome=${currentBiome(this.session)} modifier=${this.session.floorModifier.id}`,
     )
-    rows.push(`hp=${this.session.hp}/${this.session.maxHp} focus=${this.session.focus}/${this.session.maxFocus} gold=${this.session.gold} kills=${this.session.kills}`)
+    rows.push(`hp=${this.session.hp}/${this.session.maxHp} focus=${this.session.focus}/${this.session.maxFocus} gold=${this.session.gold} coins=${this.session.hub.coins} kills=${this.session.kills}`)
     for (let y = this.session.player.y - radius; y <= this.session.player.y + radius; y++) {
       let row = ""
       for (let x = this.session.player.x - radius; x <= this.session.player.x + radius; x++) {
@@ -486,6 +571,17 @@ export class HeadlessGameEnv {
         ai: actor.ai,
       })),
       inventory: this.session.inventory,
+      knowledge: this.session.knowledge.map((entry) => [entry.id, entry.kind, entry.floor, entry.discoveredAtTurn]),
+      toasts: this.session.toasts.map((toast) => [toast.title, toast.tone, toast.turn]),
+      hub: {
+        unlocked: this.session.hub.unlocked,
+        coins: this.session.hub.coins,
+        stations: Object.values(this.session.hub.stations).map((station) => [station.id, station.level, station.built]),
+        trust: Object.values(this.session.hub.trust).map((trust) => [trust.id, trust.level, trust.xp, trust.questsCompleted]),
+        farm: this.session.hub.farm,
+        mutators: this.session.hub.activeMutators,
+      },
+      equipment: this.session.equipment,
       skillCheck: this.session.skillCheck
         ? {
             id: this.session.skillCheck.id,
@@ -564,6 +660,14 @@ export class HeadlessGameEnv {
     this.session.gold = value
   }
 
+  setHubCoins(value: number) {
+    this.session.hub.coins = Math.max(0, Math.floor(value))
+  }
+
+  addXp(value: number) {
+    grantXp(this.session, value)
+  }
+
   setHeroName(name: string) {
     this.session.hero.name = name.replace(/[^\w .'-]/g, "").trim().slice(0, 24) || "Mira"
   }
@@ -597,10 +701,13 @@ export class HeadlessGameEnv {
       return { message: "Panel closed." }
     }
     if (action === "open-inventory") return this.openPanel("inventory")
+    if (action === "open-book") return this.openPanel("book")
     if (action === "open-quests") return this.openPanel("quests")
     if (action === "open-saves") return this.openPanel("saves")
     if (action === "open-cloud") return this.openPanel("cloud")
     if (action === "open-settings") return this.openPanel("settings")
+    if (action === "open-hub") return this.openPanel("hub")
+    if (action === "open-village") return this.openPanel("village")
     if (action === "save") {
       const saved = saveSession(this.session, "Headless save")
       return { saved, message: `Saved ${saved.name}.` }
@@ -647,6 +754,58 @@ export class HeadlessGameEnv {
       deleteSave(deleted.id)
       return { deleted, message: `Deleted ${deleted.name}.` }
     }
+    if (action === "unlock-hub") {
+      const changed = unlockHub(this.session, "Headless scenario opened the portal room.")
+      return { message: changed ? "Hub unlocked." : "Hub already unlocked." }
+    }
+    if (action === "sell-loot") return { message: `Sold loot for ${sellLootToVillage(this.session)} coins.` }
+    if (action.startsWith("build-")) {
+      const station = stationIdForAction(action)
+      const ok = station ? buildHubStation(this.session, station) : false
+      return { message: ok && station ? `Built ${station}.` : this.session.log[0] ?? "Station build failed." }
+    }
+    if (action === "prepare-food") {
+      const food = prepareFood(this.session)
+      return { message: food ? `Prepared ${food}.` : this.session.log[0] ?? "Food preparation failed." }
+    }
+    if (action === "upgrade-weapon") {
+      const weapon = upgradeWeapon(this.session)
+      return { message: weapon ? `Upgraded ${weapon.name}.` : this.session.log[0] ?? "Weapon upgrade failed." }
+    }
+    if (action === "plant-crop") return { message: plantCrop(this.session) ? "Crop planted." : this.session.log[0] ?? "Crop planting failed." }
+    if (action === "harvest-farm") return { message: `Harvested farm for ${harvestFarm(this.session)} coins.` }
+    if (action === "complete-village-quest") {
+      const trust = completeVillageQuest(this.session, "guildmaster")
+      return { message: `${trust.name} trust ${trust.level}.` }
+    }
+    if (action.startsWith("village-")) {
+      const move = villageMovement[action]
+      if (move) {
+        const location = moveVillagePlayer(this.session, move.x, move.y)
+        return { message: `${location} selected.` }
+      }
+    }
+    if (action === "visit-village") return { message: String(visitVillageLocation(this.session)) }
+    if (action === "shop-price") {
+      const sale = runVillageShopSale(this.session)
+      return { message: sale?.reaction ?? this.session.log[0] ?? "No shop sale." }
+    }
+    if (action === "customize-house") {
+      const house = customizeVillageHouse(this.session)
+      return { message: `${house.name} customized.` }
+    }
+    if (action === "cycle-farm-permission") return { message: `Farm permissions ${cycleSharedFarmPermission(this.session)}.` }
+    if (action === "cycle-content-pack") return { message: `Content pack ${cycleContentPack(this.session).active}.` }
+    if (action === "refresh-balance-dashboard") {
+      const dashboard = refreshBalanceDashboard(this.session)
+      return { message: `Balance ${dashboard.classWinRate[this.session.hero.classId]}% ${this.session.hero.classId}.` }
+    }
+    if (action === "play-cutscene") return { message: playLocalCutscene(this.session).title }
+    if (action.startsWith("toggle-")) {
+      const mutator = mutatorIdForAction(action)
+      const enabled = mutator ? toggleRunMutator(this.session, mutator) : false
+      return { message: mutator ? `${mutator} ${enabled ? "enabled" : "disabled"}.` : "Unknown mutator." }
+    }
 
     if (action === "resolve-skill-check") {
       const roll = resolveSkillCheck(this.session)
@@ -671,6 +830,22 @@ export class HeadlessGameEnv {
     if (action.startsWith("select-skill-")) {
       selectSkill(this.session, Number(action.at(-1)))
       return { message: this.session.combat.message }
+    }
+    if (action.startsWith("choose-levelup-")) {
+      const choice = chooseLevelUpTalent(this.session, Number(action.at(-1)))
+      return { message: choice ? `Learned ${choice.name}.` : "No level-up choice pending." }
+    }
+    if (action === "dialogue-prev") {
+      const option = cycleConversationOption(this.session, -1)
+      return { message: option ? `Selected ${option.label}.` : "No dialogue option." }
+    }
+    if (action === "dialogue-next") {
+      const option = cycleConversationOption(this.session, 1)
+      return { message: option ? `Selected ${option.label}.` : "No dialogue option." }
+    }
+    if (action.startsWith("choose-dialogue-")) {
+      const conversation = chooseConversationOption(this.session, Number(action.at(-1)))
+      return { message: conversation ? `${conversation.speaker}: ${conversation.text}` : "No conversation." }
     }
     if (action === "combat-roll") {
       performCombatAction(this.session)
@@ -828,6 +1003,51 @@ function sortedActions(actions: Set<HeadlessActionId>) {
   return headlessActionIds.filter((action) => actions.has(action))
 }
 
+function addHubLegalActions(actions: Set<HeadlessActionId>, session: GameSession) {
+  actions.add("unlock-hub")
+  actions.add("open-hub")
+  if (!session.hub.unlocked) return
+  actions.add("open-village")
+  actions.add("sell-loot")
+  actions.add("complete-village-quest")
+  for (const station of ["quarry", "blacksmith", "kitchen", "storage", "farm", "upgrade-bench"] as const) actions.add(`build-${station}` as HeadlessActionId)
+  actions.add("prepare-food")
+  actions.add("upgrade-weapon")
+  actions.add("plant-crop")
+  actions.add("harvest-farm")
+  actions.add("village-north")
+  actions.add("village-south")
+  actions.add("village-west")
+  actions.add("village-east")
+  actions.add("visit-village")
+  actions.add("shop-price")
+  actions.add("customize-house")
+  actions.add("cycle-farm-permission")
+  actions.add("cycle-content-pack")
+  actions.add("refresh-balance-dashboard")
+  actions.add("play-cutscene")
+  actions.add("toggle-hard-mode")
+  actions.add("toggle-cursed-floors")
+  actions.add("toggle-boss-rush")
+}
+
+function stationIdForAction(action: HeadlessActionId): HubStationId | null {
+  if (action === "build-quarry") return "quarry"
+  if (action === "build-blacksmith") return "blacksmith"
+  if (action === "build-kitchen") return "kitchen"
+  if (action === "build-storage") return "storage"
+  if (action === "build-farm") return "farm"
+  if (action === "build-upgrade-bench") return "upgrade-bench"
+  return null
+}
+
+function mutatorIdForAction(action: HeadlessActionId): RunMutatorId | null {
+  if (action === "toggle-hard-mode") return "hard-mode"
+  if (action === "toggle-cursed-floors") return "cursed-floors"
+  if (action === "toggle-boss-rush") return "boss-rush"
+  return null
+}
+
 function canMove(session: GameSession, delta: Point) {
   const target = { x: session.player.x + delta.x, y: session.player.y + delta.y }
   if (session.dungeon.actors.some((actor) => samePoint(actor.position, target))) return true
@@ -969,8 +1189,16 @@ function tileCode(session: GameSession, point: Point) {
   if (tile === "potion") return 4
   if (tile === "relic") return 5
   if (tile === "chest") return 6
+  if (tile === "note") return 7
+  if (tile === "recipe") return 8
+  if (tile === "tool") return 9
   if (tile === "trap") return 10
   if (tile === "door") return 11
+  if (tile === "deed") return 12
+  if (tile === "fossil") return 13
+  if (tile === "boss-memory") return 14
+  if (tile === "keepsake") return 15
+  if (tile === "story-relic") return 16
   return 0
 }
 
@@ -1019,10 +1247,13 @@ function floorModifierCode(id: string | undefined) {
 
 function panelCode(panel: HeadlessPanel) {
   if (panel === "inventory") return 0.2
-  if (panel === "quests") return 0.4
-  if (panel === "saves") return 0.6
+  if (panel === "book") return 0.35
+  if (panel === "quests") return 0.5
+  if (panel === "saves") return 0.65
   if (panel === "cloud") return 0.8
   if (panel === "settings") return 1
+  if (panel === "hub") return 1.2
+  if (panel === "village") return 1.35
   return 0
 }
 

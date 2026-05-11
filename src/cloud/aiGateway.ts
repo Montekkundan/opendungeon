@@ -1,6 +1,7 @@
 import { writeFileSync, mkdirSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
+import { buildSpriteImagePrompt } from "../assets/spriteGenerationSkill.js"
 
 export type GatewayStatus = {
   configured: boolean
@@ -58,7 +59,7 @@ export async function generateSpriteImage(prompt: string, model = "openai/gpt-im
     },
     body: JSON.stringify({
       model,
-      prompt,
+      prompt: buildSpriteImagePrompt(prompt),
       size: process.env.OPENDUNGEON_IMAGE_SIZE || "1024x1024",
       quality: process.env.OPENDUNGEON_IMAGE_QUALITY || "low",
       response_format: "b64_json",

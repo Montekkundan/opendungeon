@@ -17,6 +17,14 @@ describe("world config", () => {
 
     expect(validateWorldConfig(left)).toEqual([])
     expect(left.events).toHaveLength(50)
+    expect(left.quests.map((quest) => quest.title)).toEqual([
+      expect.stringContaining("Escort"),
+      expect.stringContaining("Rescue"),
+      expect.stringContaining("Timed Curse"),
+      expect.stringContaining("Locked Shrine"),
+      expect.stringContaining("Bounty"),
+      expect.stringContaining("Multi-Floor Chain"),
+    ])
     expect(left.events.map((event) => event.title)).toEqual(right.events.map((event) => event.title))
     expect(left.events.every((event) => anchors.some((anchor) => anchor.id === event.anchorId))).toBe(true)
   })
@@ -38,6 +46,8 @@ describe("world config", () => {
     expect(validateWorldConfig(next)).toEqual([])
     expect(next.events).toHaveLength(100)
     expect(next.quests.some((quest) => quest.title.includes("Bannerlord"))).toBe(true)
+    expect(next.quests.some((quest) => quest.title.includes("Village Remix"))).toBe(true)
+    expect(patch.memoryRefs?.some((ref) => ref.startsWith("ending-"))).toBe(true)
     expect(next.spriteAssets.at(-1)?.model).toBe("openai/gpt-image-2")
   })
 })

@@ -1,4 +1,5 @@
 import { createRng } from "../game/rng.js"
+import { loadSpriteGenerationSkill, spriteGenerationSkillAssetPath } from "../assets/spriteGenerationSkill.js"
 import { applyWorldContentPatch, type WorldConfig, type WorldContentPatch, type WorldEntity, type WorldEntityType, type WorldEvent, type WorldEventStatus, type WorldEventType, type WorldQuest, type WorldQuestStatus, type WorldSpriteAsset, type WorldSpriteStatus } from "./worldConfig.js"
 
 export type AdminGenerationRequest = {
@@ -46,6 +47,7 @@ export function createAdminPatchModelRequest(world: WorldConfig, request: AdminG
       "Every event entityId must reference either an existing entity or an entity in this patch.",
       "Every quest event/entity reference must point to an existing id or an id in this patch.",
       "Prefer 6 to 12 events, 2 to 4 quests, and a planned sprite asset for each new entity.",
+      "The patch may remix local story arcs, village trust outcomes, boss motives, and alternate endings, but must keep cause and effect readable.",
       "Keep text short, game-facing, and safe for terminal display.",
     ],
     enums: {
@@ -72,6 +74,10 @@ export function createAdminPatchModelRequest(world: WorldConfig, request: AdminG
       .slice(-12)
       .map((event) => ({ id: event.id, type: event.type, title: event.title, anchorId: event.anchorId })),
     idPrefix: `admin-${request.generation}`,
+    spriteGenerationSkill: {
+      source: `assets/${spriteGenerationSkillAssetPath}`,
+      instructions: loadSpriteGenerationSkill(),
+    },
     existingIds: {
       entities: world.entities.map((entity) => entity.id).slice(-80),
       events: world.events.map((event) => event.id).slice(-80),
@@ -83,7 +89,7 @@ export function createAdminPatchModelRequest(world: WorldConfig, request: AdminG
   return {
     model: process.env.OPENDUNGEON_AI_ADMIN_MODEL || "openai/gpt-5.4",
     system:
-      "You are the opendungeon AI admin content model. Produce strict JSON for a validated roguelike WorldContentPatch. Do not include markdown, commentary, or tool-call text.",
+      "You are the opendungeon AI admin content model. Produce strict JSON for a validated roguelike WorldContentPatch. Use the embedded spriteGenerationSkill when writing every spriteAssets prompt. Do not include markdown, commentary, or tool-call text.",
     prompt: JSON.stringify(context, null, 2),
     temperature: 0.2,
     maxTokens: 6000,
@@ -203,13 +209,14 @@ export function createProceduralAdminPatch(world: WorldConfig, request: AdminGen
     const entityId = `entity-${index.toString().padStart(3, "0")}`
     const spriteAssetId = `sprite-${entityId}`
     const bossSlot = offset === count - 1
-    const type = bossSlot ? "boss" : offset % 5 === 0 ? "quest" : offset % 3 === 0 ? "enemy" : offset % 3 === 1 ? "loot" : "interaction"
+    const villageSlot = offset % 11 === 0
+    const type = bossSlot ? "boss" : villageSlot ? "quest" : offset % 5 === 0 ? "quest" : offset % 3 === 0 ? "enemy" : offset % 3 === 1 ? "loot" : "interaction"
     const name = bossSlot && angryBoss ? "Goblin Bannerlord Rek" : generatedName(type, rng.int(0, 99), request.generation)
     entities.push({
       id: entityId,
       type: type === "boss" ? "boss" : type === "enemy" ? "enemy" : type === "loot" ? "loot" : "npc",
       name,
-      description: `${name} was created by the AI admin from player history: ${request.playerSummary.slice(0, 120) || "early crawl"}.`,
+      description: `${name} was created by the AI admin from player history: ${request.playerSummary.slice(0, 120) || "early crawl"}.${villageSlot ? " It can alter village trust, services, or route endings." : ""}`,
       anchorId: anchor.id,
       spriteAssetId,
       tags: ["ai-admin", type, `generation-${request.generation}`],
@@ -225,12 +232,12 @@ export function createProceduralAdminPatch(world: WorldConfig, request: AdminGen
       id: `event-${index.toString().padStart(3, "0")}`,
       type,
       status: offset < 5 ? "active" : "future",
-      title: bossSlot && angryBoss ? "The goblin leader answers the slaughter" : `${name} changes the dungeon`,
-      summary: `AI-admin generation ${request.generation} event at floor ${anchor.floor}, room ${anchor.roomIndex}.`,
+      title: bossSlot && angryBoss ? "The goblin leader answers the slaughter" : villageSlot ? `${name} changes the village road` : `${name} changes the dungeon`,
+      summary: bossSlot ? `AI-admin generation ${request.generation} can alter the boss motive and ending.` : villageSlot ? `AI-admin generation ${request.generation} village arc at floor ${anchor.floor}, room ${anchor.roomIndex}.` : `AI-admin generation ${request.generation} event at floor ${anchor.floor}, room ${anchor.roomIndex}.`,
       anchorId: anchor.id,
       entityIds: [entityId],
       trigger: offset < 5 ? { kind: "completed-events", value: request.completedEventCount } : { kind: "completed-events", value: request.completedEventCount + offset },
-      consequences: ["Adds adaptive world state."],
+      consequences: villageSlot ? ["Adds adaptive village trust or hub outcome.", "May branch a later ending."] : bossSlot ? ["Adds adaptive boss motive.", "May branch the ending."] : ["Adds adaptive world state."],
     })
   }
 
@@ -238,8 +245,8 @@ export function createProceduralAdminPatch(world: WorldConfig, request: AdminGen
     const questEvents = events.slice(questIndex * 5, questIndex * 5 + 4)
     quests.push({
       id: `quest-admin-${request.generation}-${questIndex}`,
-      title: questIndex === 0 && angryBoss ? "Bannerlord's Anger" : `Admin Thread ${request.generation}.${questIndex}`,
-      summary: `Quest generated from ${request.completedEventCount} completed events.`,
+      title: questIndex === 0 && angryBoss ? "Bannerlord's Anger" : questIndex === 1 ? `Village Remix ${request.generation}` : questIndex === 4 ? `Alternate Ending ${request.generation}` : `Admin Thread ${request.generation}.${questIndex}`,
+      summary: questIndex === 1 ? `AI Admin village story arc generated from ${request.completedEventCount} completed events.` : questIndex === 4 ? `AI Admin alternate ending hook generated from local run history.` : `Quest generated from ${request.completedEventCount} completed events.`,
       status: questIndex === 0 ? "active" : "locked",
       objectiveEventIds: questEvents.map((event) => event.id),
       rewardEntityIds: events.slice(questIndex * 5 + 4, questIndex * 5 + 5).flatMap((event) => event.entityIds),
@@ -254,7 +261,7 @@ export function createProceduralAdminPatch(world: WorldConfig, request: AdminGen
     quests,
     entities,
     spriteAssets,
-    memoryRefs: [`memory-${world.worldId}-${request.generation}`],
+    memoryRefs: [`memory-${world.worldId}-${request.generation}`, `ending-${world.worldId}-${request.generation}`, `village-${world.worldId}-${request.generation}`],
   }
 }
 

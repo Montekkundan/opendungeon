@@ -12,9 +12,15 @@ describe("headless game env", () => {
       expect(headlessActionIds).toContain("move-north")
       expect(headlessActionIds).toContain("combat-roll")
       expect(headlessActionIds).toContain("save")
+      expect(headlessActionIds).toContain("open-book")
+      expect(headlessActionIds).toContain("open-hub")
+      expect(headlessActionIds).toContain("open-village")
+      expect(headlessActionIds).toContain("build-blacksmith")
+      expect(headlessActionIds).toContain("refresh-balance-dashboard")
       expect(env.actionMask()).toHaveLength(headlessActionIds.length)
       expect(env.legalActions()).toContain("noop")
       expect(env.legalActions()).toContain("save")
+      expect(env.legalActions()).toContain("open-book")
     } finally {
       env.close()
     }
@@ -36,7 +42,7 @@ describe("headless game env", () => {
   })
 
   test("replays deterministic action lists", () => {
-    const actions = ["rest", "noop", "open-inventory", "close-panel"] as const
+    const actions = ["rest", "noop", "open-inventory", "close-panel", "open-book", "close-panel"] as const
     const left = new HeadlessGameEnv({ seed: 2222, isolateStorage: true })
     const right = new HeadlessGameEnv({ seed: 2222, isolateStorage: true })
     try {
@@ -68,7 +74,7 @@ describe("headless game env", () => {
   })
 
   test("runs built-in and file-backed scenarios", () => {
-    for (const name of ["smoke", "combat", "combat-skills", "area-combat", "boss-phase", "status-effects", "reaction-block", "character-name", "starting-loadout", "biome", "trap", "secret-door", "floor-modifier", "skill-check", "save-load", "save-management", "auth-local", "auth-expired", "map-generation", "npc-event", "npc-conversation", "merchant", "full-run"]) {
+    for (const name of ["smoke", "combat", "combat-skills", "area-combat", "boss-phase", "status-effects", "reaction-block", "character-name", "starting-loadout", "biome", "trap", "secret-door", "floor-modifier", "skill-check", "note-collectible", "collectible-variety", "rare-collectibles", "hub-economy", "hub-farming", "village-screen", "village-shop", "village-meta", "run-mutators", "save-load", "save-management", "auth-local", "auth-expired", "map-generation", "npc-event", "npc-conversation", "merchant", "level-up-talent", "dialogue-options", "full-run"]) {
       const scenario = builtinScenario(name)
       expect(scenario).not.toBeNull()
       const result = runScenario(name, scenario!, { seed: 1234 })

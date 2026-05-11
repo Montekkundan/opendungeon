@@ -10,11 +10,20 @@ describe("AI admin workflow model steps", () => {
     world.events[0].status = "completed"
     const request = createAdminGenerationRequest(world, "the player spared the shrine keeper")
     const modelRequest = createAdminPatchModelRequest(world, request)
-    const prompt = JSON.parse(modelRequest.prompt) as { request: { playerSummary: string }; constraints: string[]; anchors: Array<{ id: string }> }
+    const prompt = JSON.parse(modelRequest.prompt) as {
+      request: { playerSummary: string }
+      constraints: string[]
+      anchors: Array<{ id: string }>
+      spriteGenerationSkill: { source: string; instructions: string }
+    }
 
     expect(modelRequest.model).toBeTruthy()
     expect(modelRequest.system).toContain("strict JSON")
+    expect(modelRequest.system).toContain("spriteGenerationSkill")
     expect(prompt.request.playerSummary).toContain("shrine keeper")
+    expect(prompt.spriteGenerationSkill.source).toBe("assets/opendungeon-assets/skills/ai-admin-sprite-generation.md")
+    expect(prompt.spriteGenerationSkill.instructions).toContain("18x18")
+    expect(prompt.spriteGenerationSkill.instructions).toContain("8x8")
     expect(prompt.constraints.join(" ")).toContain("Do not reuse existing ids")
     expect(prompt.anchors.some((anchor) => anchor.id === world.anchors[0].id)).toBe(true)
   })

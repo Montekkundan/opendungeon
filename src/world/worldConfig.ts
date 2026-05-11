@@ -234,6 +234,14 @@ export const worldConfigJsonSchema = {
 
 const eventTypes: WorldEventType[] = ["interaction", "enemy", "loot", "quest", "biome"]
 const biomes = ["crypt", "moss vault", "iron shrine", "flooded archive", "ember jail"]
+const questArchetypes = [
+  { title: "Escort", summary: "Keep an NPC route safe through linked rooms before the dungeon reshuffles." },
+  { title: "Rescue", summary: "Find a trapped villager or memory before the next floor claims it." },
+  { title: "Timed Curse", summary: "Resolve cursed events quickly or accept a harsher floor modifier." },
+  { title: "Locked Shrine", summary: "Recover shrine proof, keys, or relic fragments to open a sealed reward." },
+  { title: "Bounty", summary: "Hunt a named enemy chain and bring proof back to the village." },
+  { title: "Multi-Floor Chain", summary: "Carry evidence across floors so a later quest can branch cleanly." },
+] as const
 const npcNames = ["Cartographer Venn", "Shrine Keeper Sol", "Wound Surgeon Iri", "Jailer Maro", "Ash Merchant Pell"]
 const enemyNames = ["Grave Squire", "Rust Wisp", "Carrion Moth", "Crypt Mimic", "Root-Bound Ghoul"]
 const lootNames = ["Moonlit Key", "Cinder Lens", "Archive Coin", "Bound Compass", "Quiet Relic"]
@@ -440,13 +448,15 @@ export function createWorldLogEntry(worldId: string, turn: number, entry: Omit<W
 
 function createInitialQuests(events: WorldEvent[], entities: WorldEntity[]): WorldQuest[] {
   const quests: WorldQuest[] = []
-  for (let index = 0; index < 5; index++) {
-    const objectiveEventIds = events.slice(index * 5, index * 5 + 4).map((event) => event.id)
-    const rewardEntityIds = entities.slice(index * 5 + 4, index * 5 + 5).map((entity) => entity.id)
+  for (let index = 0; index < questArchetypes.length; index++) {
+    const archetype = questArchetypes[index]
+    const start = index * 4
+    const objectiveEventIds = events.slice(start, start + 4).map((event) => event.id)
+    const rewardEntityIds = entities.slice(start + 3, start + 4).map((entity) => entity.id)
     quests.push({
       id: `quest-${index.toString().padStart(2, "0")}`,
-      title: `Thread of ${biomes[index % biomes.length]}`,
-      summary: "Follow linked events until the dungeon reveals a deeper rule.",
+      title: `${archetype.title}: ${biomes[index % biomes.length]}`,
+      summary: archetype.summary,
       status: index === 0 ? "active" : "locked",
       objectiveEventIds,
       rewardEntityIds,

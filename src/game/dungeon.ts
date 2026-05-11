@@ -47,7 +47,7 @@ export type DungeonSecret = {
   discovered: boolean
 }
 
-export type EnemyPattern = "sentinel" | "wander" | "patrol-horizontal" | "patrol-vertical" | "stalker"
+export type EnemyPattern = "sentinel" | "wander" | "patrol-horizontal" | "patrol-vertical" | "stalker" | "ranged" | "guard" | "ambush" | "fleeing"
 
 export type EnemyAi = {
   pattern: EnemyPattern
@@ -56,6 +56,8 @@ export type EnemyAi = {
   leashRadius: number
   direction: 1 | -1
   alerted: boolean
+  chaseTurns?: number
+  stunnedTurns?: number
 }
 
 type Room = {
@@ -169,10 +171,11 @@ function randomInteriorPoint(room: Room, rng: Rng): Point {
 }
 
 function scatterFeatures(tiles: TileId[][], rooms: Room[], rng: Rng) {
-  const featureTiles: TileId[] = ["potion", "relic", "chest", "trap"]
+  const featureTiles: TileId[] = ["potion", "relic", "chest", "trap", "note", "recipe", "tool", "deed"]
+  const rareFeatureTiles: TileId[] = ["fossil", "boss-memory", "keepsake", "story-relic"]
   for (const room of rooms.slice(1, 18)) {
     const point = randomInteriorPoint(room, rng)
-    if (tiles[point.y][point.x] === "floor") tiles[point.y][point.x] = rng.pick(featureTiles)
+    if (tiles[point.y][point.x] === "floor") tiles[point.y][point.x] = rng.next() < 0.12 ? rng.pick(rareFeatureTiles) : rng.pick(featureTiles)
   }
 }
 
@@ -291,7 +294,7 @@ export function enemyAi(kind: ActorId, origin: Point, index = 0, floor = 1): Ene
 
   if (kind === "necromancer" || kind === "grave-root-boss") {
     return {
-      pattern: "sentinel",
+      pattern: kind === "necromancer" ? "ranged" : "sentinel",
       origin: { ...origin },
       aggroRadius: kind === "grave-root-boss" ? 10 : 7 + Math.floor(floor / 3),
       leashRadius: kind === "grave-root-boss" ? 15 : 11,
@@ -302,7 +305,7 @@ export function enemyAi(kind: ActorId, origin: Point, index = 0, floor = 1): Ene
 
   if (kind === "ghoul" || kind === "rust-squire") {
     return {
-      pattern: index % 2 === 0 ? "patrol-horizontal" : "patrol-vertical",
+      pattern: kind === "rust-squire" ? "guard" : index % 2 === 0 ? "patrol-horizontal" : "patrol-vertical",
       origin: { ...origin },
       aggroRadius: kind === "rust-squire" ? 5 : 6,
       leashRadius: kind === "rust-squire" ? 8 : 9,
@@ -313,7 +316,7 @@ export function enemyAi(kind: ActorId, origin: Point, index = 0, floor = 1): Ene
 
   if (kind === "crypt-mimic") {
     return {
-      pattern: "sentinel",
+      pattern: "ambush",
       origin: { ...origin },
       aggroRadius: 5 + Math.floor(floor / 3),
       leashRadius: 8,
@@ -324,7 +327,7 @@ export function enemyAi(kind: ActorId, origin: Point, index = 0, floor = 1): Ene
 
   if (kind === "gallows-wisp" || kind === "carrion-moth") {
     return {
-      pattern: kind === "gallows-wisp" ? "stalker" : "wander",
+      pattern: kind === "gallows-wisp" ? "ranged" : "fleeing",
       origin: { ...origin },
       aggroRadius: kind === "gallows-wisp" ? 7 : 5,
       leashRadius: kind === "gallows-wisp" ? 10 : 7,

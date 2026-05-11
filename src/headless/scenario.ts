@@ -22,6 +22,8 @@ export type ScenarioLine = {
     | "add-item"
     | "set-stat"
     | "set-gold"
+    | "set-hub-coins"
+    | "add-xp"
     | "set-hero-name"
     | "damage-player"
     | "login-local-test"
@@ -259,6 +261,145 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
     ]
   }
 
+  if (name === "note-collectible") {
+    return [
+      { assert: { path: "session.knowledge.length", min: 3 } },
+      { command: "set-relative-tile", dx: 1, dy: 0, tile: "note" },
+      { action: "move-east" },
+      { assert: { path: "session.log.0", contains: "Recovered note" } },
+      { assert: { path: "session.knowledge.0.title", contains: "Recovered Note" } },
+      { action: "open-book" },
+      { assert: { path: "panel", equals: "book" } },
+      { command: "check-invariants" },
+    ]
+  }
+
+  if (name === "collectible-variety") {
+    return [
+      { command: "set-relative-tile", dx: 1, dy: 0, tile: "recipe" },
+      { action: "move-east" },
+      { assert: { path: "session.knowledge.0.title", contains: "Recovered Recipe" } },
+      { command: "set-relative-tile", dx: 1, dy: 0, tile: "tool" },
+      { action: "move-east" },
+      { assert: { path: "session.knowledge.0.title", contains: "Recovered Tool Part" } },
+      { command: "set-relative-tile", dx: 1, dy: 0, tile: "deed" },
+      { action: "move-east" },
+      { assert: { path: "session.hub.unlocked", equals: true } },
+      { assert: { path: "session.log.0", contains: "Village deed" } },
+      { command: "check-invariants" },
+    ]
+  }
+
+  if (name === "rare-collectibles") {
+    return [
+      { command: "set-relative-tile", dx: 1, dy: 0, tile: "fossil" },
+      { action: "move-east" },
+      { assert: { path: "session.knowledge.0.title", contains: "Recovered Fossil" } },
+      { command: "set-relative-tile", dx: 1, dy: 0, tile: "boss-memory" },
+      { action: "move-east" },
+      { assert: { path: "session.knowledge.0.title", contains: "Boss Memory" } },
+      { command: "set-relative-tile", dx: 1, dy: 0, tile: "keepsake" },
+      { action: "move-east" },
+      { assert: { path: "session.knowledge.0.title", contains: "Friendship Keepsake" } },
+      { command: "set-relative-tile", dx: 1, dy: 0, tile: "story-relic" },
+      { action: "move-east" },
+      { assert: { path: "session.knowledge.0.title", contains: "AI Admin Story Relic" } },
+      { assert: { path: "session.pendingWorldGeneration", equals: true } },
+      { command: "check-invariants" },
+    ]
+  }
+
+  if (name === "hub-economy") {
+    return [
+      { action: "unlock-hub" },
+      { command: "set-hub-coins", value: 180 },
+      { action: "build-blacksmith" },
+      { assert: { path: "session.hub.stations.blacksmith.built", equals: true } },
+      { action: "build-kitchen" },
+      { assert: { path: "session.hub.stations.kitchen.built", equals: true } },
+      { command: "add-item", item: "Bound relic" },
+      { command: "add-item", item: "Rollback scroll" },
+      { action: "sell-loot" },
+      { assert: { path: "session.hub.lootSold", min: 2 } },
+      { action: "prepare-food" },
+      { assert: { path: "session.hub.preparedFood.0", truthy: true } },
+      { action: "upgrade-weapon" },
+      { assert: { path: "session.equipment.weapon.bonusDamage", min: 1 } },
+      { command: "check-invariants" },
+    ]
+  }
+
+  if (name === "hub-farming") {
+    return [
+      { action: "unlock-hub" },
+      { command: "set-hub-coins", value: 120 },
+      { action: "build-farm" },
+      { assert: { path: "session.hub.stations.farm.built", equals: true } },
+      { action: "plant-crop" },
+      { assert: { path: "session.hub.farm.planted", min: 1 } },
+      { action: "harvest-farm" },
+      { assert: { path: "session.hub.farm.planted", equals: 0 } },
+      { assert: { path: "session.hub.coins", min: 1 } },
+      { action: "complete-village-quest" },
+      { assert: { path: "session.hub.trust.guildmaster.questsCompleted", min: 1 } },
+      { command: "check-invariants" },
+    ]
+  }
+
+  if (name === "village-screen") {
+    return [
+      { action: "unlock-hub" },
+      { action: "open-village" },
+      { assert: { path: "panel", equals: "village" } },
+      { action: "village-east" },
+      { assert: { path: "session.hub.village.selectedLocation", truthy: true } },
+      { action: "visit-village" },
+      { assert: { path: "session.hub.village.schedules.length", min: 5 } },
+      { command: "check-invariants" },
+    ]
+  }
+
+  if (name === "village-shop") {
+    return [
+      { action: "unlock-hub" },
+      { command: "add-item", item: "Boss memory shard" },
+      { action: "shop-price" },
+      { assert: { path: "session.hub.village.shopLog.0", truthy: true } },
+      { assert: { path: "session.hub.coins", min: 1 } },
+      { command: "check-invariants" },
+    ]
+  }
+
+  if (name === "village-meta") {
+    return [
+      { action: "unlock-hub" },
+      { action: "customize-house" },
+      { assert: { path: "session.hub.houses.0.name", truthy: true } },
+      { action: "cycle-farm-permission" },
+      { assert: { path: "session.hub.village.sharedFarm.permissions", truthy: true } },
+      { action: "cycle-content-pack" },
+      { assert: { path: "session.hub.contentPacks.active", truthy: true } },
+      { action: "refresh-balance-dashboard" },
+      { assert: { path: "session.hub.balanceDashboard.runs", min: 1 } },
+      { action: "play-cutscene" },
+      { assert: { path: "session.hub.lastCutsceneId", truthy: true } },
+      { command: "check-invariants" },
+    ]
+  }
+
+  if (name === "run-mutators") {
+    return [
+      { action: "unlock-hub" },
+      { action: "toggle-hard-mode" },
+      { assert: { path: "session.hub.activeMutators", contains: "hard-mode" } },
+      { action: "toggle-cursed-floors" },
+      { assert: { path: "session.hub.activeMutators", contains: "cursed-floors" } },
+      { action: "toggle-boss-rush" },
+      { assert: { path: "session.finalFloor", max: 3 } },
+      { command: "check-invariants" },
+    ]
+  }
+
   if (name === "save-load") {
     return [
       { command: "set-gold", value: 77 },
@@ -358,6 +499,31 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
     ]
   }
 
+  if (name === "level-up-talent") {
+    return [
+      { command: "add-xp", value: 10 },
+      { assert: { path: "session.level", equals: 2 } },
+      { assert: { path: "session.levelUp.choices.length", min: 1 } },
+      { action: "choose-levelup-0" },
+      { assert: { path: "session.levelUp", equals: null } },
+      { assert: { path: "session.talents.length", min: 1 } },
+      { command: "check-invariants" },
+    ]
+  }
+
+  if (name === "dialogue-options") {
+    return [
+      { command: "set-relative-tile", dx: 1, dy: 0, tile: "floor" },
+      { command: "place-relative-actor", id: "script-shrine", kind: "shrine-keeper", dx: 1, dy: 0, hp: 1, damage: 0 },
+      { action: "move-east" },
+      { assert: { path: "session.conversation.options.length", min: 3 } },
+      { action: "choose-dialogue-0" },
+      { assert: { path: "session.conversation.status", equals: "completed" } },
+      { assert: { path: "session.focus", min: 1 } },
+      { command: "check-invariants" },
+    ]
+  }
+
   if (name === "full-run") {
     return [
       { command: "first-legal-move" },
@@ -412,6 +578,14 @@ function runScenarioLine(env: HeadlessGameEnv, line: ScenarioLine) {
   }
   if (line.command === "set-gold") {
     env.setGold(number(line.value))
+    return { type: "setup", command: line.command }
+  }
+  if (line.command === "set-hub-coins") {
+    env.setHubCoins(number(line.value))
+    return { type: "setup", command: line.command }
+  }
+  if (line.command === "add-xp") {
+    env.addXp(number(line.value))
     return { type: "setup", command: line.command }
   }
   if (line.command === "set-hero-name") {
