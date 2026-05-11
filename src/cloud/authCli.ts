@@ -1,3 +1,5 @@
+import { spawn } from "node:child_process"
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { authSessionPath, saveAuthSession, type AuthSession } from "./authStore.js"
 import { createSupabaseBrowserlessClient, sessionFromSupabase, usernameToEmail } from "./supabase.js"
 
@@ -213,7 +215,7 @@ function isLocalTestUser(username: string, password: string) {
 function startOAuthCallbackCapture(redirectTo: string) {
   const target = callbackTarget(redirectTo)
   let settled = false
-  let timeout: Timer | null = null
+  let timeout: ReturnType<typeof setTimeout> | null = null
   let resolveSession: (session: AuthSession) => void = () => {}
   let rejectSession: (error: Error) => void = () => {}
 
@@ -222,31 +224,31 @@ function startOAuthCallbackCapture(redirectTo: string) {
     rejectSession = reject
   })
 
-  const server = Bun.serve({
-    hostname: target.hostname,
-    port: target.port,
-    fetch: async (request) => {
-      const url = new URL(request.url)
-      if (request.method === "GET" && url.pathname === target.callbackPath) {
-        return new Response(oauthCallbackHtml(target.sessionPath), { headers: { "content-type": "text/html; charset=utf-8" } })
-      }
+  const server = createServer(async (request, response) => {
+    const url = new URL(request.url ?? "/", `http://${request.headers.host ?? `${target.hostname}:${target.port}`}`)
+    if (request.method === "GET" && url.pathname === target.callbackPath) {
+      sendText(response, 200, oauthCallbackHtml(target.sessionPath), "text/html; charset=utf-8")
+      return
+    }
 
-      if (request.method === "POST" && url.pathname === target.sessionPath) {
-        try {
-          const payload = (await request.json()) as OAuthCallbackPayload
-          const captured = sessionFromOAuthCallbackPayload(payload)
-          settle(null, captured)
-          return new Response("Captured. You can close this tab.", { status: 200 })
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "OAuth callback capture failed."
-          settle(new Error(message))
-          return new Response(message, { status: 400 })
-        }
+    if (request.method === "POST" && url.pathname === target.sessionPath) {
+      try {
+        const payload = (await readJsonBody(request)) as OAuthCallbackPayload
+        const captured = sessionFromOAuthCallbackPayload(payload)
+        settle(null, captured)
+        sendText(response, 200, "Captured. You can close this tab.")
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "OAuth callback capture failed."
+        settle(new Error(message))
+        sendText(response, 400, message)
       }
+      return
+    }
 
-      return new Response("Not found", { status: 404 })
-    },
+    sendText(response, 404, "Not found")
   })
+  server.on("error", (error) => settle(error instanceof Error ? error : new Error(String(error))))
+  server.listen(target.port, target.hostname)
 
   timeout = setTimeout(() => settle(new Error(`Timed out waiting for OAuth callback after ${oauthCallbackTimeoutMs()}ms.`)), oauthCallbackTimeoutMs())
 
@@ -254,7 +256,7 @@ function startOAuthCallbackCapture(redirectTo: string) {
     if (settled) return
     settled = true
     if (timeout) clearTimeout(timeout)
-    void Promise.resolve(server.stop(true))
+    server.close()
     if (error) rejectSession(error)
     else resolveSession(captured!)
   }
@@ -265,7 +267,7 @@ function startOAuthCallbackCapture(redirectTo: string) {
       if (settled) return
       settled = true
       if (timeout) clearTimeout(timeout)
-      await Promise.resolve(server.stop(true))
+      await closeServer(server)
     },
   }
 }
@@ -375,7 +377,44 @@ function oauthCallbackTimeoutMs() {
 
 async function openBrowser(url: string) {
   if (process.env.OPENDUNGEON_OPEN_BROWSER === "0") return
-  if (process.platform !== "darwin") return
-  const child = Bun.spawn(["open", url], { stdout: "ignore", stderr: "ignore" })
-  await child.exited
+  const command = process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open"
+  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url]
+  const child = spawn(command, args, { stdio: "ignore", detached: true })
+  child.unref()
+}
+
+function sendText(response: ServerResponse, status: number, body: string, contentType = "text/plain; charset=utf-8") {
+  response.writeHead(status, { "content-type": contentType })
+  response.end(body)
+}
+
+function readJsonBody(request: IncomingMessage) {
+  return new Promise<unknown>((resolve, reject) => {
+    let body = ""
+    request.setEncoding("utf8")
+    request.on("data", (chunk) => {
+      body += chunk
+      if (body.length > 64_000) {
+        request.destroy()
+        reject(new Error("OAuth callback payload is too large."))
+      }
+    })
+    request.on("error", reject)
+    request.on("end", () => {
+      try {
+        resolve(JSON.parse(body || "{}"))
+      } catch {
+        reject(new Error("OAuth callback payload was not valid JSON."))
+      }
+    })
+  })
+}
+
+function closeServer(server: ReturnType<typeof createServer>) {
+  return new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) reject(error)
+      else resolve()
+    })
+  })
 }

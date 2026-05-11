@@ -1,3 +1,5 @@
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
+import { WebSocketServer, type RawData, type WebSocket } from "ws"
 import { MultiplayerLobbyState, loadRaceResults, saveRaceResults, type LobbyRole } from "./lobbyState.js"
 
 type LobbySocketData = {
@@ -6,59 +8,65 @@ type LobbySocketData = {
   role: LobbyRole
 }
 
-const options = parseArgs(Bun.argv.slice(2))
+type LobbyWebSocket = WebSocket & { data: LobbySocketData }
+
+const options = parseArgs(process.argv.slice(2))
 const lobby = new MultiplayerLobbyState({
   mode: options.mode,
   seed: options.seed,
   inviteCode: options.inviteCode,
   initialResults: options.leaderboardPath ? loadRaceResults(options.leaderboardPath) : [],
 })
-const sockets = new Set<ServerWebSocket>()
+const sockets = new Set<LobbyWebSocket>()
 
-const server = Bun.serve<LobbySocketData>({
-  port: options.port,
-  fetch(request, server) {
-    const url = new URL(request.url)
+const server = createServer((request, response) => {
+  const url = new URL(request.url ?? "/", `http://${request.headers.host ?? `localhost:${options.port}`}`)
 
-    if (url.pathname === "/ws") {
-      const role: LobbyRole = url.searchParams.get("role") === "spectator" ? "spectator" : "player"
-      const name = url.searchParams.get("name")?.trim() || (role === "spectator" ? "Spectator" : "Crawler")
-      const id = crypto.randomUUID()
-      return server.upgrade(request, { data: { id, name, role } }) ? undefined : new Response("upgrade failed", { status: 400 })
-    }
+  if (url.pathname === "/leaderboard") return sendJson(response, lobby.leaderboard())
+  if (url.pathname === "/invite") return sendJson(response, invitePayload(url.host))
+  if (url.pathname === "/finish" && request.method === "POST") return void submitResult(request, response)
+  if (url.pathname === "/") return sendText(response, 200, renderLobbyPage(url.host), "text/html; charset=utf-8")
 
-    if (url.pathname === "/leaderboard") return json(lobby.leaderboard())
-    if (url.pathname === "/invite") return json(invitePayload(url.host))
-    if (url.pathname === "/finish" && request.method === "POST") return submitResult(request)
-    if (url.pathname === "/") return new Response(renderLobbyPage(url.host), { headers: { "content-type": "text/html; charset=utf-8" } })
-
-    return new Response("Not found", { status: 404 })
-  },
-  websocket: {
-    open(ws) {
-      lobby.join(ws.data.id, ws.data.name, ws.data.role)
-      sockets.add(ws)
-      broadcastState()
-    },
-    close(ws) {
-      lobby.leave(ws.data.id)
-      sockets.delete(ws)
-      broadcastState()
-    },
-    message(ws, message) {
-      if (typeof message === "string") handleSocketMessage(ws, message)
-    },
-  },
+  sendText(response, 404, "Not found")
 })
+const websocketServer = new WebSocketServer({ noServer: true })
+
+server.on("upgrade", (request, socket, head) => {
+  const url = new URL(request.url ?? "/", `http://${request.headers.host ?? `localhost:${options.port}`}`)
+  if (url.pathname !== "/ws") {
+    socket.destroy()
+    return
+  }
+  const role: LobbyRole = url.searchParams.get("role") === "spectator" ? "spectator" : "player"
+  const name = url.searchParams.get("name")?.trim() || (role === "spectator" ? "Spectator" : "Crawler")
+  const data: LobbySocketData = { id: crypto.randomUUID(), name, role }
+  websocketServer.handleUpgrade(request, socket, head, (socket) => {
+    const ws = socket as LobbyWebSocket
+    ws.data = data
+    websocketServer.emit("connection", ws, request)
+  })
+})
+
+websocketServer.on("connection", (ws: LobbyWebSocket) => {
+  lobby.join(ws.data.id, ws.data.name, ws.data.role)
+  sockets.add(ws)
+  broadcastState()
+  ws.on("close", () => {
+    lobby.leave(ws.data.id)
+    sockets.delete(ws)
+    broadcastState()
+  })
+  ws.on("message", (message) => handleSocketMessage(ws, message))
+})
+
+server.listen(options.port)
 
 console.log(`opendungeon lobby`)
 console.log(`Mode: ${options.mode}`)
 console.log(`Seed: ${options.seed}`)
 console.log(`Invite: ${lobby.inviteCode}`)
-console.log(`URL:  http://localhost:${server.port}`)
-console.log(`Run:  ${lobbyCommand(`localhost:${server.port}`)}`)
-
-type ServerWebSocket = Bun.ServerWebSocket<LobbySocketData>
+console.log(`URL:  http://localhost:${options.port}`)
+console.log(`Run:  ${lobbyCommand(`localhost:${options.port}`)}`)
 
 function parseArgs(args: string[]) {
   const options = {
@@ -82,16 +90,15 @@ function parseArgs(args: string[]) {
   return options
 }
 
-function submitResult(request: Request) {
-  return request
-    .json()
+function submitResult(request: IncomingMessage, response: ServerResponse) {
+  readJsonBody(request)
     .then((body) => {
       const result = lobby.submitRaceResult(body)
       if (options.leaderboardPath) saveRaceResults(options.leaderboardPath, lobby.leaderboard())
       broadcastState()
-      return json(result, 201)
+      sendJson(response, result, 201)
     })
-    .catch(() => json({ error: "invalid result payload" }, 400))
+    .catch(() => sendJson(response, { error: "invalid result payload" }, 400))
 }
 
 function invitePayload(host: string) {
@@ -104,15 +111,16 @@ function invitePayload(host: string) {
   }
 }
 
-function handleSocketMessage(ws: ServerWebSocket, message: string) {
-  if (message === "state") {
+function handleSocketMessage(ws: LobbyWebSocket, message: RawData) {
+  const text = message.toString("utf8")
+  if (text === "state") {
     ws.send(JSON.stringify(lobby.snapshot()))
     return
   }
 
   let payload: Record<string, unknown>
   try {
-    payload = JSON.parse(message) as Record<string, unknown>
+    payload = JSON.parse(text) as Record<string, unknown>
   } catch {
     return
   }
@@ -146,13 +154,40 @@ function handleSocketMessage(ws: ServerWebSocket, message: string) {
 
 function broadcastState() {
   const payload = JSON.stringify(lobby.snapshot())
-  for (const socket of sockets) socket.send(payload)
+  for (const socket of sockets) {
+    if (socket.readyState === 1) socket.send(payload)
+  }
 }
 
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body, null, 2), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8" },
+function sendJson(response: ServerResponse, body: unknown, status = 200) {
+  sendText(response, status, JSON.stringify(body, null, 2), "application/json; charset=utf-8")
+}
+
+function sendText(response: ServerResponse, status: number, body: string, contentType = "text/plain; charset=utf-8") {
+  response.writeHead(status, { "content-type": contentType })
+  response.end(body)
+}
+
+function readJsonBody(request: IncomingMessage) {
+  return new Promise<Record<string, unknown>>((resolve, reject) => {
+    let body = ""
+    request.setEncoding("utf8")
+    request.on("data", (chunk) => {
+      body += chunk
+      if (body.length > 128_000) {
+        request.destroy()
+        reject(new Error("Payload too large."))
+      }
+    })
+    request.on("error", reject)
+    request.on("end", () => {
+      try {
+        const parsed = JSON.parse(body || "{}")
+        resolve(typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {})
+      } catch {
+        reject(new Error("Invalid JSON."))
+      }
+    })
   })
 }
 
@@ -229,5 +264,5 @@ function renderLobbyPage(host: string): string {
 }
 
 function lobbyCommand(host: string) {
-  return `OPENDUNGEON_MODE=${options.mode} OPENDUNGEON_SEED=${options.seed} OPENDUNGEON_LOBBY_URL=http://${host} bun run dev`
+  return `OPENDUNGEON_MODE=${options.mode} OPENDUNGEON_SEED=${options.seed} OPENDUNGEON_LOBBY_URL=http://${host} opendungeon`
 }

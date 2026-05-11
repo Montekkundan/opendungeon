@@ -271,12 +271,11 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
 function handleDialogKey(key: KeyEvent) {
   if (model.dialog === "quit") {
     if (key.name === "s") {
-      saveCurrentRun(true)
-      destroyApp()
+      if (saveCurrentRun(true)) closeRunToTitle("Saved run and returned to title.")
       return
     }
     if (key.name === "q") {
-      destroyApp()
+      closeRunToTitle("Run closed. Autosave remains available.")
       return
     }
     if (key.name === "escape") {
@@ -1076,7 +1075,7 @@ function loadLatestSave() {
 }
 
 function saveCurrentRun(skipFollowupAutosave = false) {
-  if (model.screen !== "game") return
+  if (model.screen !== "game") return false
   try {
     const summary = saveSession(model.session)
     model.saves = listSaves()
@@ -1086,8 +1085,10 @@ function saveCurrentRun(skipFollowupAutosave = false) {
     while (model.session.log.length > 8) model.session.log.pop()
     lastManualSaveSignature = autosaveSignature(model.session)
     if (!skipFollowupAutosave) autosaveCurrentRun("manual-save")
+    return true
   } catch (error) {
     model.saveStatus = error instanceof Error ? error.message : "Manual save failed."
+    return false
   }
 }
 
@@ -1370,10 +1371,14 @@ function queuePlayerMoveAnimationFrame() {
 }
 
 function requestQuit() {
-  if (model.screen === "game" && model.session.status === "running" && hasUnsavedManualChanges()) {
+  if ((model.screen === "game" || model.screen === "village") && model.session.status === "running" && hasUnsavedManualChanges()) {
     model.dialog = "quit"
     model.saveStatus = lastAutosaveSignature === autosaveSignature(model.session) ? "Autosave is current; manual save is older." : "This run has not been saved yet."
     refresh()
+    return
+  }
+  if (model.screen === "game" || model.screen === "village") {
+    closeRunToTitle("Run closed. Terminal remains open.")
     return
   }
   destroyApp()
@@ -1396,6 +1401,17 @@ function destroyApp() {
   if (autosaveTimer) clearInterval(autosaveTimer)
   autosaveTimer = null
   renderer.destroy()
+}
+
+function closeRunToTitle(status: string) {
+  model.dialog = null
+  model.diceRollAnimation = null
+  model.playerMoveAnimation = null
+  model.cameraFocus = null
+  model.screenTransition = null
+  setScreen("start", status)
+  model.menuIndex = model.saves.length ? 0 : 1
+  model.saveStatus = status
 }
 
 async function refreshInternetStatus() {

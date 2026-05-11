@@ -1,3 +1,3 @@
 "@montekkundan/opendungeon": patch
 
-Polish the opening descent scene, quest journal, inventory, and in-run action hints.
+Polish the opening descent scene, quest journal, inventory, in-run action hints, npm/Bun global install launchers, and close-run flow.

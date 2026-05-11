@@ -209,7 +209,7 @@ const tutorialTabs = [
     body: [
       "Ctrl+S or F5 writes a manual local save. The title Save screen lets you load, rename, delete, and inspect thumbnails for local runs.",
       "Autosave keeps one rolling slot after important run changes and on a timer while you play. It is separate from manual saves so quick recovery stays simple.",
-      "If you quit a run with newer changes than the last manual save, the game asks whether to Save & Quit, Quit Anyway, or Cancel.",
+      "If you close a run with newer changes than the last manual save, the game asks whether to Save & Close, Close Anyway, or Cancel.",
     ],
   },
   {
@@ -1609,9 +1609,9 @@ function drawConversationPanel(canvas: Canvas, session: GameSession) {
       canvas.write(optionX, optionY, `${index + 1}`, selected ? UI.gold : UI.muted, UI.panel)
       canvas.write(optionX + 2, optionY, trim(option.label, 12), selected ? UI.focus : UI.soft, UI.panel)
     })
-    canvas.write(x + 14, y + height - 2, trim("1-3 choose  Enter confirm  Esc leave  Q quit", width - 18), UI.muted, UI.panel)
+    canvas.write(x + 14, y + height - 2, trim("1-3 choose  Enter confirm  Esc leave  Q close run", width - 18), UI.muted, UI.panel)
   } else {
-    canvas.write(x + 14, y + height - 2, trim("Enter close  Esc leave  Q quit game", width - 18), UI.muted, UI.panel)
+    canvas.write(x + 14, y + height - 2, trim("Enter close  Esc leave  Q close run", width - 18), UI.muted, UI.panel)
   }
 }
 
@@ -2604,7 +2604,7 @@ function drawDialog(canvas: Canvas, model: AppModel) {
       ["Combat", "Tab target, 1-6 skill, F flee, Enter rolls d20"],
       ["Camera", "- wider FOV, = closer view"],
       ["Overlay", "U hides or shows the UI for this run"],
-      ["Run", "R rest, Esc pause, Q quit"],
+      ["Run", "R rest, Esc pause, Q close run"],
     ]
     rows.forEach((row, index) => {
       const rowY = y + 4 + index * 2
@@ -2620,7 +2620,7 @@ function drawDialog(canvas: Canvas, model: AppModel) {
     drawPauseAction(canvas, x + 24, y + 8, width - 31, "M", "Save manager", UI.cyan)
     drawPauseAction(canvas, x + 24, y + 10, width - 31, "S", "Settings", UI.cyan)
     drawPauseAction(canvas, x + 24, y + 12, width - 31, "T", "Quit to title", UI.gold)
-    drawPauseAction(canvas, x + 24, y + 14, width - 31, "Q", "Exit game", UI.hp)
+    drawPauseAction(canvas, x + 24, y + 14, width - 31, "Q", "Close run", UI.hp)
     writeWrapped(canvas, x + 4, y + height - 5, width - 8, ["Race mode keeps the same seed so friends can replay this generated crawl."], 2, UI.soft, UI.panel)
   }
 
@@ -2637,8 +2637,8 @@ function drawDialog(canvas: Canvas, model: AppModel) {
       UI.soft,
       UI.panel,
     )
-    drawPauseAction(canvas, x + 24, y + 9, width - 31, "S", "Save & Quit", UI.focus)
-    drawPauseAction(canvas, x + 24, y + 11, width - 31, "Q", "Quit Anyway", UI.hp)
+    drawPauseAction(canvas, x + 24, y + 9, width - 31, "S", "Save & Close", UI.focus)
+    drawPauseAction(canvas, x + 24, y + 11, width - 31, "Q", "Close Anyway", UI.hp)
     drawPauseAction(canvas, x + 24, y + 13, width - 31, "Esc", "Cancel", UI.gold)
     if (model.saveStatus) canvas.write(x + 4, y + height - 4, trim(model.saveStatus, width - 8), UI.muted, UI.panel)
   }
