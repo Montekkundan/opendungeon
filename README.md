@@ -58,10 +58,11 @@ bun run host -- --mode coop --seed 2423368 --port 3737
 ```bash
 bun install --frozen-lockfile
 bun run package:check
-npm publish --access public --otp <6-digit-code>
+bun run changeset
+git push origin main
 ```
 
-For Bun players, publish to npm. Bun installs global packages from the npm registry, so there is no separate Bun registry step.
+The main-branch npm workflow opens a Changesets version PR. Merging that PR updates `package.json`, `src/version.ts`, and publishes the new npm version with the `NPM_TOKEN` GitHub secret. For Bun players, publish to npm; Bun installs global packages from the npm registry, so there is no separate Bun registry step.
 
 ### Release
 
