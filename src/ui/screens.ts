@@ -430,7 +430,7 @@ function drawStartMenuRow(canvas: Canvas, x: number, y: number, width: number, h
   const hint = selected ? startMenuHint(labelText) : ""
   const lineY = y + (height > 1 ? 1 : 0)
   if (selected) canvas.fill(x, y, width, height, " ", cleanPanel2, cleanPanel2)
-  canvas.write(x + 5, lineY, trim(labelText, Math.max(4, width - 28)), fg, bg)
+  writeCentered(canvas, x, lineY, width, trim(labelText, Math.max(4, width - 28)), fg, bg)
   if (hint) canvas.write(x + Math.max(18, width - hint.length - 5), lineY, hint, disabled ? UI.muted : UI.focus, bg)
 }
 
@@ -2822,7 +2822,6 @@ function drawDialog(canvas: Canvas, model: AppModel) {
     drawPauseAction(canvas, x + 24, y + 10, width - 31, "S", "Settings", UI.cyan)
     drawPauseAction(canvas, x + 24, y + 12, width - 31, "T", "Quit to title", UI.gold)
     drawPauseAction(canvas, x + 24, y + 14, width - 31, "Q", "Close run", UI.hp)
-    writeWrapped(canvas, x + 4, y + height - 5, width - 8, ["Race mode keeps the same seed so friends can replay this generated crawl."], 2, UI.soft, UI.panel)
   }
 
   if (model.dialog === "quit") {

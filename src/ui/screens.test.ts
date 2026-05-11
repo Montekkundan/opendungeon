@@ -22,7 +22,7 @@ describe("terminal renderer snapshots", () => {
       width: 80,
       height: 24,
       model: modelFor("start", createSession(1234)),
-      expectedHash: "848f70c3",
+      expectedHash: "0dec2cde",
       requiredText: ["OPENDUNGEON", "New descent", "Settings", "v0.1.0"],
     },
     {
@@ -164,13 +164,27 @@ test("title shows update command when a newer version is available", () => {
 test("title menu keeps only the clean padded item list", () => {
   const output = draw(modelFor("start", createSession(1234), { saves: [saveSummaryFixture()] }), 120, 40)
   const text = screenText(output.chunks)
+  const selectedRow = text.split("\n").find((row) => row.includes("New descent")) ?? ""
+  const selectedTextStart = selectedRow.indexOf("New descent")
 
   expect(text).toContain("terminal dungeon crawler")
   expect(text).toContain("New descent")
+  expect(selectedTextStart).toBeGreaterThanOrEqual(54)
+  expect(selectedTextStart).toBeLessThanOrEqual(56)
   expect(text).not.toContain("@local-crawler")
   expect(text).not.toContain("local saves")
   expect(text).not.toContain("internet online")
   expect(text).not.toContain("> New descent")
+})
+
+test("pause dialog keeps mode notes out of the action stack", () => {
+  const output = draw(modelFor("game", createSession(1234, "race"), { dialog: "pause" }), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("PAUSED")
+  expect(text).toContain("Resume")
+  expect(text).toContain("Close run")
+  expect(text).not.toContain("Race mode keeps")
 })
 
 test("cloud profile screen draws account once and names local-only action clearly", () => {
