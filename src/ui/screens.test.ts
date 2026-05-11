@@ -183,7 +183,8 @@ test("pause dialog keeps mode notes out of the action stack", () => {
 
   expect(text).toContain("PAUSED")
   expect(text).toContain("Resume")
-  expect(text).toContain("Close run")
+  expect(text).toContain("Quit to title")
+  expect(text).not.toContain("Close run")
   expect(text).not.toContain("Race mode keeps")
 })
 

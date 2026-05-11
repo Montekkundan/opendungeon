@@ -34,7 +34,7 @@ import { actorLabel } from "../game/glyphs.js"
 import { saveDirectory, type SaveSummary } from "../game/saveStore.js"
 import { profilePath, type UserSettings } from "../game/settingsStore.js"
 import { formatModifier, statAbbreviations, statLabels, statLine, statsForClass } from "../game/stats.js"
-import { clamp, wrap } from "../shared/numeric.js"
+import { clamp, easeOutCubic, wrap } from "../shared/numeric.js"
 import { titleUpdateNotice, type UpdateStatus } from "../system/updateCheck.js"
 import { Canvas } from "./canvas.js"
 
@@ -2805,7 +2805,7 @@ function drawDialog(canvas: Canvas, model: AppModel) {
       ["Combat", "Tab target, 1-6 skill, F flee, Enter rolls d20"],
       ["Camera", "- wider FOV, = closer view"],
       ["Overlay", "U hides or shows the UI for this run"],
-      ["Run", "R rest, Esc pause, Q close run"],
+      ["Run", "R rest, Esc pause, Q quit prompt"],
     ]
     rows.forEach((row, index) => {
       const rowY = y + 4 + index * 2
@@ -2821,7 +2821,6 @@ function drawDialog(canvas: Canvas, model: AppModel) {
     drawPauseAction(canvas, x + 24, y + 8, width - 31, "M", "Save manager", UI.cyan)
     drawPauseAction(canvas, x + 24, y + 10, width - 31, "S", "Settings", UI.cyan)
     drawPauseAction(canvas, x + 24, y + 12, width - 31, "T", "Quit to title", UI.gold)
-    drawPauseAction(canvas, x + 24, y + 14, width - 31, "Q", "Close run", UI.hp)
   }
 
   if (model.dialog === "quit") {
@@ -2898,8 +2897,7 @@ function drawScreenTransition(canvas: Canvas, transition: ScreenTransition) {
   const progress = clamp(elapsed / Math.max(1, transition.durationMs), 0, 1)
   if (progress >= 1) return
 
-  const close = progress < 0.5 ? progress * 2 : (1 - progress) * 2
-  const shadeRows = Math.ceil((1 - close) * canvas.height)
+  const shadeRows = Math.ceil((1 - easeOutCubic(progress)) * canvas.height)
   const color = transition.kind === "portal" ? "#152d32" : "#18291c"
   for (let row = 0; row < shadeRows; row++) {
     const top = row
@@ -2908,7 +2906,7 @@ function drawScreenTransition(canvas: Canvas, transition: ScreenTransition) {
     if (bottom !== top) canvas.fill(0, bottom, canvas.width, 1, " ", color, color)
   }
 
-  if (canvas.width >= 52 && canvas.height >= 18) {
+  if (progress < 0.72 && canvas.width >= 52 && canvas.height >= 18) {
     const width = Math.min(46, canvas.width - 8)
     const x = Math.floor((canvas.width - width) / 2)
     const y = Math.floor(canvas.height / 2) - 2

@@ -1477,8 +1477,20 @@ export function rest(session: GameSession) {
     return
   }
   const focusGain = 1 + Math.max(0, session.floorModifier.restFocusBonus) + talentRestFocusBonus(session)
+  const beforeFocus = session.focus
+  const beforeHp = session.hp
   session.focus = Math.min(session.maxFocus, session.focus + focusGain)
-  session.log.unshift(focusGain > 1 ? `${session.floorModifier.name} carries your breath. Focus returns.` : "You steady your breath. Focus returns.")
+  if (session.hp < session.maxHp) session.hp = Math.min(session.maxHp, session.hp + 1)
+  const restoredFocus = session.focus - beforeFocus
+  const restoredHp = session.hp - beforeHp
+  const restored = [`${restoredFocus ? `+${restoredFocus} focus` : ""}`, `${restoredHp ? `+${restoredHp} HP` : ""}`].filter(Boolean).join(", ")
+  const message = restored
+    ? focusGain > 1
+      ? `${session.floorModifier.name} steadies you. ${restored}.`
+      : `You rest for a breath. ${restored}.`
+    : "You hold position and listen. Already steady."
+  session.log.unshift(message)
+  addToast(session, "Rested", restored || "Time passes; HP and focus are already full.", restored ? "success" : "info")
   advanceTurn(session)
 }
 

@@ -74,6 +74,7 @@ import { debugOverlaysEnabled } from "./system/debugFlags.js"
 import { checkInternetConnectivity } from "./net/connectivity.js"
 import { normalizeLobbyBaseUrl } from "./net/hostConfig.js"
 import { checkForUpdate, checkingUpdateStatus, handleUpdateCommand } from "./system/updateCheck.js"
+import { easeInOutCubic, lerp } from "./shared/numeric.js"
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`opendungeon ${version}
@@ -177,10 +178,17 @@ const model: AppModel = {
 let submittedSession: GameSession | null = null
 let diceTimer: ReturnType<typeof setTimeout> | null = null
 let moveTimer: ReturnType<typeof setTimeout> | null = null
+let cameraTimer: ReturnType<typeof setTimeout> | null = null
 let transitionTimer: ReturnType<typeof setTimeout> | null = null
 let toastTimer: ReturnType<typeof setTimeout> | null = null
 let autosaveTimer: ReturnType<typeof setInterval> | null = null
 let destroyed = false
+let cameraReturnAnimation: {
+  from: { x: number; y: number }
+  to: { x: number; y: number }
+  startedAt: number
+  durationMs: number
+} | null = null
 let pendingDeleteSaveId: string | null = null
 let lastAutosaveSignature = ""
 let lastManualSaveSignature = ""
@@ -350,17 +358,24 @@ function handleDialogKey(key: KeyEvent) {
     model.diceRollAnimation = null
     return
   }
-  if (model.dialog === "pause" && key.name === "q") {
-    requestQuit()
-    return
-  }
   if (model.dialog === "pause" && key.name === "m") {
     refreshSaveList()
     model.dialog = "saveManager"
     return
   }
+  if (model.dialog === "cutscene") {
+    if (key.name === "escape") {
+      model.dialog = null
+      clearCameraReturnAnimation()
+      return
+    }
+    if (isConfirmKey(key)) {
+      model.dialog = null
+      startCameraReturnAnimation()
+      return
+    }
+  }
   if (key.name === "escape" || key.name === "return" || key.name === "enter" || key.name === "linefeed") {
-    if (model.dialog === "cutscene") model.cameraFocus = null
     model.dialog = null
   }
 }
@@ -786,6 +801,15 @@ function handleGameKey(key: KeyEvent) {
       model.saveStatus = "Conversation closed."
       return
     }
+    if (isConfirmKey(key)) {
+      if (model.session.conversation.status === "completed") {
+        model.session.conversation = null
+        model.saveStatus = "Conversation closed."
+      } else {
+        interactWithWorld(model.session)
+      }
+      return
+    }
     if (/^[1-3]$/.test(key.name)) {
       chooseConversationOption(model.session, Number(key.name) - 1)
       return
@@ -984,6 +1008,7 @@ function confirmMenu() {
 function startRun() {
   model.session = createSession(model.seed, currentMode(model).id, currentClass(model).id, model.session.hero.name, model.session.hero.appearance)
   submittedSession = null
+  clearCameraReturnAnimation(false)
   setScreen("game", "The descent opens.", "portal")
   playLocalCutscene(model.session, "waking-cell")
   model.dialog = "cutscene"
@@ -1298,9 +1323,74 @@ function startScreenTransition(from: ScreenId, to: ScreenId, label: string, kind
     label,
     kind,
     startedAt: Date.now(),
-    durationMs: kind === "portal" || kind === "village" ? 620 : 420,
+    durationMs: kind === "portal" ? 1150 : kind === "village" ? 1000 : 520,
   }
   queueScreenTransitionFrame()
+}
+
+function startCameraReturnAnimation() {
+  const from = model.cameraFocus
+  clearCameraReturnAnimation(false)
+  if (!from || model.session.status !== "running") {
+    model.cameraFocus = null
+    return
+  }
+
+  const to = { ...model.session.player }
+  if (from.x === to.x && from.y === to.y) {
+    model.cameraFocus = null
+    return
+  }
+
+  if (model.settings.reduceMotion) {
+    model.cameraFocus = null
+    return
+  }
+
+  const distance = Math.abs(from.x - to.x) + Math.abs(from.y - to.y)
+  cameraReturnAnimation = {
+    from: { ...from },
+    to,
+    startedAt: Date.now(),
+    durationMs: Math.min(1700, Math.max(900, 760 + distance * 44)),
+  }
+  applyCameraReturnFrame()
+}
+
+function clearCameraReturnAnimation(clearFocus = true) {
+  if (cameraTimer) clearTimeout(cameraTimer)
+  cameraTimer = null
+  cameraReturnAnimation = null
+  if (clearFocus) model.cameraFocus = null
+}
+
+function applyCameraReturnFrame() {
+  const animation = cameraReturnAnimation
+  if (!animation || destroyed) return
+
+  const progress = Math.min(1, Math.max(0, (Date.now() - animation.startedAt) / animation.durationMs))
+  const eased = easeInOutCubic(progress)
+  model.cameraFocus = {
+    x: Math.round(lerp(animation.from.x, animation.to.x, eased)),
+    y: Math.round(lerp(animation.from.y, animation.to.y, eased)),
+  }
+
+  if (progress >= 1) {
+    clearCameraReturnAnimation()
+    refresh()
+    return
+  }
+
+  refresh()
+  queueCameraReturnFrame()
+}
+
+function queueCameraReturnFrame() {
+  if (cameraTimer || destroyed) return
+  cameraTimer = setTimeout(() => {
+    cameraTimer = null
+    applyCameraReturnFrame()
+  }, 50)
 }
 
 function queueScreenTransitionFrame() {
@@ -1428,6 +1518,9 @@ function destroyApp() {
   diceTimer = null
   if (moveTimer) clearTimeout(moveTimer)
   moveTimer = null
+  if (cameraTimer) clearTimeout(cameraTimer)
+  cameraTimer = null
+  cameraReturnAnimation = null
   if (transitionTimer) clearTimeout(transitionTimer)
   transitionTimer = null
   if (toastTimer) clearTimeout(toastTimer)
@@ -1442,7 +1535,7 @@ function closeRunToTitle(status: string) {
   model.dialog = null
   model.diceRollAnimation = null
   model.playerMoveAnimation = null
-  model.cameraFocus = null
+  clearCameraReturnAnimation()
   model.screenTransition = null
   setScreen("start", status)
   model.menuIndex = model.saves.length ? 0 : 1
