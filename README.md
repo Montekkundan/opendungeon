@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/readme/opendungeon-cmux.png" alt="opendungeon terminal title screen">
+  <img src="assets/readme/opendungeon-title.png" alt="opendungeon terminal title screen">
 </p>
 
 ---
