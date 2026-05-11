@@ -395,29 +395,20 @@ function drawStart(canvas: Canvas, model: AppModel) {
   const compact = canvas.height < 30
   const brandY = compact ? 3 : Math.max(3, Math.floor(canvas.height * 0.23))
   const brandHeight = compact ? drawCompactBrand(canvas, brandY, width) : drawBrand(canvas, x, brandY, width, UI.bg)
-  const summaryY = brandY + brandHeight + 1
-  const profile = model.settings.username || "local-crawler"
-  canvas.center(summaryY, trim(`${model.session.hero.name}  @${profile}  ${currentClass(model).name}  ${currentMode(model).name}  seed ${model.seed}`, width), UI.brass, UI.bg)
-  if (!compact) {
-    const net = model.internetStatus === "online" ? "internet online" : model.internetStatus === "checking" ? "checking internet" : "offline local-only"
-    canvas.center(summaryY + 2, trim(`local saves ${model.saves.length}   ${net}   art ${activeAssetPack.name}`, width), model.internetStatus === "online" ? UI.focus : UI.soft, UI.bg)
-  }
 
-  const cardW = Math.min(72, width)
+  const cardW = Math.min(76, width)
   const cardX = Math.floor((canvas.width - cardW) / 2)
-  const cardY = compact ? summaryY + 3 : Math.min(canvas.height - 14, summaryY + 5)
-  drawCommandBox(canvas, cardX, cardY, cardW, startItems[model.menuIndex], startHint(model))
-
-  const listY = cardY + 4
-  const visibleRows = Math.max(4, Math.min(startItems.length, canvas.height - listY - 4))
+  const listY = compact ? brandY + brandHeight + 2 : brandY + brandHeight + 5
+  const rowH = compact || canvas.height < 34 ? 1 : 2
+  const visibleRows = Math.max(4, Math.min(startItems.length, Math.floor((canvas.height - listY - 4) / rowH)))
   const offset = scrollOffset(model.menuIndex, visibleRows, startItems.length)
   startItems.slice(offset, offset + visibleRows).forEach((item, visibleIndex) => {
     const index = offset + visibleIndex
     const selected = model.menuIndex === index
-    drawPlainSelectRow(canvas, cardX, listY + visibleIndex, cardW, item, selected, startItemMeta(item, model), startItemDisabled(item, model))
+    drawStartMenuRow(canvas, cardX, listY + visibleIndex * rowH, cardW, rowH, item, selected, startItemDisabled(item, model))
   })
   if (offset > 0) canvas.write(cardX + cardW - 4, listY - 1, "↑", UI.muted, UI.bg)
-  if (offset + visibleRows < startItems.length) canvas.write(cardX + cardW - 4, listY + visibleRows, "↓", UI.muted, UI.bg)
+  if (offset + visibleRows < startItems.length) canvas.write(cardX + cardW - 4, listY + visibleRows * rowH, "↓", UI.muted, UI.bg)
 
   if (model.saveStatus && canvas.height > 30) canvas.center(canvas.height - 5, trim(model.saveStatus, canvas.width - 4), UI.focus, UI.bg)
   drawTitleVersionStatus(canvas, model)
@@ -429,6 +420,29 @@ function drawStart(canvas: Canvas, model: AppModel) {
     ["?", "help"],
     ["q", "quit"],
   ])
+}
+
+function drawStartMenuRow(canvas: Canvas, x: number, y: number, width: number, height: number, labelText: string, selected: boolean, disabled: boolean) {
+  const bg = selected ? cleanPanel2 : undefined
+  const fg = disabled ? UI.muted : selected ? UI.gold : UI.ink
+  const hint = selected ? startMenuHint(labelText) : ""
+  const lineY = y + (height > 1 ? 1 : 0)
+  if (selected) canvas.fill(x, y, width, height, " ", cleanPanel2, cleanPanel2)
+  canvas.write(x + 5, lineY, trim(labelText, Math.max(4, width - 28)), fg, bg)
+  if (hint) canvas.write(x + Math.max(18, width - hint.length - 5), lineY, hint, disabled ? UI.muted : UI.focus, bg)
+}
+
+function startMenuHint(item: string) {
+  if (item === "New descent") return "play"
+  if (item === "Continue last") return "continue"
+  if (item === "Load save") return "manage"
+  if (item === "Character") return "crawler"
+  if (item === "Multiplayer") return "online"
+  if (item === "Cloud login") return "sync"
+  if (item === "Tutorial") return "learn"
+  if (item === "Settings") return "tune"
+  if (item === "Controls") return "keys"
+  return ""
 }
 
 function drawTitleVersionStatus(canvas: Canvas, model: AppModel) {
@@ -2726,32 +2740,6 @@ function formatInitiativeOrder(session: GameSession) {
     .slice(0, 4)
     .map((entry) => actorLabel(entry.kind))
   return ["You", ...enemies].join(" > ")
-}
-
-function startHint(model: AppModel) {
-  const item = currentStartItem(model)
-  if (startItemDisabled(item, model)) return model.internetStatus === "checking" ? "checking network" : "offline"
-  if (item === "Continue last") return model.saves.length ? "latest save" : "no saves yet"
-  if (item === "New descent") return `${currentClass(model).name} / ${currentMode(model).name}`
-  if (item === "Load save") return `${model.saves.length} local`
-  if (item === "Cloud login") return model.settings.githubUsername ? `@${model.settings.githubUsername}` : "local-only"
-  if (item === "Tutorial") return "mechanics guide"
-  if (item === "Settings") return "profile + accessibility"
-  if (item === "Controls") return model.settings.controlScheme
-  return "open"
-}
-
-function startItemMeta(item: string, model: AppModel) {
-  if (item === "Continue last") return model.saves.length ? "c" : "empty"
-  if (item === "New descent") return "play"
-  if (item === "Load save") return `${model.saves.length}`
-  if (item === "Character") return currentClass(model).name
-  if (item === "Multiplayer") return startItemDisabled(item, model) ? "offline" : currentMode(model).name
-  if (item === "Cloud login") return startItemDisabled(item, model) ? "offline" : model.settings.cloudProvider
-  if (item === "Tutorial") return "tabs"
-  if (item === "Settings") return "local"
-  if (item === "Controls") return model.settings.controlScheme
-  return ""
 }
 
 function startItemDisabled(item: string, model: AppModel) {

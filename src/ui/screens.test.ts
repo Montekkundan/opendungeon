@@ -22,7 +22,7 @@ describe("terminal renderer snapshots", () => {
       width: 80,
       height: 24,
       model: modelFor("start", createSession(1234)),
-      expectedHash: "1e0eb95b",
+      expectedHash: "848f70c3",
       requiredText: ["OPENDUNGEON", "New descent", "Settings", "v0.1.0"],
     },
     {
@@ -161,6 +161,18 @@ test("title shows update command when a newer version is available", () => {
   expect(text).toContain("Update 0.2.0 available. Run opendungeon update.")
 })
 
+test("title menu keeps only the clean padded item list", () => {
+  const output = draw(modelFor("start", createSession(1234), { saves: [saveSummaryFixture()] }), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("terminal dungeon crawler")
+  expect(text).toContain("New descent")
+  expect(text).not.toContain("@local-crawler")
+  expect(text).not.toContain("local saves")
+  expect(text).not.toContain("internet online")
+  expect(text).not.toContain("> New descent")
+})
+
 test("new descent story scene shows narrator text and cutscene controls", () => {
   const session = createSession(1234)
   playLocalCutscene(session, "waking-cell")
@@ -237,6 +249,28 @@ function villageModel() {
   const session = createSession(1234, "coop", "ranger", "Nyx Prime")
   unlockHub(session)
   return modelFor("village", session)
+}
+
+function saveSummaryFixture() {
+  return {
+    id: "local",
+    name: "Manual",
+    savedAt: "2026-05-11T12:00:00.000Z",
+    heroName: "Mira",
+    heroTitle: "Ranger of Hollow Paths",
+    classId: "ranger",
+    mode: "solo",
+    seed: 1234,
+    floor: 1,
+    finalFloor: 5,
+    turn: 0,
+    level: 1,
+    gold: 0,
+    status: "running",
+    path: "/tmp/manual.json",
+    slot: "manual" as const,
+    thumbnail: [],
+  }
 }
 
 function modelFor(screen: ScreenId, session = createSession(1234), overrides: Partial<AppModel> = {}): AppModel {
