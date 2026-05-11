@@ -41,20 +41,24 @@ bun run dev
 
 ### Multiplayer
 
-`localhost` only works on the same computer. For friends, host on `0.0.0.0` and share the LAN IP printed by the host. For an internet server, open TCP port `3737` and set the public URL or domain.
+`localhost` only works on the same computer. For friends on the same Wi-Fi/LAN, host on `0.0.0.0` and share the LAN IP printed by the host.
 
 ```bash
 # Same Wi-Fi / LAN
 opendungeon-host --host 0.0.0.0 --mode coop --seed 2423368 --port 3737
-
-# Public VPS / server
-opendungeon-host --host 0.0.0.0 --public-url http://YOUR_SERVER_IP:3737 --mode coop --seed 2423368 --port 3737
 ```
 
-Friends join with the printed command:
+Friends join with:
 
 ```bash
-opendungeon join http://YOUR_LAN_OR_SERVER_IP:3737
+opendungeon join http://YOUR_LAN_IP:3737
+```
+
+For an internet server, open TCP port `3737` and set the public URL or domain:
+
+```bash
+opendungeon-host --host 0.0.0.0 --public-url http://YOUR_SERVER_IP:3737 --mode coop --seed 2423368 --port 3737
+opendungeon join http://YOUR_SERVER_IP:3737
 ```
 
 For local source testing:
