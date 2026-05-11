@@ -55,7 +55,13 @@ export const staticSpriteIds = [
   "shield",
   "armor",
   "key",
+  "lockpick",
   "map",
+  "pack",
+  "food",
+  "gem",
+  "torch",
+  "quest-marker",
   "trap",
   "dice",
 ] as const

@@ -1,0 +1,25 @@
+{
+  "tileSize": 8,
+  "order": [
+    "potion",
+    "relic",
+    "chest",
+    "coin",
+    "scroll",
+    "map",
+    "sword",
+    "bow",
+    "staff",
+    "dagger",
+    "axe",
+    "shield",
+    "armor",
+    "key",
+    "trap",
+    "ember",
+    "focus-gem",
+    "dice",
+    "stairs",
+    "door"
+  ]
+}

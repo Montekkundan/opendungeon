@@ -17,12 +17,29 @@ type RuntimeActorSource = {
   folder: string
   frameWidth: number
   frameHeight: number
-  files: Record<SpriteAnimationId, string>
+  files: Record<SpriteAnimationId, string> & Partial<Record<`${SpriteAnimationId}-${"up" | "down" | "left" | "right"}`, string>>
 }
 
 const spriteCache = new Map<string, PixelSprite>()
 const runtimeActorSources = {
-  "hero-soldier": actorSheet("hero-soldier", 100, 100, {
+  "tiny-ranger": actorSheet("tiny-ranger", 18, 18, {
+    idle: "idle.png",
+    walk: "walk.png",
+    "attack-melee": "attack-melee.png",
+    "attack-ranged": "attack-ranged.png",
+    cast: "attack-ranged.png",
+    talk: "idle.png",
+    hurt: "hurt.png",
+    shocked: "hurt.png",
+    death: "death.png",
+    "idle-up": "idle-up.png",
+    "idle-left": "idle-left.png",
+    "idle-right": "idle-right.png",
+    "walk-up": "walk-up.png",
+    "walk-left": "walk-left.png",
+    "walk-right": "walk-right.png",
+  }),
+  "tiny-warden": actorSheet("tiny-warden", 18, 18, {
     idle: "idle.png",
     walk: "walk.png",
     "attack-melee": "attack-melee.png",
@@ -33,7 +50,7 @@ const runtimeActorSources = {
     shocked: "hurt.png",
     death: "death.png",
   }),
-  "crypt-orc": actorSheet("crypt-orc", 100, 100, {
+  "tiny-arcanist": actorSheet("tiny-arcanist", 18, 18, {
     idle: "idle.png",
     walk: "walk.png",
     "attack-melee": "attack-melee.png",
@@ -44,29 +61,108 @@ const runtimeActorSources = {
     shocked: "hurt.png",
     death: "death.png",
   }),
-  "mire-slime": actorSheet("mire-slime", 80, 64, {
+  "tiny-npc": actorSheet("tiny-npc", 18, 18, {
     idle: "idle.png",
     walk: "walk.png",
-    "attack-melee": "attack.png",
-    "attack-ranged": "attack.png",
-    cast: "attack.png",
-    talk: "idle.png",
-    hurt: "hurt.png",
-    shocked: "shocked.png",
-    death: "death.png",
-  }),
-  warden: actorSheet("warden", 96, 96, {
-    idle: "idle.png",
-    walk: "walk.png",
-    "attack-melee": "attack.png",
-    "attack-ranged": "attack.png",
-    cast: "attack.png",
+    "attack-melee": "attack-melee.png",
+    "attack-ranged": "attack-ranged.png",
+    cast: "attack-ranged.png",
     talk: "idle.png",
     hurt: "hurt.png",
     shocked: "hurt.png",
-    death: "hurt.png",
+    death: "death.png",
+  }),
+  "tiny-ghoul": actorSheet("tiny-ghoul", 18, 18, {
+    idle: "idle.png",
+    walk: "walk.png",
+    "attack-melee": "attack-melee.png",
+    "attack-ranged": "attack-ranged.png",
+    cast: "attack-ranged.png",
+    talk: "idle.png",
+    hurt: "hurt.png",
+    shocked: "hurt.png",
+    death: "death.png",
+  }),
+  "tiny-necromancer": actorSheet("tiny-necromancer", 18, 18, {
+    idle: "idle.png",
+    walk: "walk.png",
+    "attack-melee": "attack-melee.png",
+    "attack-ranged": "attack-ranged.png",
+    cast: "attack-ranged.png",
+    talk: "idle.png",
+    hurt: "hurt.png",
+    shocked: "hurt.png",
+    death: "death.png",
+  }),
+  "tiny-boss": actorSheet("tiny-boss", 18, 18, {
+    idle: "idle.png",
+    walk: "walk.png",
+    "attack-melee": "attack-melee.png",
+    "attack-ranged": "attack-ranged.png",
+    cast: "attack-ranged.png",
+    talk: "idle.png",
+    hurt: "hurt.png",
+    shocked: "hurt.png",
+    death: "death.png",
   }),
 } satisfies Record<string, RuntimeActorSource>
+
+const terrainSpriteFrames = {
+  "floor-a": 0,
+  "floor-b": 1,
+  "floor-c": 2,
+  "wall-a": 3,
+  "wall-b": 4,
+} satisfies Partial<Record<StaticSpriteId, number>>
+
+const iconSpriteFrames = {
+  potion: 0,
+  relic: 1,
+  chest: 2,
+  coin: 3,
+  scroll: 4,
+  map: 5,
+  sword: 6,
+  bow: 7,
+  staff: 8,
+  dagger: 9,
+  axe: 10,
+  shield: 11,
+  armor: 12,
+  key: 13,
+  lockpick: 14,
+  trap: 15,
+  ember: 16,
+  "focus-gem": 17,
+  dice: 18,
+  stairs: 19,
+  door: 20,
+  pack: 21,
+  food: 22,
+  gem: 23,
+  torch: 24,
+  "quest-marker": 25,
+} satisfies Partial<Record<StaticSpriteId, number>>
+
+const kettomanIconSpriteFrames = {
+  potion: [0, 1],
+  relic: [6, 5],
+  coin: [2, 5],
+  scroll: [0, 6],
+  "focus-gem": [5, 1],
+  ember: [0, 4],
+  sword: [0, 0],
+  bow: [3, 0],
+  staff: [4, 0],
+  dagger: [1, 0],
+  axe: [2, 0],
+  shield: [6, 0],
+  armor: [4, 2],
+  key: [7, 0],
+  food: [3, 3],
+  gem: [5, 1],
+  torch: [0, 4],
+} satisfies Partial<Record<StaticSpriteId, readonly [number, number]>>
 
 export function pixelSprite(id: PixelSpriteId, width = 8, height = 4): PixelSprite {
   return animatedPixelSprite(id, "idle", 0, width, height)
@@ -78,40 +174,48 @@ export function animatedPixelSprite(
   frame = 0,
   width = 8,
   height = 4,
+  direction?: "up" | "down" | "left" | "right",
 ): PixelSprite {
-  const key = `${id}:${animation}:${frame}:${width}x${height}`
+  const key = `${id}:${animation}:${direction ?? "none"}:${frame}:${width}x${height}`
   const cached = spriteCache.get(key)
   if (cached) return cached
 
-  const sprite = isAnimatedSprite(id) ? sourceActorSprite(id, animation, frame, width, height) ?? fallbackActorSprite(id, animation, frame, width, height) : staticSprite(id, width, height)
+  const sprite = isAnimatedSprite(id) ? sourceActorSprite(id, animation, frame, width, height, direction) ?? fallbackActorSprite(id, animation, frame, width, height) : staticSprite(id, width, height)
 
   spriteCache.set(key, sprite)
   return sprite
 }
 
-function sourceActorSprite(id: AnimatedSpriteId, animation: SpriteAnimationId, frame: number, width: number, height: number) {
-  const source = actorSource(id, animation)
+function sourceActorSprite(id: AnimatedSpriteId, animation: SpriteAnimationId, frame: number, width: number, height: number, direction?: "up" | "down" | "left" | "right") {
+  const source = actorSource(id, animation, direction)
   if (!source || !existsSync(source.path)) return null
   return sampleSourceFrame(source, frame, width, height)
 }
 
-function actorSource(id: AnimatedSpriteId, animation: SpriteAnimationId): SourceSheet | null {
-  if (id === "slime") return runtimeActorSource("mire-slime", animation)
-  if (id === "hero-warden") return runtimeActorSource("warden", animation)
-  if (id === "ghoul" || id === "necromancer" || id.startsWith("boss-")) return runtimeActorSource("crypt-orc", animation)
-  return runtimeActorSource("hero-soldier", animation)
+function actorSource(id: AnimatedSpriteId, animation: SpriteAnimationId, direction?: "up" | "down" | "left" | "right"): SourceSheet | null {
+  if (id === "slime") return null
+  if (id === "hero-warden") return runtimeActorSource("tiny-warden", animation, direction)
+  if (id === "hero-arcanist") return runtimeActorSource("tiny-arcanist", animation, direction)
+  if (id === "npc-smith" || id === "npc-oracle") return runtimeActorSource("tiny-npc", animation, direction)
+  if (id === "necromancer") return runtimeActorSource("tiny-necromancer", animation, direction)
+  if (id.startsWith("boss-")) return runtimeActorSource("tiny-boss", animation, direction)
+  if (id === "ghoul") return runtimeActorSource("tiny-ghoul", animation, direction)
+  return runtimeActorSource("tiny-ranger", animation, direction)
 }
 
 function actorSheet(folder: string, frameWidth: number, frameHeight: number, files: RuntimeActorSource["files"]): RuntimeActorSource {
   return { folder, frameWidth, frameHeight, files }
 }
 
-function runtimeActorSource(sourceId: keyof typeof runtimeActorSources, animation: SpriteAnimationId): SourceSheet {
+function runtimeActorSource(sourceId: keyof typeof runtimeActorSources, animation: SpriteAnimationId, direction?: "up" | "down" | "left" | "right"): SourceSheet {
   const source = runtimeActorSources[sourceId]
+  const directionalFile = direction ? source.files[`${animation}-${direction}`] : undefined
   return {
-    path: assetPath("opendungeon-assets", "runtime", "actors", source.folder, source.files[animation]),
+    path: assetPath("opendungeon-assets", "runtime", "actors", source.folder, directionalFile ?? source.files[animation]),
     frameWidth: source.frameWidth,
     frameHeight: source.frameHeight,
+    frameCount: 4,
+    preserveFrame: true,
   }
 }
 
@@ -162,15 +266,59 @@ function actorPalette(id: AnimatedSpriteId) {
 }
 
 function staticSprite(id: StaticSpriteId, width: number, height: number): PixelSprite {
+  if (id === "void") return solidSprite(width, height, "#05070a")
+  const source = staticSource(id)
+  if (source && existsSync(source.path)) return sampleSourceFrame(source, 0, width, height)
   if (id === "floor-a" || id === "floor-b" || id === "floor-c") return textureSprite(width, height, floorPalette(id), id)
   if (id === "wall-a" || id === "wall-b") return textureSprite(width, height, wallPalette(id), id)
-  if (id === "void") return solidSprite(width, height, "#05070a")
 
   const virtualWidth = Math.max(1, width)
   const virtualHeight = Math.max(1, height * 2)
   const pixels = makeVirtual(virtualWidth, virtualHeight)
   drawStaticIcon(pixels, virtualWidth, virtualHeight, id)
   return spriteFromVirtual(pixels, virtualWidth, height)
+}
+
+function staticSource(id: StaticSpriteId): SourceSheet | null {
+  const kettomanIconFrame = kettomanIconSpriteFrames[id as keyof typeof kettomanIconSpriteFrames]
+  if (kettomanIconFrame !== undefined) {
+    const [column, row] = kettomanIconFrame
+    return {
+      path: assetPath("opendungeon-assets", "runtime", "icons", "kettoman-rpg-icons-16x16.png"),
+      frameWidth: 16,
+      frameHeight: 16,
+      frameX: column * 16,
+      frameY: row * 16,
+      frameCount: 1,
+      preserveFrame: true,
+    }
+  }
+
+  const terrainFrame = terrainSpriteFrames[id as keyof typeof terrainSpriteFrames]
+  if (terrainFrame !== undefined) {
+    return {
+      path: assetPath("opendungeon-assets", "runtime", "tiles", "terminal-terrain-8x8.png"),
+      frameWidth: 8,
+      frameHeight: 8,
+      frameX: terrainFrame * 8,
+      frameCount: 1,
+      preserveFrame: true,
+    }
+  }
+
+  const iconFrame = iconSpriteFrames[id as keyof typeof iconSpriteFrames]
+  if (iconFrame !== undefined) {
+    return {
+      path: assetPath("opendungeon-assets", "runtime", "icons", "opendungeon-terminal-icons-8x8.png"),
+      frameWidth: 8,
+      frameHeight: 8,
+      frameX: iconFrame * 8,
+      frameCount: 1,
+      preserveFrame: true,
+    }
+  }
+
+  return null
 }
 
 function textureSprite(width: number, height: number, palette: string[], seed: string): PixelSprite {

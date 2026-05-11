@@ -2,12 +2,40 @@
 
 opendungeon code is MIT licensed. Some bundled game art is third-party pixel art from itch.io and is used as part of the game, not redistributed as standalone asset packs.
 
-- Tiny RPG Character Asset Pack v1.03 by Zerie: https://zerie.itch.io/tiny-rpg-character-asset-pack
-  - Used files: free Soldier and Orc runtime sprites, normalized under `assets/opendungeon-assets/runtime/actors/hero-soldier` and `assets/opendungeon-assets/runtime/actors/crypt-orc`.
-  - License summary from the asset page: personal/commercial use allowed, editing allowed, reselling or redistributing the asset pack is not allowed.
-- Forest Monsters 2D Pixel Art by MonoPixelArt: https://monopixelart.itch.io/forest-monsters-pixel-art
-  - Used files: free Mushroom runtime sprites, normalized under `assets/opendungeon-assets/runtime/actors/mire-slime`.
-  - License summary from the asset page: use in commercial or non-commercial projects allowed, reselling or redistributing the asset pack is not allowed.
-- Samurai 2D Pixel Art by Mattz Art: https://xzany.itch.io/samurai-2d-pixel-art
-  - Used files: free Samurai runtime sprites, normalized under `assets/opendungeon-assets/runtime/actors/warden`.
-  - See `assets/opendungeon-assets/licenses/warden-sprite-license.txt`.
+- Top-Down Game 2D Character (18x18) by gummypopcat: https://gummypopcat.itch.io/top-down-game-2d-character-18x18
+  - Used files: free 18x18 elf character frames, recolored and normalized under `assets/opendungeon-assets/runtime/actors/tiny-ranger`, `tiny-warden`, `tiny-arcanist`, and `tiny-npc`.
+  - License summary from the asset page/comments: commercial project use was approved by the creator; keep creator credit.
+- Faceless Minions by SciGho: https://ninjikin.itch.io/faceless-minions
+  - Used files: free 18x18 minion sheet, normalized under `assets/opendungeon-assets/runtime/actors/tiny-ghoul`, `tiny-necromancer`, `tiny-boss`, and `tiny-guard`.
+  - Asset license: Creative Commons Attribution v4.0 International.
+- Free 8x8 Game Boy Styled Tilesets by Saint Edward Games: https://saintedwardgames.itch.io/free-8x8-game-boy-styled-tilesets
+  - Used files: colorized 8x8 tiles, normalized into `assets/opendungeon-assets/runtime/tiles/terminal-terrain-8x8.png`.
+  - License summary from the asset page: personal/commercial game use is allowed with credit to Anthony Bannach; NFT projects are forbidden.
+- Mini Odyssey Four Seasons Top down tileset 8x8 by Nicktuti: https://nicktuti.itch.io/mini-odyssey-four-seasons-topdown-tileset-8x8
+  - Used files: free spring 8x8 tiles, normalized into `assets/opendungeon-assets/runtime/tiles/terminal-terrain-8x8.png`.
+  - License summary from the asset page: personal/commercial project use and edits are allowed; asset redistribution/resale, NFT/crypto/blockchain, and AI training use are not allowed.
+- 8x8 px various icons by piiixl: https://piiixl.itch.io/8x8px-icons
+  - Used files: free 8x8 icon sheet, normalized into `assets/opendungeon-assets/runtime/icons/piiixl-terminal-icons-8x8.png`.
+  - License summary from the asset page: free for commercial use in games/projects; no resale or redistribution as-is; attribution appreciated.
+- Pixel Art Icons - RPG Essentials (16x16) by Kettoman: https://kettoman.itch.io/pixel-art-icons-rpg-essentials-16x16
+  - Used files: `icons_sheet.png`, copied into `assets/opendungeon-assets/runtime/icons/kettoman-rpg-icons-16x16.png` for inventory, loot, and UI item sprites.
+  - License summary from the bundled license file and asset page: CC0/public domain; commercial and non-commercial use allowed; credit appreciated but not required.
+- RPG Village Tileset (16x16) by franopx: https://franopx.itch.io/rpg-village-tileset-16x16
+  - Reviewed and downloaded to the local ignored cache for village, house, shop, farm, and hub planning; not bundled in runtime yet.
+  - License summary from the asset page: personal and commercial use allowed; credit is not necessary.
+- Green Valley Tileset by Foozle: https://foozlecc.itch.io/green-valley-tileset
+  - Reviewed and downloaded to the local ignored cache for farming/outdoor hub planning; not bundled in runtime yet.
+  - License summary from the bundled readme and asset page: Creative Commons Zero; commercial use and modification allowed; attribution not required.
+- 16x16 DungeonTileset II by 0x72: https://0x72.itch.io/dungeontileset-ii
+  - Reviewed and downloaded to the local ignored cache for future dungeon tile, trap, door, and enemy expansion; not bundled in runtime yet.
+  - License summary from the asset page: Creative Commons Zero; credit is not necessary.
+- Micro Tileset - Overworld & Dungeon by Kacper Wozniak: https://thkaspar.itch.io/micro-tileset-overworld-dungeon
+  - Reviewed and downloaded to the local ignored cache for 8x8 overworld/dungeon experiments; not bundled in runtime yet.
+  - License summary from the current asset page: Creative Commons Zero v1.0 Universal.
+- Chibi Farm Animals 18x18 by Goatyr: https://goatyr.itch.io/chibi-farm-animals
+  - Reviewed and downloaded to the local ignored cache for future NPC/animal work; not bundled in the runtime yet.
+  - License summary from the asset page: free pack can be used in a game/app/website/commercial project.
+- Cardboard Castles - Free Assetpack by dani maccari: https://dani-maccari.itch.io/cardboard-castles
+  - Reviewed and downloaded to the local ignored cache for future map/building markers; not bundled in the runtime yet.
+  - License summary from the asset page: personal/commercial project use is allowed with attribution to DANI MACCARI; modifying is allowed; resale/redistribution as assets is not allowed.
+- Scut Pixel Tileset - 8x8 Roguelike by scut was reviewed but not bundled because the free page text limits the free version to non-commercial projects and points commercial users to a paid commercial license.

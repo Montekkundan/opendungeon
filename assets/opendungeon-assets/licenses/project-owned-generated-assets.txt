@@ -2,6 +2,7 @@ OpenDungeon project-owned generated runtime assets
 
 Files:
 - assets/opendungeon-assets/runtime/dice/d20-project-owned.png
+- assets/opendungeon-assets/runtime/icons/opendungeon-terminal-icons-8x8.png
 - assets/opendungeon-assets/runtime/portraits/portraits-project-owned.png
 
 License:

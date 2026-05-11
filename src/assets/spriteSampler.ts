@@ -21,6 +21,9 @@ export type SourceSheet = {
   frameWidth: number
   frameHeight: number
   frameCount?: number
+  frameX?: number
+  frameY?: number
+  preserveFrame?: boolean
 }
 
 type Bounds = {
@@ -37,14 +40,16 @@ export function sampleSourceFrame(source: SourceSheet, frame: number, width: num
   const sheet = loadSheet(source.path)
   const frameCount = source.frameCount ?? Math.max(1, Math.floor(sheet.width / source.frameWidth))
   const sourceFrame = wrap(Math.round(frame), frameCount)
-  const frameX = sourceFrame * source.frameWidth
-  const frameY = 0
-  const bounds = contentBounds(sheet, frameX, frameY, source.frameWidth, source.frameHeight)
+  const frameX = (source.frameX ?? 0) + sourceFrame * source.frameWidth
+  const frameY = source.frameY ?? 0
+  const bounds = source.preserveFrame
+    ? { x: frameX, y: frameY, width: source.frameWidth, height: source.frameHeight }
+    : contentBounds(sheet, frameX, frameY, source.frameWidth, source.frameHeight)
   const virtualWidth = Math.max(1, width)
   const virtualHeight = Math.max(1, height * 2)
   const pixels = makeVirtual(virtualWidth, virtualHeight)
-  const marginX = width >= 10 ? 1 : 0
-  const marginY = height >= 5 ? 1 : 0
+  const marginX = source.preserveFrame ? 0 : width >= 10 ? 1 : 0
+  const marginY = source.preserveFrame ? 0 : height >= 5 ? 1 : 0
   const scale = Math.min(
     Math.max(1, virtualWidth - marginX * 2) / bounds.width,
     Math.max(1, virtualHeight - marginY * 2) / bounds.height,

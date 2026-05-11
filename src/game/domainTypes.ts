@@ -1,4 +1,21 @@
-export type TileId = "void" | "floor" | "wall" | "door" | "stairs" | "potion" | "relic" | "chest" | "trap"
+export type TileId =
+  | "void"
+  | "floor"
+  | "wall"
+  | "door"
+  | "stairs"
+  | "potion"
+  | "relic"
+  | "chest"
+  | "trap"
+  | "note"
+  | "recipe"
+  | "tool"
+  | "deed"
+  | "fossil"
+  | "boss-memory"
+  | "keepsake"
+  | "story-relic"
 
 const enemyActorIds = [
   "slime",

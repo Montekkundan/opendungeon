@@ -6,6 +6,7 @@ import { join } from "node:path"
 import { PNG } from "pngjs"
 import { formatAssetGenerateResult, formatAssetImportResult, runAssetsGenerate, runAssetsImport } from "./assetsCli.js"
 import { validateReferenceAssetImportManifest } from "./referenceImporter.js"
+import { buildSpriteImagePrompt, loadSpriteGenerationSkill } from "./spriteGenerationSkill.js"
 
 describe("assets CLI", () => {
   test("validates asset generation requests without live services in dry-run mode", async () => {
@@ -22,7 +23,10 @@ describe("assets CLI", () => {
   test("generates and stores through injected dependencies", async () => {
     const bytes = tinyPngBytes()
     const result = await runAssetsGenerate(["merchant", "--prompt", "merchant portrait"], {
-      generate: async () => ({ model: "test-model", mimeType: "image/png", bytes }),
+      generate: async (prompt) => {
+        expect(prompt).toBe("merchant portrait")
+        return { model: "test-model", mimeType: "image/png", bytes }
+      },
       store: async (assetId, image) => ({ assetId, storagePath: `/tmp/${assetId}-${image.bytes.length}.png`, backend: "local" }),
     })
 
@@ -35,6 +39,16 @@ describe("assets CLI", () => {
   test("rejects missing asset id or prompt", async () => {
     await expect(runAssetsGenerate(["asset-only"])).rejects.toThrow("Usage:")
     await expect(runAssetsGenerate(["", "--prompt", "x"])).rejects.toThrow("Usage:")
+  })
+
+  test("loads the AI-admin sprite skill for generated image prompts", () => {
+    const skill = loadSpriteGenerationSkill()
+    const prompt = buildSpriteImagePrompt("grave knight walk sheet")
+
+    expect(skill).toContain("OpenDungeon AI Sprite Generation Skill")
+    expect(prompt).toContain("18x18")
+    expect(prompt).toContain("8x8")
+    expect(prompt).toContain("grave knight walk sheet")
   })
 
   test("imports reference assets through a checked manifest", () => {

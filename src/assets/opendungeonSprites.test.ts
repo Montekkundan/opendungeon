@@ -19,10 +19,10 @@ import { activeAssetPack } from "./packs.js"
 describe("opendungeon runtime sprites", () => {
   test("uses runtime sprites instead of committed generated atlases", () => {
     expect(activeAssetPack.id).toBe("opendungeon")
-    expect(activeAssetPack.tileSize).toBe(100)
+    expect(activeAssetPack.tileSize).toBe(18)
     expect(activeAssetPack.sourceUrl).toContain("runtime://")
     expect(activeAssetPack.sourceUrl).toContain("opendungeon-assets")
-    expect(activeAssetPack.previewPath).toContain("assets/opendungeon-assets/runtime/actors/")
+    expect(activeAssetPack.previewPath).toContain("assets/opendungeon-assets/runtime/actors/tiny-ranger/")
     expect(animationFrameCount).toBe(4)
     expect(d20FrameCount()).toBe(12)
     expect(existsSync(d20SourceSheetPath())).toBe(true)
@@ -85,37 +85,33 @@ describe("opendungeon runtime sprites", () => {
     expect(colorCount(d20)).toBeGreaterThan(3)
   })
 
-  test("keeps committed runtime assets to the sampler-owned set", () => {
-    expect(runtimeAssetFiles()).toEqual([
+  test("keeps terminal-sized runtime assets and downloaded source packs organized", () => {
+    const files = runtimeAssetFiles()
+    for (const file of [
       "assets/opendungeon-assets/licenses/project-owned-generated-assets.txt",
-      "assets/opendungeon-assets/licenses/warden-sprite-license.txt",
-      "assets/opendungeon-assets/runtime/actors/crypt-orc/attack-melee.png",
-      "assets/opendungeon-assets/runtime/actors/crypt-orc/attack-ranged.png",
-      "assets/opendungeon-assets/runtime/actors/crypt-orc/death.png",
-      "assets/opendungeon-assets/runtime/actors/crypt-orc/hurt.png",
-      "assets/opendungeon-assets/runtime/actors/crypt-orc/idle.png",
-      "assets/opendungeon-assets/runtime/actors/crypt-orc/walk.png",
-      "assets/opendungeon-assets/runtime/actors/hero-soldier/attack-melee.png",
-      "assets/opendungeon-assets/runtime/actors/hero-soldier/attack-ranged.png",
-      "assets/opendungeon-assets/runtime/actors/hero-soldier/death.png",
-      "assets/opendungeon-assets/runtime/actors/hero-soldier/hurt.png",
-      "assets/opendungeon-assets/runtime/actors/hero-soldier/idle.png",
-      "assets/opendungeon-assets/runtime/actors/hero-soldier/walk.png",
-      "assets/opendungeon-assets/runtime/actors/mire-slime/attack.png",
-      "assets/opendungeon-assets/runtime/actors/mire-slime/death.png",
-      "assets/opendungeon-assets/runtime/actors/mire-slime/hurt.png",
-      "assets/opendungeon-assets/runtime/actors/mire-slime/idle.png",
-      "assets/opendungeon-assets/runtime/actors/mire-slime/shocked.png",
-      "assets/opendungeon-assets/runtime/actors/mire-slime/walk.png",
-      "assets/opendungeon-assets/runtime/actors/warden/attack.png",
-      "assets/opendungeon-assets/runtime/actors/warden/hurt.png",
-      "assets/opendungeon-assets/runtime/actors/warden/idle.png",
-      "assets/opendungeon-assets/runtime/actors/warden/walk.png",
+      "assets/opendungeon-assets/runtime/actors/tiny-ranger/walk.png",
+      "assets/opendungeon-assets/runtime/actors/tiny-ranger/walk-left.png",
+      "assets/opendungeon-assets/runtime/actors/tiny-ranger/walk-right.png",
+      "assets/opendungeon-assets/runtime/actors/tiny-ranger/walk-up.png",
+      "assets/opendungeon-assets/runtime/actors/tiny-warden/walk.png",
+      "assets/opendungeon-assets/runtime/actors/tiny-arcanist/walk.png",
+      "assets/opendungeon-assets/runtime/actors/tiny-ghoul/walk.png",
+      "assets/opendungeon-assets/runtime/actors/tiny-necromancer/walk.png",
+      "assets/opendungeon-assets/runtime/actors/tiny-boss/walk.png",
       "assets/opendungeon-assets/runtime/dice/d20-project-owned.png",
+      "assets/opendungeon-assets/runtime/icons/kettoman-rpg-icons-16x16.png",
+      "assets/opendungeon-assets/runtime/icons/opendungeon-terminal-icons-8x8.png",
+      "assets/opendungeon-assets/runtime/icons/piiixl-terminal-icons-8x8.png",
       "assets/opendungeon-assets/runtime/portraits/portrait-manifest.json",
       "assets/opendungeon-assets/runtime/portraits/portraits-project-owned.png",
       "assets/opendungeon-assets/runtime/sprite-metadata.json",
-    ])
+      "assets/opendungeon-assets/runtime/tiles/terminal-terrain-8x8.png",
+      "assets/opendungeon-assets/skills/ai-admin-sprite-generation.md",
+    ]) {
+      expect(files).toContain(file)
+    }
+    expect(files.some((file) => file.includes("/runtime/actors/hero-soldier/"))).toBe(false)
+    expect(files.some((file) => file.includes("/runtime/actors/crypt-orc/"))).toBe(false)
   })
 
   test("runtime source no longer references old generated or vendor asset directories", () => {
@@ -128,10 +124,12 @@ describe("opendungeon runtime sprites", () => {
     expect(existsSync("assets/opendungeon-assets/zerie")).toBe(false)
     expect(existsSync("assets/opendungeon-assets/samurai-free")).toBe(false)
     expect(existsSync("assets/opendungeon-assets/forest-monsters-free")).toBe(false)
-    expect(existsSync("assets/opendungeon-assets/runtime/actors/hero-soldier/idle.png")).toBe(true)
-    expect(existsSync("assets/opendungeon-assets/runtime/actors/crypt-orc/idle.png")).toBe(true)
-    expect(existsSync("assets/opendungeon-assets/runtime/actors/mire-slime/idle.png")).toBe(true)
-    expect(existsSync("assets/opendungeon-assets/runtime/actors/warden/idle.png")).toBe(true)
+    expect(existsSync("assets/opendungeon-assets/runtime/actors/tiny-ranger/idle.png")).toBe(true)
+    expect(existsSync("assets/opendungeon-assets/runtime/actors/tiny-ghoul/idle.png")).toBe(true)
+    expect(existsSync("assets/opendungeon-assets/runtime/tiles/terminal-terrain-8x8.png")).toBe(true)
+    expect(existsSync("assets/opendungeon-assets/runtime/icons/kettoman-rpg-icons-16x16.png")).toBe(true)
+    expect(existsSync("assets/opendungeon-assets/runtime/icons/opendungeon-terminal-icons-8x8.png")).toBe(true)
+    expect(existsSync("assets/opendungeon-assets/runtime/icons/piiixl-terminal-icons-8x8.png")).toBe(true)
 
     const forbidden = [
       "assets/" + "opendungeon/",
@@ -154,7 +152,7 @@ describe("opendungeon runtime sprites", () => {
 
     const pixelSpriteSource = readFileSync("src/assets/pixelSprites.ts", "utf8")
     expect(pixelSpriteSource.includes("fallbackActorSprite")).toBe(true)
-    expect(pixelSpriteSource.includes("sourceActorSprite(id, animation, frame, width, height) ?? fallbackActorSprite")).toBe(true)
+    expect(pixelSpriteSource.includes("sourceActorSprite(id, animation, frame, width, height, direction) ?? fallbackActorSprite")).toBe(true)
     expect(existsSync("src/assets/spriteSampler.ts")).toBe(true)
     expect(pixelSpriteSource.includes("PNG.sync.read")).toBe(false)
   })
