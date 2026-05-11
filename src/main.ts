@@ -966,10 +966,15 @@ function startRun() {
 
 function introCameraPoint(session: GameSession) {
   const quest = session.world.quests.find((candidate) => candidate.status === "active")
-  const eventId = quest?.objectiveEventIds.find((id) => session.world.events.find((event) => event.id === id)?.status !== "completed") ?? quest?.objectiveEventIds[0]
-  const event = eventId ? session.world.events.find((candidate) => candidate.id === eventId) : undefined
-  const anchor = event ? session.world.anchors.find((candidate) => candidate.id === event.anchorId && candidate.floor === session.floor) : undefined
-  return anchor?.position ?? null
+  const candidates =
+    quest?.objectiveEventIds
+      .flatMap((id) => {
+        const event = session.world.events.find((candidate) => candidate.id === id)
+        if (!event || event.status === "completed") return []
+        const anchor = session.world.anchors.find((candidate) => candidate.id === event.anchorId && candidate.floor === session.floor)
+        return anchor ? [anchor.position] : []
+      }) ?? []
+  return candidates.find((point) => Math.abs(point.x - session.player.x) + Math.abs(point.y - session.player.y) > 0) ?? candidates[0] ?? null
 }
 
 function openSaveBrowser() {

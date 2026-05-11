@@ -38,7 +38,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: skillCheckModel(),
-      expectedHash: "ec26f404",
+      expectedHash: "4022bae6",
       requiredText: ["Talent Check", "Whispering Relic", "Enter roll d20"],
     },
     {
@@ -46,7 +46,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: combatModel(),
-      expectedHash: "b622549a",
+      expectedHash: "62186df1",
       requiredText: ["Turn Combat", "Order", "Shado", "Necroman"],
     },
     {
@@ -70,7 +70,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("game", createSession(1234), { dialog: "book" }),
-      expectedHash: "5a13c842",
+      expectedHash: "60b7348c",
       requiredText: ["BOOK", "Known", "Waking Cell", "Portal Room"],
     },
     {
@@ -197,6 +197,16 @@ test("quickbar does not expose gold as a dead G action", () => {
 
   expect(text).toContain("0g")
   expect(text).not.toContain("G────────")
+})
+
+test("minimap renders a local radar with objective direction", () => {
+  const output = draw(modelFor("game", createSession(1234)), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Radar  goal E15")
+  expect(text).toContain("Goal E15 (15 steps)")
+  expect(text).toContain("@you !foe nNPC $shop >exit")
+  expect(text).not.toContain("Mini map")
 })
 
 function skillCheckModel() {

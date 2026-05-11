@@ -29,6 +29,7 @@ import {
   type MultiplayerMode,
 } from "../game/session.js"
 import { appearanceLabel, heroSpriteForAppearance, normalizeHeroAppearance, weaponSpriteForAppearance, type HeroAppearance } from "../game/appearance.js"
+import { isEnemyActorId, isNpcActorId, type TileId } from "../game/domainTypes.js"
 import { actorLabel } from "../game/glyphs.js"
 import { saveDirectory, type SaveSummary } from "../game/saveStore.js"
 import { profilePath, type UserSettings } from "../game/settingsStore.js"
@@ -974,66 +975,109 @@ function mapTileSize(canvas: Canvas, debugView: boolean, preference: UserSetting
 
 function drawMinimap(canvas: Canvas, session: GameSession) {
   if (canvas.width < 96 || canvas.height < 28) return
-  const width = Math.min(24, Math.max(18, Math.floor(canvas.width * 0.14)))
-  const height = Math.min(10, Math.max(8, Math.floor(canvas.height * 0.18)))
+  const width = Math.min(38, Math.max(32, Math.floor(canvas.width * 0.22)))
+  const availableHeight = canvas.height - gameQuickbarHeight(canvas) - gameHudHeight(canvas) - 4
+  const height = Math.min(15, Math.max(11, Math.min(availableHeight, Math.floor(canvas.height * 0.28))))
   const x = 2
   const y = canvas.height - gameQuickbarHeight(canvas) - height - 1
-  if (y <= gameHudHeight(canvas) + 1) return
+  if (height < 10 || y <= gameHudHeight(canvas) + 1) return
 
-  canvas.fill(x, y, width, height, " ", "#0b1218", "#0b1218")
+  const bg = "#0b1218"
+  canvas.fill(x, y, width, height, " ", bg, bg)
   canvas.border(x, y, width, height, UI.edge)
-  canvas.write(x + 2, y, "Mini map", UI.gold, "#0b1218")
 
   const innerX = x + 1
   const innerY = y + 1
   const innerW = width - 2
-  const innerH = height - 3
-  const dungeonW = session.dungeon.width
-  const dungeonH = session.dungeon.height
+  const innerH = height - 4
   const objective = activeQuestObjectivePoint(session)
-  const objectiveCell =
-    objective &&
-    objective.x >= 0 &&
-    objective.y >= 0 &&
-    objective.x < dungeonW &&
-    objective.y < dungeonH
-      ? {
-          x: clamp(Math.round((objective.x / Math.max(1, dungeonW - 1)) * (innerW - 1)), 0, innerW - 1),
-          y: clamp(Math.round((objective.y / Math.max(1, dungeonH - 1)) * (innerH - 1)), 0, innerH - 1),
-        }
-      : null
+  const startX = session.player.x - Math.floor(innerW / 2)
+  const startY = session.player.y - Math.floor(innerH / 2)
+  let objectiveVisible = false
+  const title = objective ? `Radar  goal ${objectiveDirectionLabel(session.player, objective)}` : "Radar"
+  canvas.write(x + 2, y, trim(title, width - 4), UI.gold, bg)
 
   for (let row = 0; row < innerH; row++) {
     for (let col = 0; col < innerW; col++) {
-      const mapX = clamp(Math.floor((col / Math.max(1, innerW - 1)) * (dungeonW - 1)), 0, dungeonW - 1)
-      const mapY = clamp(Math.floor((row / Math.max(1, innerH - 1)) * (dungeonH - 1)), 0, dungeonH - 1)
-      const key = pointKey({ x: mapX, y: mapY })
-      const seen = session.seen.has(key)
+      const mapX = startX + col
+      const mapY = startY + row
+      const point = { x: mapX, y: mapY }
+      const key = pointKey(point)
       const visible = session.visible.has(key)
-      const tile = session.dungeon.tiles[mapY]?.[mapX] ?? "void"
-      let fg = seen ? (tile === "wall" ? "#7f8a94" : visible ? "#86d9ad" : "#416b5f") : "#101820"
-      let ch = seen ? (tile === "wall" ? "#" : ".") : " "
+      const seen = session.seen.has(key)
+      let marker = minimapTileMarker(session.dungeon.tiles[mapY]?.[mapX] ?? "void", visible, seen)
+      const actor = visible ? actorAt(session.dungeon.actors, point) : undefined
 
-      if (objectiveCell && col === objectiveCell.x && row === objectiveCell.y) {
-        ch = "◆"
-        fg = UI.gold
+      if (actor) marker = minimapActorMarker(actor.kind)
+      if (objective && objective.x === mapX && objective.y === mapY) {
+        marker = { ch: "◆", fg: UI.gold }
+        objectiveVisible = true
       }
       if (session.player.x === mapX && session.player.y === mapY) {
-        ch = "@"
-        fg = UI.focus
+        marker = { ch: "@", fg: UI.focus }
       }
-      canvas.write(innerX + col, innerY + row, ch, fg, "#0b1218")
+      canvas.write(innerX + col, innerY + row, marker.ch, marker.fg, bg)
     }
   }
-  canvas.write(x + 1, y + height - 2, trim("@ you  ◆ quest", width - 2), UI.soft, "#0b1218")
+  if (objective && !objectiveVisible) drawMinimapObjectivePointer(canvas, objective, startX, startY, innerX, innerY, innerW, innerH, bg)
+  const detail = objective ? `Goal ${objectiveDistanceText(session.player, objective)}  floor ${session.floor}` : `Floor ${session.floor}`
+  canvas.write(x + 1, y + height - 3, trim(detail, width - 2), UI.brass, bg)
+  canvas.write(x + 1, y + height - 2, trim("@you !foe nNPC $shop >exit ◆", width - 2), UI.soft, bg)
+}
+
+function minimapTileMarker(tile: TileId, visible: boolean, seen: boolean) {
+  if (!seen && !visible) return { ch: " ", fg: "#101820" }
+  const dim = visible ? 1 : 0
+  if (tile === "wall") return { ch: "#", fg: dim ? "#a7b0ba" : "#52606b" }
+  if (tile === "door") return { ch: "+", fg: dim ? UI.gold : "#7d6b42" }
+  if (tile === "stairs") return { ch: ">", fg: dim ? UI.focus : "#4f8d70" }
+  if (tile === "trap") return { ch: "^", fg: dim ? UI.hp : "#724654" }
+  if (tile === "potion") return { ch: "p", fg: dim ? UI.focus : "#4f8d70" }
+  if (tile === "chest") return { ch: "$", fg: dim ? UI.gold : "#7d6b42" }
+  if (tile === "relic") return { ch: "r", fg: dim ? UI.brass : "#7d6b42" }
+  if (tile === "note" || tile === "recipe" || tile === "tool" || tile === "deed" || tile === "fossil" || tile === "boss-memory" || tile === "keepsake" || tile === "story-relic") {
+    return { ch: "?", fg: dim ? UI.cyan : "#466f78" }
+  }
+  if (tile === "void") return { ch: " ", fg: "#101820" }
+  return { ch: visible ? "." : "·", fg: visible ? "#86d9ad" : "#416b5f" }
+}
+
+function minimapActorMarker(kind: string) {
+  if (isEnemyActorId(kind)) return { ch: "!", fg: UI.hp }
+  if (isNpcActorId(kind)) return { ch: kind === "merchant" ? "$" : "n", fg: kind === "merchant" ? UI.gold : UI.cyan }
+  return { ch: "?", fg: UI.soft }
+}
+
+function drawMinimapObjectivePointer(canvas: Canvas, objective: { x: number; y: number }, startX: number, startY: number, innerX: number, innerY: number, innerW: number, innerH: number, bg: string) {
+  const col = clamp(objective.x - startX, 0, innerW - 1)
+  const row = clamp(objective.y - startY, 0, innerH - 1)
+  canvas.write(innerX + col, innerY + row, "◆", UI.gold, bg)
+}
+
+function objectiveDirectionLabel(from: { x: number; y: number }, to: { x: number; y: number }) {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const horizontal = dx > 0 ? `E${dx}` : dx < 0 ? `W${Math.abs(dx)}` : ""
+  const vertical = dy > 0 ? `S${dy}` : dy < 0 ? `N${Math.abs(dy)}` : ""
+  return [horizontal, vertical].filter(Boolean).join(" ") || "here"
+}
+
+function objectiveDistanceText(from: { x: number; y: number }, to: { x: number; y: number }) {
+  const distance = Math.abs(to.x - from.x) + Math.abs(to.y - from.y)
+  return `${objectiveDirectionLabel(from, to)} (${distance} steps)`
 }
 
 function activeQuestObjectivePoint(session: GameSession) {
   const quest = session.world.quests.find((candidate) => candidate.status === "active") ?? null
-  const eventId = quest?.objectiveEventIds.find((id) => session.world.events.find((event) => event.id === id)?.status !== "completed") ?? quest?.objectiveEventIds[0]
-  const event = eventId ? session.world.events.find((candidate) => candidate.id === eventId) : undefined
-  const anchor = event ? session.world.anchors.find((candidate) => candidate.id === event.anchorId && candidate.floor === session.floor) : undefined
-  return anchor?.position ?? null
+  const candidates =
+    quest?.objectiveEventIds
+      .flatMap((id) => {
+        const event = session.world.events.find((candidate) => candidate.id === id)
+        if (!event || event.status === "completed") return []
+        const anchor = session.world.anchors.find((candidate) => candidate.id === event.anchorId && candidate.floor === session.floor)
+        return anchor ? [anchor.position] : []
+      }) ?? []
+  return candidates.find((point) => Math.abs(point.x - session.player.x) + Math.abs(point.y - session.player.y) > 0) ?? candidates[0] ?? null
 }
 
 function drawAssetTile(
