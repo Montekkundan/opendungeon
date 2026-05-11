@@ -166,6 +166,7 @@ const model: AppModel = {
   animationFrame: 0,
   playerMoveAnimation: null,
   diceRollAnimation: null,
+  cameraFocus: null,
   screenTransition: null,
 }
 let submittedSession: GameSession | null = null
@@ -331,7 +332,10 @@ function handleDialogKey(key: KeyEvent) {
     model.dialog = "saveManager"
     return
   }
-  if (key.name === "escape" || key.name === "return" || key.name === "enter" || key.name === "linefeed") model.dialog = null
+  if (key.name === "escape" || key.name === "return" || key.name === "enter" || key.name === "linefeed") {
+    if (model.dialog === "cutscene") model.cameraFocus = null
+    model.dialog = null
+  }
 }
 
 function handleInventoryKey(key: KeyEvent) {
@@ -349,7 +353,7 @@ function handleInventoryKey(key: KeyEvent) {
 }
 
 function handleQuestsKey(key: KeyEvent) {
-  const max = Math.max(0, model.session.world.quests.length - 1)
+  const max = Math.max(0, visibleQuestCount(model.session) - 1)
   if (key.name === "escape" || isConfirmKey(key)) {
     model.dialog = null
     return
@@ -358,6 +362,11 @@ function handleQuestsKey(key: KeyEvent) {
   if (isDownKey(key)) model.questIndex = clamp(model.questIndex + 1, 0, max)
   if (key.name === "pageup") model.questIndex = clamp(model.questIndex - 5, 0, max)
   if (key.name === "pagedown") model.questIndex = clamp(model.questIndex + 5, 0, max)
+}
+
+function visibleQuestCount(session: GameSession) {
+  const unlocked = session.world.quests.filter((quest) => quest.status !== "locked").length
+  return unlocked || Math.min(session.world.quests.length, 1)
 }
 
 function handleBookKey(key: KeyEvent) {
@@ -394,6 +403,7 @@ function handleHubKey(key: KeyEvent) {
   }
   if (key.name === "n") {
     playLocalCutscene(model.session)
+    model.cameraFocus = null
     model.dialog = "cutscene"
     return
   }
@@ -744,6 +754,11 @@ function handleGameKey(key: KeyEvent) {
   }
 
   if (model.session.conversation && !model.session.combat.active && !model.session.skillCheck) {
+    if (key.name === "escape") {
+      model.session.conversation = null
+      model.saveStatus = "Conversation closed. Press Q to quit the game or Esc for pause."
+      return
+    }
     if (/^[1-3]$/.test(key.name)) {
       chooseConversationOption(model.session, Number(key.name) - 1)
       return
@@ -790,7 +805,7 @@ function handleGameKey(key: KeyEvent) {
   }
   if (key.name === "o" || (key.name === "j" && model.settings.controlScheme !== "vim")) {
     model.dialog = "quests"
-    model.questIndex = clamp(model.questIndex, 0, Math.max(0, model.session.world.quests.length - 1))
+    model.questIndex = clamp(model.questIndex, 0, Math.max(0, visibleQuestCount(model.session) - 1))
     return
   }
   if (key.name === "r") {
@@ -939,12 +954,22 @@ function startRun() {
   model.session = createSession(model.seed, currentMode(model).id, currentClass(model).id, model.session.hero.name, model.session.hero.appearance)
   submittedSession = null
   setScreen("game", "The descent opens.", "portal")
-  model.dialog = null
+  playLocalCutscene(model.session, "waking-cell")
+  model.dialog = "cutscene"
+  model.cameraFocus = introCameraPoint(model.session)
   model.uiHidden = !model.settings.showUi
   model.bookIndex = 0
   model.saveStatus = `${currentMode(model).name} run started. Press Ctrl+S or F5 to save locally.`
   lastManualSaveSignature = ""
   autosaveCurrentRun("new-run")
+}
+
+function introCameraPoint(session: GameSession) {
+  const quest = session.world.quests.find((candidate) => candidate.status === "active")
+  const eventId = quest?.objectiveEventIds.find((id) => session.world.events.find((event) => event.id === id)?.status !== "completed") ?? quest?.objectiveEventIds[0]
+  const event = eventId ? session.world.events.find((candidate) => candidate.id === eventId) : undefined
+  const anchor = event ? session.world.anchors.find((candidate) => candidate.id === event.anchorId && candidate.floor === session.floor) : undefined
+  return anchor?.position ?? null
 }
 
 function openSaveBrowser() {

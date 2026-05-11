@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createSession, selectSkill, tryMove, unlockHub } from "../game/session.js"
+import { createSession, playLocalCutscene, selectSkill, tryMove, unlockHub } from "../game/session.js"
 import { setTile } from "../game/dungeon.js"
 import { defaultSettings } from "../game/settingsStore.js"
 import { hashText } from "../shared/hash.js"
@@ -38,15 +38,15 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: skillCheckModel(),
-      expectedHash: "e3c0ab52",
-      requiredText: ["Talent Check", "Whispering Relic", "Roll"],
+      expectedHash: "ec26f404",
+      requiredText: ["Talent Check", "Whispering Relic", "Enter roll d20"],
     },
     {
       name: "combat",
       width: 120,
       height: 40,
       model: combatModel(),
-      expectedHash: "3239e2eb",
+      expectedHash: "b622549a",
       requiredText: ["Turn Combat", "Order", "Shado", "Necroman"],
     },
     {
@@ -70,7 +70,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("game", createSession(1234), { dialog: "book" }),
-      expectedHash: "6fb11055",
+      expectedHash: "5a13c842",
       requiredText: ["BOOK", "Known", "Waking Cell", "Portal Room"],
     },
     {
@@ -161,6 +161,44 @@ test("title shows update command when a newer version is available", () => {
   expect(text).toContain("Update 0.2.0 available. Run opendungeon update.")
 })
 
+test("new descent story scene shows narrator text and cutscene controls", () => {
+  const session = createSession(1234)
+  playLocalCutscene(session, "waking-cell")
+  const output = draw(modelFor("game", session, { dialog: "cutscene", cameraFocus: { x: session.player.x + 1, y: session.player.y } }), 100, 32)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Huh... where am I?")
+  expect(text).toContain("Enter begin descent")
+})
+
+test("quest journal only lists discovered chains at the start", () => {
+  const session = createSession(1234)
+  const lockedTitle = session.world.quests.find((quest) => quest.status === "locked")?.title
+  const output = draw(modelFor("game", session, { dialog: "quests" }), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Escort: crypt")
+  expect(text).toContain("locked quest chains hidden")
+  if (lockedTitle) expect(text).not.toContain(lockedTitle)
+})
+
+test("inventory presents gold and full action labels", () => {
+  const output = draw(modelFor("game", createSession(1234), { dialog: "inventory" }), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Gold 0")
+  expect(text).toContain("Enter use")
+  expect(text).toContain("Esc close")
+})
+
+test("quickbar does not expose gold as a dead G action", () => {
+  const output = draw(modelFor("game", createSession(1234)), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("0g")
+  expect(text).not.toContain("G────────")
+})
+
 function skillCheckModel() {
   const session = createSession(1234)
   const target = { x: session.player.x + 1, y: session.player.y }
@@ -223,6 +261,7 @@ function modelFor(screen: ScreenId, session = createSession(1234), overrides: Pa
     animationFrame: 0,
     playerMoveAnimation: null,
     diceRollAnimation: null,
+    cameraFocus: null,
     screenTransition: null,
     ...overrides,
   }

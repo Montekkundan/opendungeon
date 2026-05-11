@@ -230,7 +230,7 @@ export const villageLocationIds = ["portal", "blacksmith", "market", "farm", "ho
 export type VillageLocationId = (typeof villageLocationIds)[number]
 export type VillageCustomerTaste = "relic" | "tool" | "food" | "material" | "memory"
 export type FarmPermission = "owner-only" | "friends" | "everyone"
-export type CutsceneId = "first-clear" | "village-unlock" | "ending-rooted" | "ending-remixed"
+export type CutsceneId = "waking-cell" | "first-clear" | "village-unlock" | "ending-rooted" | "ending-remixed"
 export const contentPackIds = ["opendungeon", "high-contrast", "mono-terminal"] as const
 export type ContentPackId = (typeof contentPackIds)[number]
 export type EquipmentSlot = "weapon" | "armor" | "relic"
@@ -2978,18 +2978,20 @@ function createVillageCustomers(): VillageCustomer[] {
 }
 
 function createCutscenes(heroName = "Mira"): CutsceneState[] {
-  return (["first-clear", "village-unlock", "ending-rooted", "ending-remixed"] as const).map((id) => createCutscene(id, heroName))
+  return (["waking-cell", "first-clear", "village-unlock", "ending-rooted", "ending-remixed"] as const).map((id) => createCutscene(id, heroName))
 }
 
 function createCutscene(id: CutsceneId, heroName = "Mira"): CutsceneState {
   const name = cleanHeroName(heroName)
   const titles: Record<CutsceneId, string> = {
+    "waking-cell": "Waking Cell",
     "first-clear": "First Clear",
     "village-unlock": "Village Route Opened",
     "ending-rooted": "Root Ending",
     "ending-remixed": "Remixed Ending",
   }
   const lines: Record<CutsceneId, string[]> = {
+    "waking-cell": [`${name}: "Huh... where am I?"`, "A note scratches itself into your book, and the dungeon camera drifts toward the first voice ahead.", "Move with WASD or arrows. Press E or Enter near people, doors, notes, and loot."],
     "first-clear": [`${name} reaches the final gate with no memory, but the dungeon finally answers.`, "A road appears where the last wall used to be."],
     "village-unlock": ["The portal room lights one stone at a time.", "Beyond it, a village waits for loot, trust, houses, and another run."],
     "ending-rooted": ["The grave-root admits it was guarding the first memory, not stealing it.", "The village survives because you choose what returns through the portal."],
@@ -3083,7 +3085,7 @@ function isFarmPermission(value: unknown): value is FarmPermission {
 }
 
 function isCutsceneId(value: unknown): value is CutsceneId {
-  return value === "first-clear" || value === "village-unlock" || value === "ending-rooted" || value === "ending-remixed"
+  return value === "waking-cell" || value === "first-clear" || value === "village-unlock" || value === "ending-rooted" || value === "ending-remixed"
 }
 
 function isContentPackId(value: unknown): value is ContentPackId {

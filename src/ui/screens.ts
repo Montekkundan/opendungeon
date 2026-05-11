@@ -67,6 +67,8 @@ export type PlayerMoveAnimation = {
   direction: "up" | "down" | "left" | "right"
 }
 
+export type CameraFocus = { x: number; y: number } | null
+
 export type ScreenTransition = {
   from: ScreenId
   to: ScreenId
@@ -107,6 +109,7 @@ export type AppModel = {
   animationFrame: number
   playerMoveAnimation?: PlayerMoveAnimation | null
   diceRollAnimation?: DiceRollAnimation | null
+  cameraFocus?: CameraFocus
   screenTransition?: ScreenTransition | null
 }
 
@@ -771,7 +774,7 @@ function drawTutorial(canvas: Canvas, model: AppModel) {
 function drawGame(canvas: Canvas, model: AppModel) {
   const session = model.session
   const moveAnimation = activePlayerMoveAnimation(model)
-  drawMap(canvas, session, model.debugView, model.settings, model.animationFrame, moveAnimation)
+  drawMap(canvas, session, model.debugView, model.settings, model.animationFrame, moveAnimation, model.cameraFocus ?? null)
   if (!model.uiHidden) {
     drawHud(canvas, session)
     if (!model.debugView && model.settings.showMinimap) drawMinimap(canvas, session)
@@ -892,24 +895,28 @@ function drawMap(
   settings: UserSettings,
   animationFrame = session.turn,
   playerMoveAnimation: PlayerMoveAnimation | null = null,
+  cameraFocus: CameraFocus = null,
 ) {
   const tileSize = mapTileSize(canvas, debugView, settings.tileScale)
   const tileWidth = tileSize.width
   const tileHeight = tileSize.height
   const viewWidth = Math.max(1, Math.ceil(canvas.width / tileWidth))
   const viewHeight = Math.max(4, Math.ceil(canvas.height / tileHeight))
-  const startX = session.player.x - Math.floor(viewWidth / 2)
-  const startY = session.player.y - Math.floor(viewHeight / 2)
+  const center = cameraFocus ?? session.player
+  const startX = center.x - Math.floor(viewWidth / 2)
+  const startY = center.y - Math.floor(viewHeight / 2)
   const targets = combatTargets(session)
   const selectedTargetId = session.combat.active ? targets[session.combat.selectedTarget]?.id : undefined
+  const previewRadius = cameraFocus ? Math.max(4, Math.floor(Math.min(viewWidth, viewHeight) * 0.3)) : 0
 
   for (let sy = 0; sy < viewHeight; sy++) {
     for (let sx = 0; sx < viewWidth; sx++) {
       const x = startX + sx
       const y = startY + sy
       const point = { x, y }
-      const visible = session.visible.has(pointKey(point))
-      const seen = session.seen.has(pointKey(point))
+      const previewVisible = Boolean(cameraFocus && Math.abs(cameraFocus.x - x) + Math.abs(cameraFocus.y - y) <= previewRadius)
+      const visible = session.visible.has(pointKey(point)) || previewVisible
+      const seen = session.seen.has(pointKey(point)) || previewVisible
       const actor = visible ? actorAt(session.dungeon.actors, point) : undefined
       const screenX = sx * tileWidth
       const screenY = sy * tileHeight
@@ -937,7 +944,11 @@ function drawMap(
       }
       else if (actor) {
         drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, actorSpriteId(actor.kind), debugView, actorAnimation(actor.id === selectedTargetId, session), actor.id === selectedTargetId ? animationFrame : 0)
-        if (actor.id === selectedTargetId) drawTargetFrame(canvas, screenX, screenY, tileWidth, tileHeight, debugView)
+        if (actor.id === selectedTargetId || (cameraFocus && cameraFocus.x === x && cameraFocus.y === y)) drawTargetFrame(canvas, screenX, screenY, tileWidth, tileHeight, debugView)
+      }
+      else if (cameraFocus && cameraFocus.x === x && cameraFocus.y === y) {
+        drawTargetFrame(canvas, screenX, screenY, tileWidth, tileHeight, debugView)
+        canvas.write(screenX + Math.max(1, Math.floor(tileWidth / 2) - 1), screenY + Math.max(1, Math.floor(tileHeight / 2)), "◆", UI.gold)
       }
     }
   }
@@ -1018,7 +1029,7 @@ function drawMinimap(canvas: Canvas, session: GameSession) {
 }
 
 function activeQuestObjectivePoint(session: GameSession) {
-  const quest = focusedQuest(session)
+  const quest = session.world.quests.find((candidate) => candidate.status === "active") ?? null
   const eventId = quest?.objectiveEventIds.find((id) => session.world.events.find((event) => event.id === id)?.status !== "completed") ?? quest?.objectiveEventIds[0]
   const event = eventId ? session.world.events.find((candidate) => candidate.id === eventId) : undefined
   const anchor = event ? session.world.anchors.find((candidate) => candidate.id === event.anchorId && candidate.floor === session.floor) : undefined
@@ -1214,7 +1225,7 @@ function drawHud(canvas: Canvas, session: GameSession) {
   if (canvas.width < 96 || height < 5) {
     canvas.fill(0, 0, canvas.width, Math.min(4, canvas.height), " ", cleanPanel, cleanPanel)
     if (canvas.height > 4) canvas.fill(0, 4, canvas.width, 1, " ", "#0b1118", "#0b1118")
-    const hero = trim(`${session.hero.name} · ${formatBiome(currentBiome(session))} · ${session.floorModifier.name}`, Math.max(16, canvas.width - 34))
+    const hero = trim(`${session.hero.name} · ${formatBiome(currentBiome(session))} · ${session.floorModifier.name} · ${session.gold}g`, Math.max(16, canvas.width - 34))
     canvas.write(1, 0, hero, UI.ink, cleanPanel)
     drawHudBar(canvas, 1, 1, Math.max(12, Math.floor(canvas.width * 0.32)), "HP", session.hp, session.maxHp, UI.hp, UI.hpBack)
     drawHudBar(canvas, Math.floor(canvas.width * 0.43), 1, Math.max(10, Math.floor(canvas.width * 0.25)), "FOCUS", session.focus, session.maxFocus, UI.focus, UI.focusBack)
@@ -1229,7 +1240,7 @@ function drawHud(canvas: Canvas, session: GameSession) {
 
   const infoX = x + 14
   const contentW = width - 17
-  canvas.write(infoX, 1, trim(`${session.hero.name}  LV ${session.level}  XP ${session.xp}/${session.level * 10}`, Math.floor(contentW * 0.48)), UI.gold, UI.panel)
+  canvas.write(infoX, 1, trim(`${session.hero.name}  LV ${session.level}  XP ${session.xp}/${session.level * 10}  ${session.gold}g`, Math.floor(contentW * 0.48)), UI.gold, UI.panel)
   canvas.write(infoX + Math.floor(contentW * 0.5), 1, trim(`${session.hero.title} · ${formatBiome(currentBiome(session))} · ${session.floorModifier.name}`, Math.floor(contentW * 0.48)), UI.soft, UI.panel)
   drawHudBar(canvas, infoX, 2, Math.max(20, Math.floor(contentW * 0.42)), "HP", session.hp, session.maxHp, UI.hp, UI.hpBack)
   drawHudBar(canvas, infoX + Math.floor(contentW * 0.48), 2, Math.max(20, Math.floor(contentW * 0.42)), "FOCUS", session.focus, session.maxFocus, UI.focus, UI.focusBack)
@@ -1330,9 +1341,13 @@ function focusedQuest(session: GameSession) {
   return (
     session.world.quests.find((quest) => quest.status === "active") ??
     session.world.quests.find((quest) => quest.status === "completed") ??
-    session.world.quests.find((quest) => quest.status === "locked") ??
     null
   )
+}
+
+function visibleQuestList(session: GameSession) {
+  const unlocked = session.world.quests.filter((quest) => quest.status !== "locked")
+  return unlocked.length ? unlocked : session.world.quests.slice(0, 1)
 }
 
 function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollAnimation | null | undefined, settings: UserSettings) {
@@ -1354,7 +1369,7 @@ function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollA
         { key: "Ent", label: "Roll", custom: "d20", active: true },
       ]
     : [
-        { key: "1", label: "Strike", sprite: "sword" },
+        { key: "E", label: "Use", sprite: "quest-marker", active: Boolean(session.conversation || session.skillCheck) },
         {
           key: "H",
           label: "Potion",
@@ -1362,10 +1377,10 @@ function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollA
           count: String(countInventory(session, "Deploy nerve potion")),
           active: session.hp < session.maxHp,
         },
-        { key: "G", label: "Gold", sprite: "coin", count: String(session.gold) },
+        { key: "R", label: "Rest", sprite: "food" },
         { key: "J", label: "Quest", sprite: "quest-marker", count: String(session.world.quests.filter((quest) => quest.status !== "locked").length) },
         { key: "B", label: "Book", sprite: "scroll", count: String(session.knowledge.length) },
-        { key: "D", label: "Roll", custom: "d20" },
+        { key: "L", label: "Log", sprite: "scroll" },
         { key: "I", label: "Pack", sprite: "pack", count: String(session.inventory.length) },
       ]
   const slotCount = items.length
@@ -1509,7 +1524,8 @@ function drawConversationPanel(canvas: Canvas, session: GameSession) {
   if (!conversation) return
 
   const width = Math.min(78, canvas.width - 6)
-  const height = conversation.options.length ? 12 : 9
+  const hasChoices = conversation.options.length > 0 && conversation.status === "open"
+  const height = hasChoices ? 13 : 10
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.max(1, canvas.height - gameQuickbarHeight(canvas) - height - 2)
   const trade = conversation.trade
@@ -1524,9 +1540,9 @@ function drawConversationPanel(canvas: Canvas, session: GameSession) {
   writeWrapped(canvas, x + 14, y + 4, width - 18, [conversation.text], 2, UI.ink, UI.panel)
   if (trade) {
     const tradeText = trade.purchased ? `${trade.item} in pack` : `${trade.item}  ${trade.price}g`
-    canvas.write(x + 14, y + height - 2, trim(tradeText, width - 26), trade.purchased ? UI.focus : UI.brass, UI.panel)
+    canvas.write(x + 14, y + height - 4, trim(tradeText, width - 26), trade.purchased ? UI.focus : UI.brass, UI.panel)
   }
-  if (conversation.options.length && conversation.status === "open") {
+  if (hasChoices) {
     const optionY = y + 8
     conversation.options.slice(0, 3).forEach((option, index) => {
       const selected = index === conversation.selectedOption
@@ -1534,7 +1550,9 @@ function drawConversationPanel(canvas: Canvas, session: GameSession) {
       canvas.write(optionX, optionY, `${index + 1}`, selected ? UI.gold : UI.muted, UI.panel)
       canvas.write(optionX + 2, optionY, trim(option.label, 12), selected ? UI.focus : UI.soft, UI.panel)
     })
-    canvas.write(x + 14, y + height - 2, trim("1-3 choose dialogue, Enter confirms selected option", width - 18), UI.muted, UI.panel)
+    canvas.write(x + 14, y + height - 2, trim("1-3 choose  Enter confirm  Esc leave  Q quit", width - 18), UI.muted, UI.panel)
+  } else {
+    canvas.write(x + 14, y + height - 2, trim("Enter close  Esc leave  Q quit game", width - 18), UI.muted, UI.panel)
   }
 }
 
@@ -2027,11 +2045,11 @@ function inventoryLayout(model: AppModel, width: number, height: number): Invent
     height: innerH - 4,
   }
   const details: Rect = { x: innerX, y: frame.y + frame.height - 7, width: innerW, height: 3 }
-  const apply: Rect = { x: frame.x + frame.width - 29, y: frame.y + frame.height - 3, width: 12, height: 1 }
-  const close: Rect = { x: frame.x + frame.width - 15, y: frame.y + frame.height - 3, width: 10, height: 1 }
+  const apply: Rect = { x: frame.x + frame.width - 34, y: frame.y + frame.height - 3, width: 14, height: 1 }
+  const close: Rect = { x: frame.x + frame.width - 18, y: frame.y + frame.height - 3, width: 12, height: 1 }
   const columns = clamp(Math.floor((pack.width - 4) / 12), 3, 6)
   const slotW = Math.max(9, Math.floor((pack.width - 4 - (columns - 1)) / columns))
-  const slotH = 4
+  const slotH = 5
   const rows = Math.max(2, Math.floor((pack.height - 5) / slotH))
   const slots: Rect[] = []
   for (let row = 0; row < rows; row++) {
@@ -2040,7 +2058,7 @@ function inventoryLayout(model: AppModel, width: number, height: number): Invent
         x: pack.x + 2 + col * (slotW + 1),
         y: pack.y + 3 + row * slotH,
         width: slotW,
-        height: 3,
+        height: 4,
       })
     }
   }
@@ -2133,15 +2151,16 @@ function drawInventoryDialog(canvas: Canvas, model: AppModel) {
   )
   canvas.write(layout.character.x + 17, layout.character.y + 3, trim(model.session.hero.name, layout.character.width - 20), UI.ink, UI.panel)
   canvas.write(layout.character.x + 17, layout.character.y + 4, trim(model.session.hero.title, layout.character.width - 20), UI.soft, UI.panel)
-  if (layout.character.height > 11) canvas.write(layout.character.x + 3, layout.character.y + 10, `Level ${model.session.level}`, UI.gold, UI.panel)
-  if (layout.character.height > 13) canvas.write(layout.character.x + 3, layout.character.y + 12, trim(statLine(model.session.stats), layout.character.width - 6), UI.soft, UI.panel)
-  if (layout.character.height > 16) drawEquipmentLine(canvas, layout.character.x + 3, layout.character.y + 15, layout.character.width - 6, "Weapon", findInventoryByKind(model.session.inventory, "weapon"))
-  if (layout.character.height > 17) drawMiniIcon(canvas, layout.character.x + layout.character.width - 9, layout.character.y + 15, weaponSpriteForAppearance(model.session.hero.classId, model.session.hero.appearance), 5, 1)
-  if (layout.character.height > 18) drawEquipmentLine(canvas, layout.character.x + 3, layout.character.y + 17, layout.character.width - 6, "Relic", findInventoryByKind(model.session.inventory, "relic"))
-  if (layout.character.height > 20) drawEquipmentLine(canvas, layout.character.x + 3, layout.character.y + 19, layout.character.width - 6, "Consumable", findInventoryByKind(model.session.inventory, "consumable"))
+  if (layout.character.height > 11) canvas.write(layout.character.x + 3, layout.character.y + 10, trim(`Level ${model.session.level}   Gold ${model.session.gold}`, layout.character.width - 6), UI.gold, UI.panel)
+  if (layout.character.height > 13) canvas.write(layout.character.x + 3, layout.character.y + 12, trim(`HP ${model.session.hp}/${model.session.maxHp}   Focus ${model.session.focus}/${model.session.maxFocus}`, layout.character.width - 6), UI.focus, UI.panel)
+  if (layout.character.height > 15) canvas.write(layout.character.x + 3, layout.character.y + 14, trim(statLine(model.session.stats), layout.character.width - 6), UI.soft, UI.panel)
+  if (layout.character.height > 18) drawEquipmentLine(canvas, layout.character.x + 3, layout.character.y + 17, layout.character.width - 6, "Weapon", findInventoryByKind(model.session.inventory, "weapon"))
+  if (layout.character.height > 19) drawMiniIcon(canvas, layout.character.x + layout.character.width - 9, layout.character.y + 17, weaponSpriteForAppearance(model.session.hero.classId, model.session.hero.appearance), 5, 1)
+  if (layout.character.height > 20) drawEquipmentLine(canvas, layout.character.x + 3, layout.character.y + 19, layout.character.width - 6, "Relic", findInventoryByKind(model.session.inventory, "relic"))
+  if (layout.character.height > 22) drawEquipmentLine(canvas, layout.character.x + 3, layout.character.y + 21, layout.character.width - 6, "Consumable", findInventoryByKind(model.session.inventory, "consumable"))
 
   drawPanel(canvas, layout.pack.x, layout.pack.y, layout.pack.width, layout.pack.height, "Pack", UI.edge)
-  canvas.write(layout.pack.x + 2, layout.pack.y + 1, trim(`${model.session.inventory.length}/${layout.slots.length} slots`, layout.pack.width - 4), UI.soft, UI.panel)
+  canvas.write(layout.pack.x + 2, layout.pack.y + 1, trim(`${model.session.inventory.length}/${layout.slots.length} slots   Gold ${model.session.gold}`, layout.pack.width - 4), UI.soft, UI.panel)
   layout.slots.forEach((slot, index) => drawInventorySlot(canvas, slot, model.session.inventory[index], index === selectedIndex, index === model.inventoryDragIndex))
 
   drawPanel(canvas, layout.details.x, layout.details.y, layout.details.width, layout.details.height, "Selection", UI.edgeDim)
@@ -2154,7 +2173,7 @@ function drawInventoryDialog(canvas: Canvas, model: AppModel) {
   }
 
   if (model.message) canvas.write(layout.details.x + 2, layout.details.y + 2, trim(model.message, layout.details.width - 4), UI.muted, UI.panel)
-  drawInventoryButton(canvas, layout.apply, "Enter apply", selectedItem ? UI.focus : UI.muted)
+  drawInventoryButton(canvas, layout.apply, "Enter use", selectedItem ? UI.focus : UI.muted)
   drawInventoryButton(canvas, layout.close, "Esc close", UI.gold)
 }
 
@@ -2169,9 +2188,14 @@ function drawInventorySlot(canvas: Canvas, rect: Rect, item: string | undefined,
   drawCleanBox(canvas, rect.x, rect.y, rect.width, rect.height, selected ? UI.gold : cleanLine, bg)
   if (selected || dragging) canvas.fill(rect.x, rect.y, 1, rect.height, " ", dragging ? UI.cyan : UI.gold, dragging ? UI.cyan : UI.gold)
   if (!item) return
-  drawMiniIcon(canvas, rect.x + 2, rect.y + 1, inventorySprite(item), 4, 1, dragging ? 0.65 : 1)
-  const labelWidth = Math.max(0, rect.width - 8)
-  if (labelWidth >= 5) canvas.write(rect.x + 7, rect.y + 1, trimInventoryLabel(item, labelWidth), selected ? UI.gold : UI.ink)
+  drawMiniIcon(canvas, rect.x + 2, rect.y + 1, inventorySprite(item), Math.min(5, Math.max(4, rect.width - 4)), 1, dragging ? 0.65 : 1)
+  const labelWidth = Math.max(0, rect.width - 2)
+  if (labelWidth >= 5) {
+    const labelY = rect.y + rect.height - 2
+    const labelBg = selected ? "#22303c" : "#111c25"
+    canvas.fill(rect.x + 1, labelY, rect.width - 2, 1, " ", labelBg, labelBg)
+    canvas.write(rect.x + 1, labelY, trimInventoryLabel(item, labelWidth), selected ? UI.gold : UI.ink, labelBg)
+  }
 }
 
 function drawInventoryButton(canvas: Canvas, rect: Rect, text: string, color: string) {
@@ -2258,22 +2282,26 @@ function bookEntryIcon(kind: GameSession["knowledge"][number]["kind"]): PixelSpr
 }
 
 function drawQuestsDialog(canvas: Canvas, model: AppModel, x: number, y: number, width: number, height: number) {
-  const quests = model.session.world.quests
+  const allQuests = model.session.world.quests
+  const quests = visibleQuestList(model.session)
+  const selectedIndex = clamp(model.questIndex, 0, Math.max(0, quests.length - 1))
+  const lockedCount = allQuests.filter((quest) => quest.status === "locked").length
   const listX = x + 4
   const listY = y + 4
   const listW = Math.min(36, Math.floor((width - 10) * 0.42))
   const rowH = 2
   const visibleRows = Math.max(4, Math.min(quests.length || 1, Math.floor((height - 8) / rowH)))
-  const offset = scrollOffset(model.questIndex, visibleRows, quests.length)
-  const selectedQuest = quests[clamp(model.questIndex, 0, Math.max(0, quests.length - 1))]
+  const offset = scrollOffset(selectedIndex, visibleRows, quests.length)
+  const selectedQuest = quests[selectedIndex]
 
   canvas.write(listX, y + 3, "Journal", UI.brass, UI.panel)
   drawScrollbar(canvas, listX + listW + 1, listY, visibleRows * rowH, offset, visibleRows, quests.length)
   quests.slice(offset, offset + visibleRows).forEach((quest, visibleIndex) => {
     const index = offset + visibleIndex
-    drawQuestListRow(canvas, listX, listY + visibleIndex * rowH, listW, model, quest, index === model.questIndex)
+    drawQuestListRow(canvas, listX, listY + visibleIndex * rowH, listW, model, quest, index === selectedIndex)
   })
   if (!quests.length) canvas.write(listX, listY, "No quests generated yet.", UI.soft, UI.panel)
+  if (lockedCount > 0) canvas.write(listX, y + height - 5, trim(`${lockedCount} locked quest chain${lockedCount === 1 ? "" : "s"} hidden until discovered.`, listW), UI.muted, UI.panel)
 
   const detailX = listX + listW + 4
   const detailW = width - (detailX - x) - 4
@@ -2367,7 +2395,8 @@ function drawCutsceneDialog(canvas: Canvas, model: AppModel, x: number, y: numbe
   drawMiniIcon(canvas, x + width - 14, y + 4, "focus-gem", 10, 3)
   canvas.write(x + 4, y + 4, trim(scene.title, width - 22), UI.gold, UI.panel)
   writeWrapped(canvas, x + 4, y + 7, width - 8, scene.lines, height - 11, UI.ink, UI.panel)
-  canvas.write(x + 4, y + height - 4, trim("Scenes are stored in the Book so the local story stays replayable offline.", width - 8), UI.soft, UI.panel)
+  const hint = scene.id === "waking-cell" ? "Enter begin descent  Esc skip. Camera preview points to the first lead." : "Enter close  Esc close. Scenes are saved in the Book."
+  canvas.write(x + 4, y + height - 4, trim(hint, width - 8), UI.soft, UI.panel)
 }
 
 function runMutatorShortLabel(id: string) {
