@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { WebSocketServer, type RawData, type WebSocket } from "ws"
+import { advertisedLobbyUrls, lobbyEnvCommand, lobbyJoinCommand, parseLobbyHostArgs, requestLobbyUrl } from "./hostConfig.js"
 import { MultiplayerLobbyState, loadRaceResults, saveRaceResults, type LobbyRole } from "./lobbyState.js"
 
 type LobbySocketData = {
@@ -10,7 +11,26 @@ type LobbySocketData = {
 
 type LobbyWebSocket = WebSocket & { data: LobbySocketData }
 
-const options = parseArgs(process.argv.slice(2))
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.log(`opendungeon-host
+
+Usage:
+  opendungeon-host --host 0.0.0.0 --mode coop --seed 2423368 --port 3737
+  opendungeon-host --host 0.0.0.0 --public-url http://YOUR_SERVER_IP:3737
+
+Options:
+  --host <address>       Bind address. Use 0.0.0.0 for LAN/server hosting.
+  --public-url <url>     Public URL printed in invites when behind a proxy or on a VPS.
+  --port <port>          TCP port. Defaults to PORT or 3737.
+  --mode <coop|race>     Lobby mode.
+  --seed <number>        Shared dungeon seed.
+  --invite <code>        Optional stable invite code.
+  --leaderboard <path>   Persist race leaderboard JSON.
+`)
+  process.exit(0)
+}
+
+const options = parseLobbyHostArgs(process.argv.slice(2))
 const lobby = new MultiplayerLobbyState({
   mode: options.mode,
   seed: options.seed,
@@ -21,11 +41,13 @@ const sockets = new Set<LobbyWebSocket>()
 
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? `localhost:${options.port}`}`)
+  const publicUrl = requestLobbyUrl(request.headers.host, options, request.headers["x-forwarded-proto"])
 
+  if (url.pathname === "/health" || url.pathname === "/healthz") return sendJson(response, healthPayload())
   if (url.pathname === "/leaderboard") return sendJson(response, lobby.leaderboard())
-  if (url.pathname === "/invite") return sendJson(response, invitePayload(url.host))
+  if (url.pathname === "/invite") return sendJson(response, invitePayload(publicUrl))
   if (url.pathname === "/finish" && request.method === "POST") return void submitResult(request, response)
-  if (url.pathname === "/") return sendText(response, 200, renderLobbyPage(url.host), "text/html; charset=utf-8")
+  if (url.pathname === "/") return sendText(response, 200, renderLobbyPage(publicUrl), "text/html; charset=utf-8")
 
   sendText(response, 404, "Not found")
 })
@@ -59,36 +81,7 @@ websocketServer.on("connection", (ws: LobbyWebSocket) => {
   ws.on("message", (message) => handleSocketMessage(ws, message))
 })
 
-server.listen(options.port)
-
-console.log(`opendungeon lobby`)
-console.log(`Mode: ${options.mode}`)
-console.log(`Seed: ${options.seed}`)
-console.log(`Invite: ${lobby.inviteCode}`)
-console.log(`URL:  http://localhost:${options.port}`)
-console.log(`Run:  ${lobbyCommand(`localhost:${options.port}`)}`)
-
-function parseArgs(args: string[]) {
-  const options = {
-    port: 3737,
-    seed: Math.floor(Math.random() * 9_000_000) + 1_000_000,
-    mode: "race" as "race" | "coop",
-    inviteCode: "",
-    leaderboardPath: process.env.OPENDUNGEON_LOBBY_LEADERBOARD || "",
-  }
-
-  for (let index = 0; index < args.length; index++) {
-    const arg = args[index]
-    const value = args[index + 1]
-    if (arg === "--port" && value) options.port = Number(value)
-    if (arg === "--seed" && value) options.seed = Number(value)
-    if (arg === "--mode" && value && ["race", "coop"].includes(value)) options.mode = value as "race" | "coop"
-    if (arg === "--invite" && value) options.inviteCode = value.replace(/[^\w-]/g, "").slice(0, 16)
-    if (arg === "--leaderboard" && value) options.leaderboardPath = value
-  }
-
-  return options
-}
+server.listen(options.port, options.bindHost, printStartup)
 
 function submitResult(request: IncomingMessage, response: ServerResponse) {
   readJsonBody(request)
@@ -101,13 +94,25 @@ function submitResult(request: IncomingMessage, response: ServerResponse) {
     .catch(() => sendJson(response, { error: "invalid result payload" }, 400))
 }
 
-function invitePayload(host: string) {
+function healthPayload() {
+  return {
+    ok: true,
+    mode: options.mode,
+    seed: options.seed,
+    inviteCode: lobby.inviteCode,
+    players: lobby.snapshot().players.length,
+    spectators: lobby.snapshot().spectators.length,
+  }
+}
+
+function invitePayload(publicUrl: string) {
   return {
     mode: options.mode,
     seed: options.seed,
     inviteCode: lobby.inviteCode,
-    url: `http://${host}`,
-    command: lobbyCommand(host),
+    url: publicUrl,
+    command: lobbyJoinCommand(publicUrl),
+    envCommand: lobbyEnvCommand(publicUrl, options),
   }
 }
 
@@ -132,6 +137,11 @@ function handleSocketMessage(ws: LobbyWebSocket, message: RawData) {
       floor: state.floor as number,
       turn: state.turn as number,
       hp: state.hp as number,
+      level: state.level as number,
+      unspentStatPoints: state.unspentStatPoints as number,
+      inventoryCount: state.inventoryCount as number,
+      gold: state.gold as number,
+      saveRevision: state.saveRevision as number,
       x: state.x as number,
       y: state.y as number,
       combatActive: Boolean(state.combatActive),
@@ -191,8 +201,11 @@ function readJsonBody(request: IncomingMessage) {
   })
 }
 
-function renderLobbyPage(host: string): string {
-  const command = lobbyCommand(host)
+function renderLobbyPage(publicUrl: string): string {
+  const command = htmlEscape(lobbyJoinCommand(publicUrl))
+  const legacyCommand = htmlEscape(lobbyEnvCommand(publicUrl, options))
+  const mode = htmlEscape(options.mode)
+  const inviteCode = htmlEscape(lobby.inviteCode)
   return `<!doctype html>
 <html>
   <head>
@@ -213,9 +226,11 @@ function renderLobbyPage(host: string): string {
   <body>
     <main>
       <h1>opendungeon Lobby</h1>
-      <p>Mode <strong>${options.mode}</strong> · Seed <strong>${options.seed}</strong> · Invite <strong>${lobby.inviteCode}</strong></p>
+      <p>Mode <strong>${mode}</strong> · Seed <strong>${options.seed}</strong> · Invite <strong>${inviteCode}</strong></p>
       <pre>${command}</pre>
-      <p class="muted">Share this URL and the command with friends on the same network.</p>
+      <p class="muted">Share this URL and join command with friends. Use a LAN IP for home networks or a public domain/IP for internet servers.</p>
+      <p class="muted">Legacy env command:</p>
+      <pre>${legacyCommand}</pre>
       <p class="muted">Spectators can open this page with <code>?role=spectator</code>.</p>
       <section>
         <h2>Players</h2>
@@ -263,6 +278,21 @@ function renderLobbyPage(host: string): string {
 </html>`
 }
 
-function lobbyCommand(host: string) {
-  return `OPENDUNGEON_MODE=${options.mode} OPENDUNGEON_SEED=${options.seed} OPENDUNGEON_LOBBY_URL=http://${host} opendungeon`
+function htmlEscape(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+}
+
+function printStartup() {
+  const urls = advertisedLobbyUrls(options)
+  const preferredUrl = options.publicUrl || urls.find((url) => !url.includes("localhost")) || urls[0]
+  console.log(`opendungeon lobby`)
+  console.log(`Mode: ${options.mode}`)
+  console.log(`Seed: ${options.seed}`)
+  console.log(`Invite: ${lobby.inviteCode}`)
+  console.log(`Bind: ${options.bindHost}:${options.port}`)
+  console.log(`Health: ${preferredUrl}/health`)
+  console.log(`Join: ${lobbyJoinCommand(preferredUrl)}`)
+  console.log(`Legacy: ${lobbyEnvCommand(preferredUrl, options)}`)
+  console.log(`URLs:`)
+  for (const url of urls) console.log(`  ${url}`)
 }

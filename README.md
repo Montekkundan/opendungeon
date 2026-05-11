@@ -41,17 +41,36 @@ bun run dev
 
 ### Multiplayer
 
-Start a local lobby:
+`localhost` only works on the same computer. For friends, host on `0.0.0.0` and share the LAN IP printed by the host. For an internet server, open TCP port `3737` and set the public URL or domain.
 
 ```bash
-opendungeon-host --mode coop --seed 2423368 --port 3737
+# Same Wi-Fi / LAN
+opendungeon-host --host 0.0.0.0 --mode coop --seed 2423368 --port 3737
+
+# Public VPS / server
+opendungeon-host --host 0.0.0.0 --public-url http://YOUR_SERVER_IP:3737 --mode coop --seed 2423368 --port 3737
 ```
 
-Share the printed lobby URL and command with friends on the same network. For local source testing:
+Friends join with the printed command:
+
+```bash
+opendungeon join http://YOUR_LAN_OR_SERVER_IP:3737
+```
+
+For local source testing:
 
 ```bash
 bun run host -- --mode coop --seed 2423368 --port 3737
 ```
+
+Docker/server hosting:
+
+```bash
+docker build -f packaging/docker/Dockerfile -t opendungeon-server .
+docker run --rm -p 3737:3737 -e OPENDUNGEON_PUBLIC_URL=http://YOUR_SERVER_IP:3737 opendungeon-server --mode coop --seed 2423368
+```
+
+Ghost-style server platforms can use `packaging/ghost/opendungeon` as the game template. It follows Ghost's per-game compose-generator shape: `index.ts`, `install.ts`, and `settings.ts`.
 
 ### Publish
 

@@ -32,6 +32,8 @@
     "assets",
     "bin",
     "dist/**/*.js",
+    "packaging/docker",
+    "packaging/ghost",
     "README.md",
     "LICENSE",
     "package.json"

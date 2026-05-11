@@ -1,0 +1,13 @@
+services:
+  opendungeon:
+    build:
+      context: ../..
+      dockerfile: packaging/docker/Dockerfile
+    environment:
+      OPENDUNGEON_MODE: ${OPENDUNGEON_MODE:-coop}
+      OPENDUNGEON_SEED: ${OPENDUNGEON_SEED:-2423368}
+      OPENDUNGEON_PUBLIC_URL: ${OPENDUNGEON_PUBLIC_URL:-}
+      PORT: 3737
+    ports:
+      - "3737:3737/tcp"
+    restart: unless-stopped

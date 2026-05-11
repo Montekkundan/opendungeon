@@ -1,4 +1,5 @@
 import { FrameBufferRenderable, createCliRenderer, type KeyEvent, type MouseEvent as OpenTuiMouseEvent } from "@opentui/core"
+import WebSocket from "ws"
 import {
   addToast,
   createSession,
@@ -71,6 +72,7 @@ import { formatServerSetupReport, serverSetupReport } from "./system/serverSetup
 import { handleSetupCommand } from "./system/firstRunSetup.js"
 import { debugOverlaysEnabled } from "./system/debugFlags.js"
 import { checkInternetConnectivity } from "./net/connectivity.js"
+import { normalizeLobbyBaseUrl } from "./net/hostConfig.js"
 import { checkForUpdate, checkingUpdateStatus, handleUpdateCommand } from "./system/updateCheck.js"
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
@@ -80,6 +82,7 @@ Terminal roguelike RPG built with OpenTUI.
 
 Usage:
   opendungeon                   Start the game
+  opendungeon join <lobby-url>  Join a hosted lobby URL
   opendungeon login <username>  Prompt for a password and save an auth session
   opendungeon --login github    Open Supabase GitHub OAuth
   opendungeon saves list        List local saves for backup or maintenance
@@ -97,6 +100,7 @@ Environment:
   OPENDUNGEON_ASSET_DIR    Override bundled asset directory
   OPENDUNGEON_TILE_SCALE   overview | wide | medium | close
   OPENDUNGEON_DEBUG_OVERLAY=1 enables debug map/console overlays
+  OPENDUNGEON_LOBBY_URL    Hosted lobby URL for co-op/race result sync
 
 ${authHelpText()}
 ${saveCommandHelp()}
@@ -120,6 +124,7 @@ const updateExitCode = await handleUpdateCommand(process.argv.slice(2), version)
 if (updateExitCode !== null) process.exit(updateExitCode)
 const setupExitCode = await handleSetupCommand(process.argv.slice(2))
 if (setupExitCode !== null) process.exit(setupExitCode)
+const cliJoin = await resolveJoinCommand(process.argv.slice(2))
 
 if (process.argv[2] === "doctor" || process.argv.includes("--doctor")) {
   console.log(formatTerminalCapabilityReport(terminalCapabilityReport()))
@@ -146,7 +151,7 @@ const model: AppModel = {
   message: "",
   saves: initialSaves,
   saveIndex: 0,
-  saveStatus: "",
+  saveStatus: cliJoin?.status ?? "",
   debugView: debugOverlaysEnabled(),
   rendererBackend: shouldUseThreeRenderer() ? "three" : "terminal",
   settings: initialSettings,
@@ -179,6 +184,9 @@ let destroyed = false
 let pendingDeleteSaveId: string | null = null
 let lastAutosaveSignature = ""
 let lastManualSaveSignature = ""
+let lobbySocket: WebSocket | null = null
+let lobbySocketUrl = ""
+let lobbyConnectedPlayers = 0
 const toastCreatedAt = new Map<string, number>()
 const toastTtlMs = 3200
 
@@ -212,6 +220,7 @@ renderer.on("resize", refresh)
 void refreshInternetStatus()
 void refreshUpdateStatus()
 autosaveTimer = setInterval(() => autosaveCurrentRun("timer"), 30_000)
+if (cliJoin?.autoStart) startRun()
 refresh()
 
 renderer.keyInput.on("keypress", (key: KeyEvent) => {
@@ -235,13 +244,17 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
   if (model.screen === "game" && model.session.skillCheck) {
     handleSkillCheckKey(key)
     autosaveCurrentRun()
+    syncLobbyState()
     refresh()
     return
   }
 
   if (model.dialog) {
     handleDialogKey(key)
-    if (model.screen === "game") autosaveCurrentRun()
+    if (model.screen === "game") {
+      autosaveCurrentRun()
+      syncLobbyState()
+    }
     refresh()
     return
   }
@@ -254,6 +267,7 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
   if (model.screen === "village") {
     handleVillageKey(key)
     autosaveCurrentRun()
+    syncLobbyState()
     maybeSubmitLobbyResult()
     refresh()
     return
@@ -262,6 +276,7 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
   if (model.screen === "game") {
     handleGameKey(key)
     autosaveCurrentRun()
+    syncLobbyState()
   } else handleMenuKey(key)
 
   maybeSubmitLobbyResult()
@@ -970,6 +985,7 @@ function startRun() {
   model.bookIndex = 0
   model.saveStatus = `${currentMode(model).name} run started. Press Ctrl+S or F5 to save locally.`
   lastManualSaveSignature = ""
+  connectLobby()
   autosaveCurrentRun("new-run")
 }
 
@@ -1400,6 +1416,7 @@ function hasUnsavedManualChanges() {
 
 function destroyApp() {
   destroyed = true
+  closeLobbySocket()
   if (diceTimer) clearTimeout(diceTimer)
   diceTimer = null
   if (moveTimer) clearTimeout(moveTimer)
@@ -1414,6 +1431,7 @@ function destroyApp() {
 }
 
 function closeRunToTitle(status: string) {
+  closeLobbySocket()
   model.dialog = null
   model.diceRollAnimation = null
   model.playerMoveAnimation = null
@@ -1439,8 +1457,88 @@ async function refreshUpdateStatus() {
   refresh()
 }
 
+function connectLobby() {
+  const lobbyUrl = lobbyUrlFromConfig()
+  if (!lobbyUrl || lobbySocketUrl === lobbyUrl) return
+  closeLobbySocket()
+  lobbySocketUrl = lobbyUrl
+
+  try {
+    const socketUrl = new URL("/ws", lobbyUrl)
+    socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:"
+    socketUrl.searchParams.set("name", env("OPENDUNGEON_PLAYER_NAME", "DUNGEON_PLAYER_NAME") || model.session.hero.name)
+    socketUrl.searchParams.set("role", "player")
+    const socket = new WebSocket(socketUrl)
+    lobbySocket = socket
+    socket.on("open", () => {
+      model.session.log.unshift(`Connected to lobby ${lobbyUrl}.`)
+      syncLobbyState()
+      refresh()
+    })
+    socket.on("message", (message) => updateLobbyStatus(message.toString()))
+    socket.on("close", () => {
+      if (lobbySocket === socket) lobbySocket = null
+      lobbyConnectedPlayers = 0
+    })
+    socket.on("error", () => {
+      model.session.log.unshift("Lobby connection failed.")
+      refresh()
+    })
+  } catch {
+    model.session.log.unshift("Lobby URL is invalid.")
+  }
+}
+
+function syncLobbyState() {
+  if (!lobbySocket || lobbySocket.readyState !== WebSocket.OPEN) return
+  lobbySocket.send(
+    JSON.stringify({
+      type: "sync",
+      state: {
+        floor: model.session.floor,
+        turn: model.session.turn,
+        hp: model.session.hp,
+        level: model.session.level,
+        unspentStatPoints: model.session.levelUp ? 1 : 0,
+        inventoryCount: model.session.inventory.length,
+        gold: model.session.gold,
+        saveRevision: model.session.turn,
+        x: model.session.player.x,
+        y: model.session.player.y,
+        combatActive: model.session.combat.active,
+      },
+    }),
+  )
+}
+
+function updateLobbyStatus(text: string) {
+  try {
+    const snapshot = JSON.parse(text) as { players?: unknown[]; syncWarnings?: string[] }
+    const players = Array.isArray(snapshot.players) ? snapshot.players.length : 0
+    if (players && players !== lobbyConnectedPlayers) {
+      lobbyConnectedPlayers = players
+      model.session.log.unshift(`Lobby players online: ${players}.`)
+      refresh()
+    }
+    const warning = Array.isArray(snapshot.syncWarnings) ? snapshot.syncWarnings[0] : ""
+    if (warning && model.session.log[0] !== warning) {
+      model.session.log.unshift(warning)
+      refresh()
+    }
+  } catch {
+    return
+  }
+}
+
+function closeLobbySocket() {
+  if (lobbySocket) lobbySocket.close()
+  lobbySocket = null
+  lobbySocketUrl = ""
+  lobbyConnectedPlayers = 0
+}
+
 function maybeSubmitLobbyResult() {
-  const lobbyUrl = env("OPENDUNGEON_LOBBY_URL", "DUNGEON_LOBBY_URL")
+  const lobbyUrl = lobbyUrlFromConfig()
   if (!lobbyUrl || model.session.status === "running" || submittedSession === model.session) return
   submittedSession = model.session
   const result = {
@@ -1469,7 +1567,12 @@ function maybeSubmitLobbyResult() {
     })
 }
 
+function lobbyUrlFromConfig() {
+  return cliJoin?.lobbyUrl || normalizeLobbyBaseUrl(env("OPENDUNGEON_LOBBY_URL", "DUNGEON_LOBBY_URL") || "")
+}
+
 function seedFromEnv() {
+  if (cliJoin?.seed) return cliJoin.seed
   const value = Number(env("OPENDUNGEON_SEED", "DUNGEON_SEED"))
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 2423368
 }
@@ -1479,6 +1582,7 @@ function randomSeed() {
 }
 
 function modeFromEnv(): MultiplayerMode {
+  if (cliJoin?.mode) return cliJoin.mode
   const value = env("OPENDUNGEON_MODE", "DUNGEON_MODE")
   return value === "coop" || value === "race" || value === "solo" ? value : "solo"
 }
@@ -1575,6 +1679,47 @@ function modeIndexFor(mode: MultiplayerMode) {
   if (mode === "coop") return 1
   if (mode === "race") return 2
   return 0
+}
+
+type CliJoin = {
+  lobbyUrl: string
+  seed?: number
+  mode?: MultiplayerMode
+  status: string
+  autoStart: boolean
+}
+
+async function resolveJoinCommand(args: string[]): Promise<CliJoin | null> {
+  if (args[0] !== "join") return null
+  const lobbyUrl = normalizeLobbyBaseUrl(args[1] || "")
+  if (!lobbyUrl) {
+    console.error("Usage: opendungeon join <lobby-url>")
+    process.exit(1)
+  }
+
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 3500)
+    const response = await fetch(new URL("/invite", lobbyUrl), { signal: controller.signal }).finally(() => clearTimeout(timer))
+    if (!response.ok) throw new Error(`Lobby returned ${response.status}`)
+    const invite = (await response.json()) as { mode?: string; seed?: number; url?: string }
+    const mode = invite.mode === "coop" || invite.mode === "race" ? invite.mode : undefined
+    const seed = Number.isFinite(Number(invite.seed)) ? Math.floor(Number(invite.seed)) : undefined
+    const url = normalizeLobbyBaseUrl(invite.url || lobbyUrl) || lobbyUrl
+    return {
+      lobbyUrl: url,
+      seed,
+      mode,
+      status: `Joining lobby ${url}.`,
+      autoStart: Boolean(seed && mode),
+    }
+  } catch {
+    return {
+      lobbyUrl,
+      status: `Could not read lobby invite at ${lobbyUrl}. Check the server URL and port.`,
+      autoStart: false,
+    }
+  }
 }
 
 function env(primary: string, fallback: string) {

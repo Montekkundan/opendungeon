@@ -23,6 +23,8 @@ function smokeNpmInstall(tarball: string) {
   run("npm", ["install", "-g", "--prefix", prefix, tarball])
   const output = run("opendungeon", ["--version"], { env: withPath(npmBin(prefix), { ...process.env, OPENDUNGEON_REQUIRE_BUNDLED_BUN: "1" }) })
   assertVersionOutput("npm", output)
+  const hostOutput = run("opendungeon-host", ["--help"], { env: withPath(npmBin(prefix), { ...process.env, OPENDUNGEON_REQUIRE_BUNDLED_BUN: "1" }) })
+  assertHostOutput("npm", hostOutput)
 }
 
 function findPackedTarball(directory: string) {
@@ -36,6 +38,8 @@ function smokeBunInstall(tarball: string) {
   run("bun", ["install", "-g", tarball], { env: { ...process.env, BUN_INSTALL: bunHome } })
   const output = run("opendungeon", ["--version"], { env: withPath(join(bunHome, "bin"), { ...process.env, OPENDUNGEON_REQUIRE_BUNDLED_BUN: "1" }) })
   assertVersionOutput("bun", output)
+  const hostOutput = run("opendungeon-host", ["--help"], { env: withPath(join(bunHome, "bin"), { ...process.env, OPENDUNGEON_REQUIRE_BUNDLED_BUN: "1" }) })
+  assertHostOutput("bun", hostOutput)
 }
 
 function npmBin(prefix: string) {
@@ -48,6 +52,10 @@ function withPath(binDir: string, env = process.env) {
 
 function assertVersionOutput(manager: string, output: string) {
   if (!output.includes("opendungeon ")) throw new Error(`${manager} global install did not run opendungeon --version. Output:\n${output}`)
+}
+
+function assertHostOutput(manager: string, output: string) {
+  if (!output.includes("opendungeon-host")) throw new Error(`${manager} global install did not run opendungeon-host --help. Output:\n${output}`)
 }
 
 function run(command: string, args: string[], options: { env?: NodeJS.ProcessEnv } = {}) {
