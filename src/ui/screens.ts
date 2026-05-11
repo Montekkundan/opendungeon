@@ -2582,13 +2582,15 @@ function drawDungeonBackdrop(canvas: Canvas, seed: number, settings?: UserSettin
 }
 
 function drawScreenTransition(canvas: Canvas, transition: ScreenTransition) {
+  if (transition.kind === "screen") return
+
   const elapsed = Date.now() - transition.startedAt
   const progress = clamp(elapsed / Math.max(1, transition.durationMs), 0, 1)
   if (progress >= 1) return
 
   const close = progress < 0.5 ? progress * 2 : (1 - progress) * 2
   const shadeRows = Math.ceil((1 - close) * canvas.height)
-  const color = transition.kind === "portal" ? "#152d32" : transition.kind === "village" ? "#18291c" : "#071014"
+  const color = transition.kind === "portal" ? "#152d32" : "#18291c"
   for (let row = 0; row < shadeRows; row++) {
     const top = row
     const bottom = canvas.height - row - 1
@@ -2600,10 +2602,10 @@ function drawScreenTransition(canvas: Canvas, transition: ScreenTransition) {
     const width = Math.min(46, canvas.width - 8)
     const x = Math.floor((canvas.width - width) / 2)
     const y = Math.floor(canvas.height / 2) - 2
-    const title = transition.kind === "portal" ? "PORTAL" : transition.kind === "village" ? "VILLAGE" : "SHIFT"
+    const title = transition.kind === "portal" ? "PORTAL" : "VILLAGE"
     canvas.fill(x, y, width, 4, " ", "#05070a", "#05070a")
-    canvas.border(x, y, width, 4, transition.kind === "screen" ? UI.gold : UI.focus)
-    canvas.center(y + 1, trim(title, width - 4), transition.kind === "screen" ? UI.gold : UI.focus, "#05070a")
+    canvas.border(x, y, width, 4, UI.focus)
+    canvas.center(y + 1, trim(title, width - 4), UI.focus, "#05070a")
     canvas.center(y + 2, trim(transition.label, width - 4), UI.soft, "#05070a")
   }
 }

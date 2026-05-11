@@ -1207,11 +1207,15 @@ function setScreen(screen: ScreenId, label: string, kind: ScreenTransition["kind
   const from = model.screen
   if (from === screen) return
   model.screen = screen
+  if (kind === "screen") {
+    model.screenTransition = null
+    return
+  }
   startScreenTransition(from, screen, label, kind)
 }
 
 function startScreenTransition(from: ScreenId, to: ScreenId, label: string, kind: ScreenTransition["kind"]) {
-  if (model.settings.reduceMotion) {
+  if (kind === "screen" || model.settings.reduceMotion) {
     model.screenTransition = null
     return
   }

@@ -115,6 +115,28 @@ test("multiplayer picker only shows multiplayer modes", () => {
   expect(text).not.toContain("One crawl, local run.")
 })
 
+test("normal screen changes do not draw transition banners", () => {
+  const output = draw(
+    modelFor("tutorial", createSession(1234), {
+      screenTransition: {
+        from: "start",
+        to: "tutorial",
+        label: "Opening tutorial.",
+        kind: "screen",
+        startedAt: Date.now(),
+        durationMs: 420,
+      },
+    }),
+    100,
+    32,
+  )
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Tutorial")
+  expect(text).not.toContain("SHIFT")
+  expect(text).not.toContain("Opening tutorial.")
+})
+
 function skillCheckModel() {
   const session = createSession(1234)
   const target = { x: session.player.x + 1, y: session.player.y }
