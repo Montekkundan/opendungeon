@@ -9,6 +9,7 @@ import { actorGlyph, tileGlyph } from "../game/glyphs.js"
 import {
   attemptFlee,
   combatSkills,
+  createNextDescentSession,
   createSession,
   currentBiome,
   cycleTarget,
@@ -29,6 +30,7 @@ import {
   playLocalCutscene,
   prepareFood,
   performCombatAction,
+  recordTutorialAction,
   refreshBalanceDashboard,
   resolveSkillCheck,
   rest,
@@ -129,6 +131,7 @@ export const headlessActionIds = [
   "toggle-hard-mode",
   "toggle-cursed-floors",
   "toggle-boss-rush",
+  "start-next-descent",
 ] as const
 
 export type HeadlessActionId = (typeof headlessActionIds)[number]
@@ -676,6 +679,29 @@ export class HeadlessGameEnv {
     this.session.hp = Math.max(0, this.session.hp - Math.max(0, amount))
   }
 
+  completeTutorialAndReachFloor2() {
+    if (!this.session.tutorial.enabled) {
+      this.session = createSession(this.session.seed, this.session.mode, this.session.hero.classId, this.session.hero.name, this.session.hero.appearance, true)
+    }
+    for (const action of ["move-up", "move-down", "move-left", "move-right", "inventory", "quests", "book", "npc", "talent-check", "combat-start", "combat-end"] as const) {
+      recordTutorialAction(this.session, action)
+    }
+    const stairs = { x: this.session.player.x + 1, y: this.session.player.y }
+    setTile(this.session.dungeon, stairs, "stairs")
+    this.session.dungeon.actors = this.session.dungeon.actors.filter((actor) => !samePoint(actor.position, stairs))
+    tryMove(this.session, 1, 0)
+  }
+
+  completeFirstClear() {
+    this.session.floor = this.session.finalFloor
+    this.session.status = "running"
+    this.session.combat = { active: false, actorIds: [], selectedTarget: 0, selectedSkill: 0, initiative: [], round: 0, message: "" }
+    const stairs = { x: this.session.player.x + 1, y: this.session.player.y }
+    setTile(this.session.dungeon, stairs, "stairs")
+    this.session.dungeon.actors = this.session.dungeon.actors.filter((actor) => !samePoint(actor.position, stairs))
+    tryMove(this.session, 1, 0)
+  }
+
   saveLocalTestAuth(provider: AuthSession["provider"] = "password", expiresAt = new Date(Date.UTC(2099, 0, 1)).toISOString()) {
     saveAuthSession({
       provider,
@@ -801,6 +827,11 @@ export class HeadlessGameEnv {
       return { message: `Balance ${dashboard.classWinRate[this.session.hero.classId]}% ${this.session.hero.classId}.` }
     }
     if (action === "play-cutscene") return { message: playLocalCutscene(this.session).title }
+    if (action === "start-next-descent") {
+      this.session = createNextDescentSession(this.session, this.session.seed + 1)
+      this.panel = null
+      return { message: "Started next descent from village preparations." }
+    }
     if (action.startsWith("toggle-")) {
       const mutator = mutatorIdForAction(action)
       const enabled = mutator ? toggleRunMutator(this.session, mutator) : false
@@ -1029,6 +1060,7 @@ function addHubLegalActions(actions: Set<HeadlessActionId>, session: GameSession
   actions.add("toggle-hard-mode")
   actions.add("toggle-cursed-floors")
   actions.add("toggle-boss-rush")
+  actions.add("start-next-descent")
 }
 
 function stationIdForAction(action: HeadlessActionId): HubStationId | null {
