@@ -1599,24 +1599,29 @@ function drawTutorialCoach(canvas: Canvas, session: GameSession) {
   if (!prompt || canvas.width < 82 || canvas.height < 28) return
   const width = Math.min(74, Math.max(56, Math.floor(canvas.width * 0.48)))
   const x = Math.max(2, canvas.width - width - 2)
-  const y = gameHudHeight(canvas) + 1
+  const toastReserve = session.toasts.length && !session.combat.active ? Math.min(6, 3 + wrappedRows(session.toasts[0]?.text ?? "", width - 7, 3).length) : 0
+  const y = gameHudHeight(canvas) + 1 + toastReserve
   const steps = "steps" in prompt && Array.isArray(prompt.steps) ? prompt.steps : []
-  const height = Math.min(12, Math.max(8, 7 + Math.ceil(steps.length / 2)))
+  const textRows = wrappedRows(prompt.text, width - 4, 3)
+  const footerRows = "footer" in prompt && prompt.footer ? wrappedRows(prompt.footer, width - 4, 2) : []
+  const stepRows = Math.ceil(Math.min(steps.length, 8) / 2)
+  const height = Math.min(canvas.height - y - 1, Math.max(9, 5 + textRows.length + stepRows + footerRows.length))
   canvas.fill(x, y, width, height, " ", "#0b1218", "#0b1218")
   canvas.border(x, y, width, height, UI.gold)
   canvas.write(x + 2, y + 1, trim(prompt.title, width - 4), UI.gold, "#0b1218")
-  writeWrapped(canvas, x + 2, y + 2, width - 4, [prompt.text], 2, UI.ink, "#0b1218")
+  writeRows(canvas, x + 2, y + 2, width - 4, textRows, UI.ink, "#0b1218")
   const leftW = Math.floor((width - 6) / 2)
+  const stepStartY = y + 3 + textRows.length
   steps.slice(0, 8).forEach((step, index) => {
     const done = step.endsWith("done")
     const col = index % 2
     const row = Math.floor(index / 2)
     const stepX = x + 2 + col * (leftW + 2)
-    const stepY = y + 5 + row
+    const stepY = stepStartY + row
     canvas.write(stepX, stepY, done ? "[x]" : "[ ]", done ? UI.focus : UI.muted, "#0b1218")
     canvas.write(stepX + 4, stepY, trim(step.replace(/\s+(done|needed)$/u, ""), leftW - 4), done ? UI.focus : UI.soft, "#0b1218")
   })
-  if ("footer" in prompt && prompt.footer) canvas.write(x + 2, y + height - 2, trim(prompt.footer, width - 4), UI.brass, "#0b1218")
+  if (footerRows.length) writeRows(canvas, x + 2, y + height - footerRows.length - 1, width - 4, footerRows, UI.brass, "#0b1218")
 }
 
 function drawToasts(canvas: Canvas, session: GameSession) {
@@ -1908,8 +1913,8 @@ function drawSkillCheckModal(canvas: Canvas, session: GameSession, animation: Di
   const check = session.skillCheck
   if (!check) return
 
-  const width = Math.min(92, canvas.width - 8)
-  const height = Math.min(22, canvas.height - 6)
+  const width = Math.min(104, canvas.width - 8)
+  const height = Math.min(26, canvas.height - 6)
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.floor((canvas.height - height) / 2)
   const roll = check.roll
@@ -1944,16 +1949,23 @@ function drawSkillCheckModal(canvas: Canvas, session: GameSession, animation: Di
   drawPixelBlock(canvas, infoX + infoW - 10, diceY + 4, pixelSprite(classSprite(session.hero.classId, session.hero.appearance), 8, 3), 0.85)
   canvas.write(infoX + 2, diceY + 5, trim(check.actor, infoW - 14), UI.gold, UI.panel2)
 
-  writeWrapped(canvas, x + 4, y + height - 7, width - 8, [check.prompt], 2, UI.soft, UI.panel)
-  writeWrapped(canvas, x + 4, y + height - 5, width - 8, [skillCheckFormulaText(session, check)], 2, UI.ink, UI.panel)
+  const bodyW = width - 8
+  const promptRows = wrappedRows(check.prompt, bodyW, 2)
+  const formulaRows = wrappedRows(skillCheckFormulaText(session, check), bodyW, 3)
+  const promptY = y + height - 10
+  const formulaY = promptY + promptRows.length + 1
+  writeRows(canvas, x + 4, promptY, bodyW, promptRows, UI.soft, UI.panel)
+  writeRows(canvas, x + 4, formulaY, bodyW, formulaRows, UI.ink, UI.panel)
   if (resolved) {
     const color = roll.success ? UI.focus : UI.hp
-    canvas.fill(x + Math.floor(width / 2) - 12, y + height - 3, 24, 1, " ", UI.panel3, UI.panel3)
-    writeCentered(canvas, x, y + height - 3, width, roll.success ? "SUCCESS" : "FAILURE", color, UI.panel3)
-    canvas.center(y + height - 2, trim(skillCheckOutcomeText(check, roll.success), width - 8), UI.ink, UI.panel)
+    const outcomeRows = wrappedRows(skillCheckOutcomeText(check, roll.success), bodyW, 2)
+    canvas.fill(x + Math.floor(width / 2) - 12, y + height - 4, 24, 1, " ", UI.panel3, UI.panel3)
+    writeCentered(canvas, x, y + height - 4, width, roll.success ? "SUCCESS" : "FAILURE", color, UI.panel3)
+    outcomeRows.forEach((row, index) => writeCentered(canvas, x, y + height - 3 + index, width, row, UI.ink, UI.panel))
   } else {
-    canvas.center(y + height - 3, "Enter roll d20   Esc step away", UI.focus, UI.panel)
-    canvas.center(y + height - 2, "A d20 is a twenty-sided die; stats, luck, level, and relics add to it.", UI.muted, UI.panel)
+    const guideRows = wrappedRows("A d20 is a twenty-sided die. Add stats, luck, level, and relics to the roll.", bodyW, 2)
+    canvas.center(y + height - 4, "Enter roll d20   Esc step away", UI.focus, UI.panel)
+    guideRows.forEach((row, index) => writeCentered(canvas, x, y + height - 3 + index, width, row, UI.muted, UI.panel))
   }
 }
 
@@ -2000,6 +2012,10 @@ function writeCentered(canvas: Canvas, x: number, y: number, width: number, text
 
 function writeWrapped(canvas: Canvas, x: number, y: number, width: number, paragraphs: readonly string[], maxRows: number, fg: string, bg?: string) {
   const rows = wrappedRows(paragraphs.join(" "), width, maxRows)
+  writeRows(canvas, x, y, width, rows, fg, bg)
+}
+
+function writeRows(canvas: Canvas, x: number, y: number, width: number, rows: readonly string[], fg: string, bg?: string) {
   rows.forEach((row, index) => canvas.write(x, y + index, trim(row, width), fg, bg))
 }
 

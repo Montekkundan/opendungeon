@@ -38,7 +38,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: skillCheckModel(),
-      expectedHash: "e5099664",
+      expectedHash: "285cc6a1",
       requiredText: ["Talent Check", "Whispering Relic", "Total >= difficulty", "Enter roll d20", "Esc step away"],
     },
     {
@@ -377,6 +377,32 @@ test("active tutorial coach remains visible when run UI is hidden", () => {
   expect(text).toContain("Up")
   expect(text).toContain("Pack I")
   expect(text).toContain("The gate opens")
+})
+
+test("tutorial coach wraps co-op checkpoint instructions", () => {
+  const output = draw(modelFor("game", createSession(1234, "coop", "ranger", "Mira", undefined, true)), 136, 44)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Area I - Movement")
+  expect(text).toContain("In co-op")
+  expect(text).toContain("every connected crawler")
+  expect(text).toContain("must finish this checkpoint")
+  expect(text).toContain("The gate opens")
+})
+
+test("talent check modal shows the full D20 rule and result copy", () => {
+  const model = skillCheckModel()
+  const check = model.session.skillCheck
+  if (!check) throw new Error("expected skill check")
+  check.status = "resolved"
+  check.roll = { d20: 15, modifier: -1, total: 14, dc: check.dc, success: true, critical: false, fumble: false, stat: check.stat, consequence: check.successText }
+  const output = draw(model, 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Total >= difficulty wins; 20 always succeeds and 1 fails.")
+  expect(text).toContain("You got a Bound relic, focus, gold, and XP.")
+  expect(text).toContain("Press I to inspect inventory.")
+  expect(text).not.toContain("1 fa…")
 })
 
 test("book dialog separates monster entries into the monster tab", () => {
