@@ -421,6 +421,32 @@ test("book dialog separates monster entries into the monster tab", () => {
   expect(text).not.toContain("Waking Cell")
 })
 
+test("run end explains village recovery after death", () => {
+  const session = createSession(1234)
+  unlockHub(session)
+  session.status = "dead"
+  session.hp = 0
+  const output = draw(modelFor("game", session), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("YOU FELL")
+  expect(text).toContain("Village progress remains")
+  expect(text).toContain("Enter next descent")
+  expect(text).toContain("V village")
+})
+
+test("run end explains village preparation after victory", () => {
+  const session = createSession(1234)
+  unlockHub(session)
+  session.status = "victory"
+  const output = draw(modelFor("game", session), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("VICTORY")
+  expect(text).toContain("sell loot, build, cook")
+  expect(text).toContain("Enter next descent")
+})
+
 function skillCheckModel() {
   const session = createSession(1234)
   const target = { x: session.player.x + 1, y: session.player.y }

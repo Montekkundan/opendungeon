@@ -3029,7 +3029,7 @@ function drawPauseAction(canvas: Canvas, x: number, y: number, width: number, ke
 
 function drawRunEnd(canvas: Canvas, session: GameSession) {
   const width = Math.min(68, canvas.width - 8)
-  const height = 13
+  const height = 14
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.floor((canvas.height - height) / 2)
   canvas.fill(x, y, width, height, " ", "#05070a", "#05070a")
@@ -3040,12 +3040,19 @@ function drawRunEnd(canvas: Canvas, session: GameSession) {
     session.status === "victory"
       ? "The final gate opens. The dungeon releases its claim."
       : "The dungeon closes around your unfinished oath."
+  const recovery = session.hub.unlocked
+    ? session.status === "victory"
+      ? "Village road is open: sell loot, build, cook, and descend again."
+      : "Village progress remains; this run's floor progress is lost."
+    : "No village route yet. Retry this seed or return to title."
+  const footer = session.hub.unlocked ? "Enter next descent    V village    Esc title    q quit" : "Enter rerun this seed    Esc title    q quit"
 
   canvas.center(y + 2, title, session.status === "victory" ? "#f4d06f" : "#d56b8c")
   canvas.center(y + 4, body, "#d8dee9")
   canvas.center(y + 6, `Score ${runScore(session)}  Floor ${session.floor}/${session.finalFloor}  Turns ${session.turn}`, "#f4d06f")
   canvas.center(y + 7, `Kills ${session.kills}  Gold ${session.gold}  Level ${session.level}`, "#8f9ba8")
-  canvas.center(y + 9, "Enter rerun this seed    Esc title    q quit", "#66717d")
+  canvas.center(y + 9, recovery, session.hub.unlocked ? UI.focus : "#8f9ba8")
+  canvas.center(y + 11, footer, "#66717d")
 }
 
 function drawDungeonBackdrop(canvas: Canvas, seed: number, settings?: UserSettings) {

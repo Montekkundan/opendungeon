@@ -905,7 +905,11 @@ function handleGameKey(key: KeyEvent) {
       else blockVillageShortcut()
       return
     }
-    if (isConfirmKey(key)) startRun()
+    if (isConfirmKey(key)) {
+      if (model.session.hub.unlocked) startVillageDescent()
+      else startRun()
+      return
+    }
     if (key.name === "escape") {
       setScreen("start", "Returning to title.")
       model.menuIndex = 0
