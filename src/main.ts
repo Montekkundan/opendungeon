@@ -76,6 +76,7 @@ import {
   type ScreenId,
   type ScreenTransition,
 } from "./ui/screens.js"
+import { nextVillageSeedMode, seedForVillageDescent, villageSeedPlanText } from "./game/descentSeed.js"
 import { shouldUseThreeRenderer } from "./rendering/threeAssets.js"
 import { authHelpText, handleAuthCommand } from "./cloud/authCli.js"
 import { loadAuthSession } from "./cloud/authStore.js"
@@ -169,6 +170,7 @@ const model: AppModel = {
   classIndex: classIndexFromEnv(),
   modeIndex: modeIndexFromEnv(),
   seed: seedFromEnv(),
+  villageSeedMode: "fresh",
   session: createSession(seedFromEnv(), modeFromEnv(), classFromEnv(), initialPlayerName),
   message: "",
   saves: initialSaves,
@@ -559,8 +561,13 @@ function handleHubKey(key: KeyEvent) {
 
 function handleVillageKey(key: KeyEvent) {
   if (key.name === "g") {
-    model.seed = randomSeed()
+    model.seed = seedForVillageDescent(model.villageSeedMode, model.seed, randomSeed)
     startVillageDescent()
+    return
+  }
+  if (key.name === "s") {
+    model.villageSeedMode = nextVillageSeedMode(model.villageSeedMode)
+    model.saveStatus = `Next descent seed: ${villageSeedPlanText(model.villageSeedMode, model.seed)}.`
     return
   }
   if (key.name === "1") {

@@ -79,7 +79,7 @@
 - [x] Add a first-clear acceptance path: finish tutorial, reach Floor 5, defeat or clear the final gate, auto-arrive in village, sell loot, build or inspect blacksmith, prepare food, then start the next descent with meta-progression still present.
 - [x] Add a headless scenario for the full loop above, plus assertions for quest title, floor transitions, hub unlock, village state persistence, and next-run modifiers.
 - [x] Make victory and death recovery explicit: after death, show whether the village/hub progress remains, what was lost, and which key starts the next descent.
-- [ ] Decide whether "new descent" should use a fresh random seed, a player-chosen seed, or a village challenge seed; expose that choice in the village UI before launching.
+- [x] Decide whether "new descent" should use a fresh random seed, a player-chosen seed, or a village challenge seed; expose that choice in the village UI before launching.
 
 ### Tutorial And First-Time User Experience
 

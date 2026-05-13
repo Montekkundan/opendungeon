@@ -78,8 +78,8 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: villageModel(),
-      expectedHash: "c762e204",
-      requiredText: ["Village", "Walkable Village", "NPC Schedule", "Market and Balance", "First loop", "G starts"],
+      expectedHash: "193d4514",
+      requiredText: ["Village", "Walkable Village", "NPC Schedule", "Market and Balance", "Seed plan", "S seed", "G starts"],
     },
   ]
 
@@ -507,6 +507,7 @@ function modelFor(screen: ScreenId, session = createSession(1234), overrides: Pa
     classIndex: 2,
     modeIndex: 0,
     seed: session.seed,
+    villageSeedMode: "fresh",
     session,
     message: "",
     saves: [],

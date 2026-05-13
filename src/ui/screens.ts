@@ -35,6 +35,7 @@ import {
   type MultiplayerMode,
 } from "../game/session.js"
 import { appearanceLabel, heroSpriteForAppearance, normalizeHeroAppearance, weaponSpriteForAppearance, type HeroAppearance } from "../game/appearance.js"
+import { villageSeedModeLabel, type VillageSeedMode } from "../game/descentSeed.js"
 import { isEnemyActorId, isNpcActorId, type TileId } from "../game/domainTypes.js"
 import { actorLabel } from "../game/glyphs.js"
 import { saveDirectory, type SaveSummary } from "../game/saveStore.js"
@@ -109,6 +110,7 @@ export type AppModel = {
   classIndex: number
   modeIndex: number
   seed: number
+  villageSeedMode: VillageSeedMode
   session: GameSession
   message: string
   saves: SaveSummary[]
@@ -889,8 +891,8 @@ function drawVillage(canvas: Canvas, model: AppModel) {
   canvas.write(sideX + 3, mapY + 2, trim(selected.text, sideW - 6), UI.ink, UI.panel)
   canvas.write(sideX + 3, mapY + 4, trim(`Coins ${hub.coins}  Loot sold ${hub.lootSold}  Pack ${hub.contentPacks.active}`, sideW - 6), UI.soft, UI.panel)
   canvas.write(sideX + 3, mapY + 5, trim(`Farm permissions ${hub.village.sharedFarm.permissions}`, sideW - 6), UI.soft, UI.panel)
-  canvas.write(sideX + 3, mapY + 6, trim("First loop: 3 sell loot, 1 blacksmith, 4 food.", sideW - 6), UI.gold, UI.panel)
-  canvas.write(sideX + 3, mapY + 7, trim("G starts the next descent when ready.", sideW - 6), UI.focus, UI.panel)
+  canvas.write(sideX + 3, mapY + 6, trim(`Seed plan ${villageSeedModeLabel(model.villageSeedMode)}. S cycles.`, sideW - 6), UI.gold, UI.panel)
+  canvas.write(sideX + 3, mapY + 7, trim("G starts when loot, build, and food are ready.", sideW - 6), UI.focus, UI.panel)
 
   const scheduleY = mapY + 10
   drawPanel(canvas, sideX, scheduleY, sideW, 9, "NPC Schedule", UI.edge)
@@ -920,6 +922,7 @@ function drawVillage(canvas: Canvas, model: AppModel) {
     ["P", "farm perms"],
     ["C", "pack"],
     ["B", "balance"],
+    ["S", "seed"],
     ["N", "cutscene"],
     ["1/3/4", "prep"],
     ["G", "descent"],
