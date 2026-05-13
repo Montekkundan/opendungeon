@@ -22,6 +22,10 @@ export type UserSettings = {
   diceSkin: DiceSkinId
   music: boolean
   sound: boolean
+  muteAudio: boolean
+  masterVolume: number
+  musicVolume: number
+  sfxVolume: number
 }
 
 type ProfileEnvelope = {
@@ -45,8 +49,12 @@ export const defaultSettings: UserSettings = {
   backgroundFx: "normal",
   tileScale: "wide",
   diceSkin: defaultDiceSkin,
-  music: false,
+  music: true,
   sound: true,
+  muteAudio: false,
+  masterVolume: 0.8,
+  musicVolume: 0.7,
+  sfxVolume: 0.8,
 }
 
 export function profileDirectory() {
@@ -88,6 +96,7 @@ function ensureProfileDirectory() {
 }
 
 function normalizeSettings(settings: Partial<UserSettings>): UserSettings {
+  const hasAudioSchema = hasStoredAudioSchema(settings)
   return {
     username: cleanName(settings.username, defaultSettings.username),
     githubUsername: cleanName(settings.githubUsername, ""),
@@ -101,9 +110,17 @@ function normalizeSettings(settings: Partial<UserSettings>): UserSettings {
     backgroundFx: asBackgroundFx(settings.backgroundFx),
     tileScale: asTileScale(settings.tileScale),
     diceSkin: asDiceSkin(settings.diceSkin),
-    music: Boolean(settings.music),
-    sound: settings.sound !== false,
+    music: hasAudioSchema ? settings.music !== false : defaultSettings.music,
+    sound: hasAudioSchema ? settings.sound !== false : defaultSettings.sound,
+    muteAudio: hasAudioSchema ? Boolean(settings.muteAudio) : defaultSettings.muteAudio,
+    masterVolume: asVolume(settings.masterVolume, defaultSettings.masterVolume),
+    musicVolume: asVolume(settings.musicVolume, defaultSettings.musicVolume),
+    sfxVolume: asVolume(settings.sfxVolume, defaultSettings.sfxVolume),
   }
+}
+
+function hasStoredAudioSchema(settings: Partial<UserSettings>) {
+  return "muteAudio" in settings || "masterVolume" in settings || "musicVolume" in settings || "sfxVolume" in settings
 }
 
 function cleanName(value: unknown, fallback: string) {
@@ -128,4 +145,9 @@ function asTileScale(value: unknown): TileScalePreference {
 
 function asDiceSkin(value: unknown): DiceSkinId {
   return typeof value === "string" && (diceSkinIds as readonly string[]).includes(value) ? (value as DiceSkinId) : defaultDiceSkin
+}
+
+function asVolume(value: unknown, fallback: number) {
+  const number = typeof value === "number" ? value : Number(value)
+  return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : fallback
 }

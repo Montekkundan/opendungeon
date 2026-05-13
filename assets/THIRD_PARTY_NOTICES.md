@@ -20,6 +20,12 @@ opendungeon code is MIT licensed. Some bundled game art is third-party pixel art
 - Pixel Art Icons - RPG Essentials (16x16) by Kettoman: https://kettoman.itch.io/pixel-art-icons-rpg-essentials-16x16
   - Used files: `icons_sheet.png`, copied into `assets/opendungeon-assets/runtime/icons/kettoman-rpg-icons-16x16.png` for inventory, loot, and UI item sprites.
   - License summary from the bundled license file and asset page: CC0/public domain; commercial and non-commercial use allowed; credit appreciated but not required.
+- Bountiful Bits - 10x10 RPG Assets Top-Down Tileset by VEXED: https://v3x3d.itch.io/bountiful-bits
+  - Used files: `Colored/no-background/Civilized-no-bg.png`, copied into `assets/opendungeon-assets/runtime/tiles/vexed-bountiful-bits-civilized-10x10.png` and sampled for dungeon door and hazard sprites.
+  - Asset license: Creative Commons Zero v1.0 Universal; the current asset page says commercial use and tile modification are allowed.
+- Project-owned music loops:
+  - Used files: `assets/opendungeon-assets/runtime/audio/title-settings-loop.mp3` and `assets/opendungeon-assets/runtime/audio/dungeon-loop.mp3`.
+  - Source notes: see `assets/opendungeon-assets/licenses/project-owned-audio.txt`.
 - RPG Village Tileset (16x16) by franopx: https://franopx.itch.io/rpg-village-tileset-16x16
   - Reviewed and downloaded to the local ignored cache for village, house, shop, farm, and hub planning; not bundled in runtime yet.
   - License summary from the asset page: personal and commercial use allowed; credit is not necessary.
