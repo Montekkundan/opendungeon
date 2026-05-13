@@ -1153,7 +1153,15 @@ function confirmMenu() {
 
 function startRun() {
   if (!acquireRunSlot()) return
-  model.session = createSession(model.seed, currentMode(model).id, currentClass(model).id, currentPlayerName(), model.session.hero.appearance, model.settings.startWithTutorial)
+  model.session = createSession(
+    model.seed,
+    currentMode(model).id,
+    currentClass(model).id,
+    currentPlayerName(),
+    model.session.hero.appearance,
+    model.settings.startWithTutorial,
+    !model.settings.startWithTutorial,
+  )
   submittedSession = null
   clearCameraReturnAnimation(false)
   setScreen("game", "The descent opens.", "portal")

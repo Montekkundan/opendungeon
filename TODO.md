@@ -85,7 +85,7 @@
 
 - [ ] Play through the tutorial in Ghostty at multiple terminal sizes and fix text overlap, hidden lines, camera jumps, and unreadable modal content.
 - [x] Add tutorial coverage for final gate, village arrival, selling loot, building blacksmith, preparing food, and starting a new descent after the first clear.
-- [ ] Add a skip/tutorial-off path that still gives experienced players the core quest and starting context without trapping them behind tutorial gates.
+- [x] Add a skip/tutorial-off path that still gives experienced players the core quest and starting context without trapping them behind tutorial gates.
 - [x] Make all tutorial prompts and talent-check explanations wrap without ellipses at supported terminal sizes.
 - [ ] Add reduced-motion behavior for tutorial gate opening, teleport, dice, camera, and first-clear transitions.
 

@@ -1455,7 +1455,15 @@ const monsterProfiles: Record<EnemyActorId, MonsterProfile> = {
   },
 }
 
-export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", classId: HeroClass = "ranger", heroName = "Mira", appearance?: Partial<HeroAppearance> | null, startWithTutorial = false): GameSession {
+export function createSession(
+  seed = 2423368,
+  mode: MultiplayerMode = "solo",
+  classId: HeroClass = "ranger",
+  heroName = "Mira",
+  appearance?: Partial<HeroAppearance> | null,
+  startWithTutorial = false,
+  showTutorialOffStart = false,
+): GameSession {
   const dungeon = createDungeon(seed, 1)
   const stats = statsForClass(classId)
   const maxHp = derivedMaxHp(stats)
@@ -1525,6 +1533,7 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
   if (session.tutorial.enabled) prepareTutorialArea(session)
   for (const entry of initialKnowledgeEntries()) rememberKnowledge(session, entry)
   addToast(session, "Awake", "No memory, one weapon, and a dungeon that knows your steps.", "info")
+  if (!session.tutorial.enabled && showTutorialOffStart) applyTutorialOffStart(session)
   revealAroundPlayer(session)
   return session
 }
@@ -1545,6 +1554,7 @@ export function createNextDescentSession(previous: GameSession, seed: number): G
   next.focus = next.maxFocus
   applyMutatorPressure(next)
   refreshBalanceDashboard(next)
+  focusFinalGateQuest(next)
   rememberKnowledge(next, {
     id: "village-next-descent",
     title: "Prepared Descent",
@@ -3032,6 +3042,20 @@ function applyPostTutorialHandoff(session: GameSession) {
   rememberKnowledge(session, {
     id: "post-tutorial-handoff",
     title: "Find the Final Gate",
+    text,
+    kind: "tutorial",
+    floor: session.floor,
+  })
+  addToast(session, "Find the Final Gate", text, "info")
+}
+
+function applyTutorialOffStart(session: GameSession) {
+  const text = `Tutorial is off. Find stairs, survive to Floor ${session.finalFloor}, and open the road home.`
+  focusFinalGateQuest(session)
+  session.log.unshift(text)
+  rememberKnowledge(session, {
+    id: "tutorial-off-start",
+    title: "Tutorial Skipped",
     text,
     kind: "tutorial",
     floor: session.floor,

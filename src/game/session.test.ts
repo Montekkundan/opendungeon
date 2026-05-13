@@ -263,6 +263,18 @@ describe("game session", () => {
     expect(session.toasts[0].title).toBe("Already asked")
   })
 
+  test("tutorial-off starts still focus the final-gate quest", () => {
+    const session = createSession(1234, "solo", "ranger", "Mira", undefined, false, true)
+
+    expect(session.tutorial.enabled).toBe(false)
+    expect(session.tutorial.completed).toBe(true)
+    expect(session.tutorial.gatePoints).toEqual([])
+    expect(session.world.quests[0]?.title).toBe("Find the Final Gate")
+    expect(session.toasts[0]).toMatchObject({ title: "Find the Final Gate", tone: "info" })
+    expect(session.log[0]).toContain("Tutorial is off")
+    expect(session.knowledge.find((entry) => entry.id === "tutorial-off-start")?.text).toContain("Find stairs")
+  })
+
   test("tutorial gates three first-floor areas for movement, NPC checks, and combat", () => {
     const session = createSession(1234, "solo", "ranger", "Mira", undefined, true)
     const [gateOne, gateTwo] = session.tutorial.gatePoints
@@ -582,6 +594,9 @@ describe("game session", () => {
     expect(next.inventory).toContain("Travel rations")
     expect(next.equipment.weapon?.bonusDamage).toBe(1)
     expect(next.maxHp).toBeLessThanOrEqual(session.maxHp)
+    expect(next.world.quests[0]?.title).toBe("Find the Final Gate")
+    expect(next.toasts[0]).toMatchObject({ title: "Next descent", tone: "success" })
+    expect(next.log[0]).toContain("Village preparations carried")
   })
 
   test("village screen systems cover movement, schedules, shop pricing, co-op homes, content packs, cutscenes, and balance", () => {
