@@ -1,5 +1,6 @@
 import { Command } from "@/components/command";
 import { Footer, Header } from "@/components/site-chrome";
+import { gameModes } from "@/lib/game-modes";
 
 export default function Page() {
   return (
@@ -78,6 +79,19 @@ export default function Page() {
               <span>Open docs </span>
               <span aria-hidden="true">-&gt;</span>
             </a>
+          </section>
+
+          <section data-component="preview-copy">
+            <h3>Three ways to play</h3>
+            <div data-component="mode-grid">
+              {gameModes.map((mode) => (
+                <article data-component="mode-card" key={mode.id}>
+                  <span>{mode.status}</span>
+                  <h2>{mode.name}</h2>
+                  <p>{mode.summary}</p>
+                </article>
+              ))}
+            </div>
           </section>
 
           <section data-component="preview-copy">

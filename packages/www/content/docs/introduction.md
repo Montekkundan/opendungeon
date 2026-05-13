@@ -17,3 +17,5 @@ The terminal client is still the primary game surface. The website gives players
 ## How to read these docs
 
 Use the section pages for product-facing flows like install, controls, multiplayer, Supabase, and deployment. Use the game system pages for the RPG rules: core loop, combat, NPCs, monsters, village progression, and AI-admin content.
+
+Contributors should also read `CONTRIBUTING.md` in the repo root for the file map, one-laptop multiplayer commands, website commands, and release checks.

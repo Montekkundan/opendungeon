@@ -27,6 +27,13 @@ The terminal client keeps controls compact so the same surface works in Ghostty,
 - `V` opens village state.
 - `L` opens the run log.
 
+## Audio
+
+- `Ctrl+O` mutes or unmutes the whole game.
+- Settings includes master volume, music volume, SFX volume, music on/off, SFX on/off, and the current output status.
+- Menu, settings, tutorial, and village screens use the title/settings loop.
+- Dungeon gameplay and overlays use the dungeon loop.
+
 ## Accessibility direction
 
-Controls should remain legible under high contrast, reduced motion, larger tile scale, different camera field-of-view settings, and optional minimap visibility.
+Controls should remain legible under high contrast, reduced motion, larger tile scale, different camera field-of-view settings, optional minimap visibility, and muted audio.

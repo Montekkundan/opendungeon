@@ -4,7 +4,7 @@ import { supabaseConfigured } from "@/lib/supabase/env";
 import { login, signInWithGithub, signup } from "./actions";
 
 interface PageProps {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; next?: string }>;
 }
 
 export const metadata = {
@@ -12,8 +12,10 @@ export const metadata = {
 };
 
 export default async function LoginPage({ searchParams }: PageProps) {
-  const { error } = await searchParams;
+  const { error, next } = await searchParams;
   const configured = supabaseConfigured();
+  const nextPath =
+    next?.startsWith("/") && !next.startsWith("//") ? next : "/profile";
 
   return (
     <main data-page="opendungeon">
@@ -56,6 +58,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
                 type="password"
               />
             </label>
+            <input name="next" type="hidden" value={nextPath} />
             <div data-slot="auth-actions">
               <Button disabled={!configured} formAction={login} type="submit">
                 Log in
@@ -72,6 +75,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
           </form>
 
           <form action={signInWithGithub}>
+            <input name="next" type="hidden" value={nextPath} />
             <Button disabled={!configured} type="submit" variant="secondary">
               Continue with GitHub
             </Button>

@@ -2,6 +2,8 @@
 
 Multiplayer starts local-first. A host terminal owns the authoritative game session, and other terminal sessions join through the host address. This keeps the rules close to the CLI while the website grows invite and account features.
 
+For product planning, Multiplayer means the authored opendungeon story plus multiple players. Multiplayer with GM is a separate mode where a logged-in Dungeon Master can approve AI-assisted world changes from the website.
+
 ## Same laptop sessions
 
 You can open multiple terminal tabs on the same laptop and join the same local host. Unsigned guest sessions may run side by side. A signed-in account should not double-join from the same terminal app identity, so Ghostty sessions with the same logged-in identity should report that the account is already in a game.
