@@ -74,6 +74,8 @@ Start one local lobby host:
 bun run host -- --host 127.0.0.1 --mode coop --seed 2423368 --port 3737
 ```
 
+Loopback binds only accept same-laptop clients, so use `http://127.0.0.1:3737` or `http://localhost:3737` for this flow. If the host prints a LAN URL, it should only be when the host is bound to `0.0.0.0` or an explicit LAN address.
+
 Then open separate terminal windows or tabs for each player:
 
 ```txt

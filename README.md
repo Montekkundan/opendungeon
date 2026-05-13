@@ -59,13 +59,13 @@ Keep service-role keys server-only. The Next.js website only needs the publishab
 
 ### Multiplayer
 
-`localhost` only works on the same computer. For friends on the same Wi-Fi/LAN, host on `0.0.0.0` and share the LAN IP printed by the host.
+`127.0.0.1` and `localhost` only work on the same computer. For friends on the same Wi-Fi/LAN, host on `0.0.0.0` and share the LAN IP printed by the host.
 
 ```bash
 # Same laptop, multiple terminal tabs
 bun run host -- --host 127.0.0.1 --mode coop --seed 2423368 --port 3737
-OPENDUNGEON_PLAYER_NAME=Mira bun run dev join http://127.0.0.1:3737
-OPENDUNGEON_PLAYER_NAME=Nyx bun run dev join http://127.0.0.1:3737
+OPENDUNGEON_PLAYER_NAME=Mira bun run dev -- join http://127.0.0.1:3737
+OPENDUNGEON_PLAYER_NAME=Nyx bun run dev -- join http://127.0.0.1:3737
 
 # Same Wi-Fi / LAN
 opendungeon-host --host 0.0.0.0 --mode coop --seed 2423368 --port 3737
@@ -91,6 +91,11 @@ bun run host -- --mode coop --seed 2423368 --port 3737
 ```
 
 Signed-in accounts are protected from duplicate local play: opening a second Ghostty tab with the same saved login shows an already-in-game message. Guest/local tabs are allowed, so multiple players can join from one laptop without logging in.
+`OPENDUNGEON_PLAYER_NAME` is process-local, so every guest tab can use a different crawler name without changing your saved profile.
+
+### Contributing
+
+Start with [CONTRIBUTING.md](CONTRIBUTING.md) for the repo map, local multiplayer test commands, website commands, and the checks expected before release-facing changes.
 
 Docker/server hosting:
 

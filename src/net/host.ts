@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { WebSocketServer, type RawData, type WebSocket } from "ws"
-import { advertisedLobbyUrls, lobbyEnvCommand, lobbyJoinCommand, parseLobbyHostArgs, requestLobbyUrl } from "./hostConfig.js"
+import { advertisedLobbyUrls, lobbyEnvCommand, lobbyJoinCommand, parseLobbyHostArgs, preferredAdvertisedLobbyUrl, requestLobbyUrl } from "./hostConfig.js"
 import { MultiplayerLobbyState, loadRaceResults, saveRaceResults, type LobbyRole } from "./lobbyState.js"
 
 type LobbySocketData = {
@@ -61,7 +61,7 @@ server.on("upgrade", (request, socket, head) => {
   }
   const role: LobbyRole = url.searchParams.get("role") === "spectator" ? "spectator" : "player"
   const name = url.searchParams.get("name")?.trim() || (role === "spectator" ? "Spectator" : "Crawler")
-  const data: LobbySocketData = { id: crypto.randomUUID(), name, role }
+  const data: LobbySocketData = { id: cleanClientId(url.searchParams.get("clientId")) || crypto.randomUUID(), name, role }
   websocketServer.handleUpgrade(request, socket, head, (socket) => {
     const ws = socket as LobbyWebSocket
     ws.data = data
@@ -134,6 +134,7 @@ function handleSocketMessage(ws: LobbyWebSocket, message: RawData) {
     const state = payload.state as Record<string, unknown>
     lobby.updateCoopState({
       playerId: ws.data.id,
+      classId: state.classId as string,
       floor: state.floor as number,
       turn: state.turn as number,
       hp: state.hp as number,
@@ -145,6 +146,9 @@ function handleSocketMessage(ws: LobbyWebSocket, message: RawData) {
       x: state.x as number,
       y: state.y as number,
       combatActive: Boolean(state.combatActive),
+      tutorialStage: state.tutorialStage as string,
+      tutorialReady: Boolean(state.tutorialReady),
+      tutorialCompleted: Boolean(state.tutorialCompleted),
     })
     broadcastState()
   }
@@ -264,7 +268,7 @@ function renderLobbyPage(publicUrl: string): string {
           ? state.spectators.map((player) => "<li>" + player.name + "</li>").join("")
           : '<li class="muted">None</li>';
         document.querySelector("#coop").innerHTML = state.coopStates.length
-          ? state.coopStates.map((sync) => "<li>" + sync.name + " · floor " + sync.floor + " · turn " + sync.turn + " · hp " + sync.hp + " · (" + sync.x + "," + sync.y + ")</li>").join("")
+          ? state.coopStates.map((sync) => "<li>" + sync.name + " · " + sync.classId + " · floor " + sync.floor + " · turn " + sync.turn + " · hp " + sync.hp + " · (" + sync.x + "," + sync.y + ") · tutorial " + sync.tutorialStage + (sync.tutorialReady ? " ready" : " waiting") + "</li>").join("")
           : '<li class="muted">No sync packets yet.</li>';
         document.querySelector("#combat").textContent = state.combat.active
           ? "Round " + state.combat.round + " · active player " + state.combat.activePlayerId
@@ -278,13 +282,18 @@ function renderLobbyPage(publicUrl: string): string {
 </html>`
 }
 
+function cleanClientId(value: string | null) {
+  const id = value?.trim() ?? ""
+  return /^[A-Za-z0-9_-]{4,80}$/.test(id) ? id : ""
+}
+
 function htmlEscape(value: string) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 }
 
 function printStartup() {
   const urls = advertisedLobbyUrls(options)
-  const preferredUrl = options.publicUrl || urls.find((url) => !url.includes("localhost")) || urls[0]
+  const preferredUrl = preferredAdvertisedLobbyUrl(options, urls)
   console.log(`opendungeon lobby`)
   console.log(`Mode: ${options.mode}`)
   console.log(`Seed: ${options.seed}`)
@@ -295,4 +304,5 @@ function printStartup() {
   console.log(`Legacy: ${lobbyEnvCommand(preferredUrl, options)}`)
   console.log(`URLs:`)
   for (const url of urls) console.log(`  ${url}`)
+  if (options.bindHost === "127.0.0.1" || options.bindHost === "localhost") console.log(`LAN: use --host 0.0.0.0 to share from another device.`)
 }

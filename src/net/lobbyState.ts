@@ -15,6 +15,7 @@ export type LobbyPlayer = {
 export type CoopSyncState = {
   playerId: string
   name: string
+  classId: string
   floor: number
   turn: number
   hp: number
@@ -27,11 +28,17 @@ export type CoopSyncState = {
   x: number
   y: number
   combatActive: boolean
+  tutorialStage: string
+  tutorialReady: boolean
+  tutorialCompleted: boolean
   updatedAt: number
 }
 
-type CoopSyncInput = Omit<CoopSyncState, "name" | "updatedAt" | "level" | "unspentStatPoints" | "inventoryCount" | "gold" | "saveRevision" | "connected"> &
-  Partial<Pick<CoopSyncState, "level" | "unspentStatPoints" | "inventoryCount" | "gold" | "saveRevision" | "connected">>
+type CoopSyncInput = Omit<
+  CoopSyncState,
+  "name" | "updatedAt" | "level" | "unspentStatPoints" | "inventoryCount" | "gold" | "saveRevision" | "connected" | "classId" | "tutorialStage" | "tutorialReady" | "tutorialCompleted"
+> &
+  Partial<Pick<CoopSyncState, "level" | "unspentStatPoints" | "inventoryCount" | "gold" | "saveRevision" | "connected" | "classId" | "tutorialStage" | "tutorialReady" | "tutorialCompleted">>
 
 export type CombatTurnState = {
   active: boolean
@@ -113,6 +120,7 @@ export class MultiplayerLobbyState {
     const state: CoopSyncState = {
       ...input,
       name: player.name,
+      classId: cleanClassId(input.classId),
       floor: positiveInt(input.floor),
       turn: positiveInt(input.turn),
       hp: positiveInt(input.hp),
@@ -125,6 +133,9 @@ export class MultiplayerLobbyState {
       x: integer(input.x),
       y: integer(input.y),
       combatActive: Boolean(input.combatActive),
+      tutorialStage: cleanTutorialStage(input.tutorialStage),
+      tutorialReady: Boolean(input.tutorialReady),
+      tutorialCompleted: Boolean(input.tutorialCompleted),
       updatedAt: this.now(),
     }
     this.coopStates.set(input.playerId, state)
@@ -224,6 +235,17 @@ function coopSyncWarnings(states: CoopSyncState[]) {
   if (states.some((state) => state.unspentStatPoints > 0)) warnings.push("A player has unspent stat points.")
   if (states.some((state) => state.inventoryCount > 24)) warnings.push("A player inventory is over the expected sync size.")
   return warnings
+}
+
+function cleanClassId(value: unknown) {
+  const text = String(value || "ranger").trim()
+  return /^[a-z0-9-]{3,24}$/i.test(text) ? text.slice(0, 24) : "ranger"
+}
+
+function cleanTutorialStage(value: unknown) {
+  const text = String(value || "complete").trim()
+  if (text === "movement" || text === "npc-check" || text === "combat" || text === "complete") return text
+  return "complete"
 }
 
 export function loadRaceResults(path: string): RaceResult[] {

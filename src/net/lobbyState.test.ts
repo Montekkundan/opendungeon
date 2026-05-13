@@ -21,9 +21,9 @@ describe("multiplayer lobby state", () => {
     lobby.join("p1", "Mira")
     lobby.join("p2", "Nyx")
 
-    lobby.updateCoopState({ playerId: "p1", floor: 2, turn: 15, hp: 18, x: 4, y: 8, combatActive: true })
+    lobby.updateCoopState({ playerId: "p1", classId: "cleric", floor: 2, turn: 15, hp: 18, x: 4, y: 8, combatActive: true, tutorialStage: "movement", tutorialReady: true })
     lobby.startCombatTurnOrder(["p2", "p1", "missing"])
-    expect(lobby.snapshot().coopStates[0]).toMatchObject({ name: "Mira", floor: 2, combatActive: true })
+    expect(lobby.snapshot().coopStates[0]).toMatchObject({ name: "Mira", classId: "cleric", floor: 2, combatActive: true, tutorialStage: "movement", tutorialReady: true, tutorialCompleted: false })
     expect(lobby.snapshot().combat).toMatchObject({ active: true, activePlayerId: "p2", round: 1 })
 
     lobby.advanceCombatTurn()

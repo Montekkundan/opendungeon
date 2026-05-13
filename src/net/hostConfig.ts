@@ -78,15 +78,33 @@ export function requestLobbyUrl(hostHeader: string | undefined, options: LobbyHo
 }
 
 export function advertisedLobbyUrls(options: LobbyHostOptions, interfaces = networkInterfaces()) {
-  const urls = [`http://localhost:${options.port}`]
-  for (const entries of Object.values(interfaces)) {
-    for (const entry of entries ?? []) {
-      if (entry.family !== "IPv4" || entry.internal) continue
-      urls.push(`http://${entry.address}:${options.port}`)
-    }
-  }
+  const urls: string[] = []
   if (options.publicUrl) urls.push(options.publicUrl)
+
+  if (isWildcardBindHost(options.bindHost)) {
+    urls.push(`http://localhost:${options.port}`)
+    for (const entries of Object.values(interfaces)) {
+      for (const entry of entries ?? []) {
+        if (entry.family !== "IPv4" || entry.internal) continue
+        urls.push(`http://${entry.address}:${options.port}`)
+      }
+    }
+  } else if (isLoopbackBindHost(options.bindHost)) {
+    const loopbackUrl = bindHostUrl(options.bindHost, options.port)
+    urls.push(loopbackUrl)
+    if (!loopbackUrl.includes("localhost")) urls.push(`http://localhost:${options.port}`)
+    if (!loopbackUrl.includes("127.0.0.1") && options.bindHost === "localhost") urls.push(`http://127.0.0.1:${options.port}`)
+  } else {
+    urls.push(bindHostUrl(options.bindHost, options.port))
+  }
+
   return [...new Set(urls)]
+}
+
+export function preferredAdvertisedLobbyUrl(options: LobbyHostOptions, urls = advertisedLobbyUrls(options)) {
+  if (options.publicUrl) return options.publicUrl
+  if (isWildcardBindHost(options.bindHost)) return urls.find((url) => !isLocalLobbyUrl(url)) || urls[0]
+  return urls[0]
 }
 
 export function lobbyJoinCommand(lobbyUrl: string) {
@@ -105,4 +123,27 @@ function positivePort(value: string | undefined, fallback: number) {
 function positiveInt(value: string | number | undefined, fallback: number) {
   const number = Number(value)
   return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback
+}
+
+function isWildcardBindHost(host: string) {
+  return host === "0.0.0.0" || host === "::" || host === "[::]"
+}
+
+function isLoopbackBindHost(host: string) {
+  return host === "localhost" || host === "::1" || host === "[::1]" || host.startsWith("127.")
+}
+
+function bindHostUrl(host: string, port: number) {
+  if (host === "[::1]") return `http://[::1]:${port}`
+  if (host === "::1") return `http://[::1]:${port}`
+  return `http://${host}:${port}`
+}
+
+function isLocalLobbyUrl(raw: string) {
+  try {
+    const host = new URL(raw).hostname
+    return host === "localhost" || host === "::1" || host.startsWith("127.")
+  } catch {
+    return false
+  }
 }

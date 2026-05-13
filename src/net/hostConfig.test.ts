@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { advertisedLobbyUrls, lobbyEnvCommand, lobbyJoinCommand, normalizeLobbyBaseUrl, parseLobbyHostArgs, requestLobbyUrl } from "./hostConfig.js"
+import { advertisedLobbyUrls, lobbyEnvCommand, lobbyJoinCommand, normalizeLobbyBaseUrl, parseLobbyHostArgs, preferredAdvertisedLobbyUrl, requestLobbyUrl } from "./hostConfig.js"
 
 describe("lobby host config", () => {
   test("defaults to a server-ready bind host and port", () => {
@@ -40,6 +40,29 @@ describe("lobby host config", () => {
     })
 
     expect(urls).toEqual(["http://localhost:3737", "http://192.168.1.25:3737"])
+    expect(preferredAdvertisedLobbyUrl(options, urls)).toBe("http://192.168.1.25:3737")
+  })
+
+  test("does not advertise unreachable LAN addresses for loopback binds", () => {
+    const options = parseLobbyHostArgs(["--host", "127.0.0.1", "--port", "3737"], {})
+    const urls = advertisedLobbyUrls(options, {
+      lo0: [{ address: "127.0.0.1", family: "IPv4", internal: true, cidr: "127.0.0.1/8", mac: "", netmask: "255.0.0.0" }],
+      en0: [{ address: "192.168.1.25", family: "IPv4", internal: false, cidr: "192.168.1.25/24", mac: "", netmask: "255.255.255.0" }],
+    })
+
+    expect(urls).toEqual(["http://127.0.0.1:3737", "http://localhost:3737"])
+    expect(preferredAdvertisedLobbyUrl(options, urls)).toBe("http://127.0.0.1:3737")
+  })
+
+  test("advertises only the bound address for explicit LAN binds", () => {
+    const options = parseLobbyHostArgs(["--host", "192.168.1.25", "--port", "3737"], {})
+    const urls = advertisedLobbyUrls(options, {
+      en0: [{ address: "192.168.1.25", family: "IPv4", internal: false, cidr: "192.168.1.25/24", mac: "", netmask: "255.255.255.0" }],
+      en1: [{ address: "10.0.1.33", family: "IPv4", internal: false, cidr: "10.0.1.33/24", mac: "", netmask: "255.255.255.0" }],
+    })
+
+    expect(urls).toEqual(["http://192.168.1.25:3737"])
+    expect(preferredAdvertisedLobbyUrl(options, urls)).toBe("http://192.168.1.25:3737")
   })
 
   test("normalizes join URLs and keeps a legacy env command", () => {
