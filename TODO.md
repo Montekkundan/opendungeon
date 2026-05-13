@@ -110,7 +110,7 @@
 ### Multiplayer And Network Play
 
 - [x] Test one-laptop multiplayer manually with `bun run host -- --host 127.0.0.1 --mode coop --seed 2423368 --port 3737` and multiple `bun run dev -- join http://127.0.0.1:3737` clients in different terminal tabs/apps. Verified after the loopback URL and process-local player-name fixes.
-- [ ] Add an automated multiplayer smoke test that covers host startup, two guest clients, spectator join, state sync, disconnect, and race result submission.
+- [x] Add an automated multiplayer smoke test that covers host startup, two guest clients, spectator join, state sync, disconnect, and race result submission.
 - [ ] Verify signed-in duplicate-run locking in Ghostty and another terminal app: same signed-in account should be blocked, separate guest auth dirs should be allowed.
 - [ ] Make game modes explicit everywhere: Single Player, Multiplayer, and Multiplayer with GM. Avoid mixing race/sync/dev-host concepts with the authored story loop.
 - [ ] Single Player mode: the authored opendungeon story loop, lore, deterministic dungeon rules, village meta-progression, and curated/local assets; no external GM content should alter this canonical offline story.
