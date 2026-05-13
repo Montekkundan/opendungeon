@@ -164,6 +164,11 @@ const kettomanIconSpriteFrames = {
   torch: [0, 4],
 } satisfies Partial<Record<StaticSpriteId, readonly [number, number]>>
 
+const bountifulCivilizedSpriteFrames = {
+  door: [6, 2],
+  trap: [1, 25],
+} satisfies Partial<Record<StaticSpriteId, readonly [number, number]>>
+
 export function pixelSprite(id: PixelSpriteId, width = 8, height = 4): PixelSprite {
   return animatedPixelSprite(id, "idle", 0, width, height)
 }
@@ -289,6 +294,20 @@ function staticSource(id: StaticSpriteId): SourceSheet | null {
       frameHeight: 16,
       frameX: column * 16,
       frameY: row * 16,
+      frameCount: 1,
+      preserveFrame: true,
+    }
+  }
+
+  const bountifulFrame = bountifulCivilizedSpriteFrames[id as keyof typeof bountifulCivilizedSpriteFrames]
+  if (bountifulFrame !== undefined) {
+    const [column, row] = bountifulFrame
+    return {
+      path: assetPath("opendungeon-assets", "runtime", "tiles", "vexed-bountiful-bits-civilized-10x10.png"),
+      frameWidth: 10,
+      frameHeight: 10,
+      frameX: column * 10,
+      frameY: row * 10,
       frameCount: 1,
       preserveFrame: true,
     }

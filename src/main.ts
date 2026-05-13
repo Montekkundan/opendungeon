@@ -3,6 +3,7 @@ import WebSocket from "ws"
 import {
   addToast,
   applyOpeningStoryBranch,
+  createNextDescentSession,
   createSession,
   cycleTarget,
   chooseConversationOption,
@@ -32,6 +33,8 @@ import {
   runVillageShopSale,
   selectSkill,
   sellLootToVillage,
+  setTutorialCoopGateHold,
+  tutorialCoopCheckpoint,
   toggleRunMutator,
   tryMove,
   upgradeWeapon,
@@ -40,11 +43,13 @@ import {
   type GameSession,
   type HeroClass,
   type MultiplayerMode,
+  type RunToast,
 } from "./game/session.js"
 import { openingStoryBranches } from "./game/story.js"
 import { deleteSave, exportSave, listSaves, loadSave, renameSave, saveAutosave, saveSession, type SaveSummary } from "./game/saveStore.js"
 import { handleSaveCommand, saveCommandHelp } from "./game/saveCli.js"
 import { loadSettings, saveSettings, type UserSettings } from "./game/settingsStore.js"
+import { defaultPlayerName, playerNameFromEnv } from "./game/playerIdentity.js"
 import { appearanceLabel, cycleCosmeticPalette, cycleHeroAnimationSet, cycleHeroWeaponSprite, cyclePortraitVariant, normalizeHeroAppearance } from "./game/appearance.js"
 import { handleAssetsCommand, assetsCommandHelp } from "./assets/assetsCli.js"
 import { diceSkinIds } from "./assets/diceSkins.js"
@@ -67,6 +72,7 @@ import {
   tutorialTabCount,
   type AppModel,
   type PlayerMoveAnimation,
+  type RemotePlayerMarker,
   type ScreenId,
   type ScreenTransition,
 } from "./ui/screens.js"
@@ -80,9 +86,12 @@ import { acquireLocalRunLock, releaseLocalRunLock, type LocalRunLock } from "./s
 import { debugOverlaysEnabled } from "./system/debugFlags.js"
 import { checkInternetConnectivity } from "./net/connectivity.js"
 import { normalizeLobbyBaseUrl } from "./net/hostConfig.js"
+import type { CoopSyncState, LobbySnapshot } from "./net/lobbyState.js"
 import { checkForUpdate, checkingUpdateStatus, handleUpdateCommand } from "./system/updateCheck.js"
 import { easeInOutQuart, lerp } from "./shared/numeric.js"
 import { transitionDurationForKind } from "./ui/teleportAnimation.js"
+import { GameAudioController } from "./audio/gameAudio.js"
+import type { AudioEventId } from "./audio/audioManifest.js"
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`opendungeon ${version}
@@ -108,6 +117,7 @@ Environment:
   OPENDUNGEON_PROFILE_DIR  Override local profile/settings directory
   OPENDUNGEON_RUN_LOCK_DIR Override signed-in active-run lock directory
   OPENDUNGEON_TERMINAL_APP Override the terminal app label used in duplicate-run messages
+  OPENDUNGEON_PLAYER_NAME  Override the local crawler name for one process
   OPENDUNGEON_ASSET_DIR    Override bundled asset directory
   OPENDUNGEON_TILE_SCALE   overview | wide | medium | close
   OPENDUNGEON_DEBUG_OVERLAY=1 enables debug map/console overlays
@@ -150,6 +160,7 @@ if (process.argv[2] === "setup-check") {
 
 const initialSaves = listSaves()
 const initialSettings = loadSettings()
+const initialPlayerName = defaultPlayerName()
 
 const model: AppModel = {
   screen: "start",
@@ -158,7 +169,7 @@ const model: AppModel = {
   classIndex: classIndexFromEnv(),
   modeIndex: modeIndexFromEnv(),
   seed: seedFromEnv(),
-  session: createSession(seedFromEnv(), modeFromEnv(), classFromEnv()),
+  session: createSession(seedFromEnv(), modeFromEnv(), classFromEnv(), initialPlayerName),
   message: "",
   saves: initialSaves,
   saveIndex: 0,
@@ -169,6 +180,9 @@ const model: AppModel = {
   settingsTabIndex: 0,
   settingsIndex: 0,
   settingsReturnScreen: "start",
+  audioStatus: "Audio ready.",
+  remotePlayers: [],
+  coopGateStatus: "",
   inputMode: null,
   uiHidden: !initialSettings.showUi,
   inventoryIndex: 0,
@@ -209,8 +223,12 @@ let lobbySocketUrl = ""
 let lobbyConnectedPlayers = 0
 let activeRunLock: LocalRunLock | null = null
 const localGuestSessionId = crypto.randomUUID().slice(0, 8)
+const localLobbyClientId = crypto.randomUUID()
 const toastCreatedAt = new Map<string, number>()
+const sfxToastIds = new Set<string>()
 const toastTtlMs = 3200
+const audioController = new GameAudioController()
+let lastAudioSyncKey = ""
 
 const renderer = await createCliRenderer({
   exitOnCtrlC: false,
@@ -250,6 +268,14 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
     destroyApp()
     return
   }
+
+  if (isMuteKey(key)) {
+    toggleAudioMute()
+    refresh()
+    return
+  }
+
+  if (key.name === "escape") playAudioEvent("menu-cancel")
 
   if (model.inputMode) {
     handleInputKey(key)
@@ -366,10 +392,7 @@ function handleDialogKey(key: KeyEvent) {
     return
   }
   if (model.dialog === "pause" && key.name === "t") {
-    model.dialog = null
-    setScreen("start", "Returning to title.")
-    model.menuIndex = 0
-    model.diceRollAnimation = null
+    closeRunToTitle("Returning to title.")
     return
   }
   if (model.dialog === "pause" && key.name === "m") {
@@ -394,7 +417,8 @@ function handleDialogKey(key: KeyEvent) {
       }
       if (isConfirmKey(key)) {
         const branch = openingBranches[clamp(model.cutsceneChoiceIndex ?? 0, 0, openingBranches.length - 1)]
-        if (branch) model.saveStatus = applyOpeningStoryBranch(model.session, branch.id)
+        if (branch) applyOpeningStoryBranch(model.session, branch.id)
+        model.saveStatus = ""
         model.dialog = null
         clearCameraReturnAnimation()
         return
@@ -500,15 +524,34 @@ function handleHubKey(key: KeyEvent) {
     model.dialog = "cutscene"
     return
   }
-  if (key.name === "1") buildHubStation(model.session, "blacksmith")
-  if (key.name === "2") buildHubStation(model.session, "kitchen")
-  if (key.name === "3") sellLootToVillage(model.session)
-  if (key.name === "4") prepareFood(model.session)
+  if (key.name === "1") {
+    buildHubStation(model.session, "blacksmith")
+    playAudioEvent("village-build")
+  }
+  if (key.name === "2") {
+    buildHubStation(model.session, "kitchen")
+    playAudioEvent("village-build")
+  }
+  if (key.name === "3") {
+    sellLootToVillage(model.session)
+    playAudioEvent("item-pickup")
+  }
+  if (key.name === "4") {
+    prepareFood(model.session)
+    playAudioEvent("village-build")
+  }
   if (key.name === "5") {
     if (!plantCrop(model.session)) harvestFarm(model.session)
+    playAudioEvent("village-build")
   }
-  if (key.name === "6") upgradeWeapon(model.session)
-  if (key.name === "7") completeVillageQuest(model.session)
+  if (key.name === "6") {
+    upgradeWeapon(model.session)
+    playAudioEvent("village-build")
+  }
+  if (key.name === "7") {
+    completeVillageQuest(model.session)
+    playAudioEvent("quest-update")
+  }
   if (key.name === "8") toggleRunMutator(model.session, "hard-mode")
   if (key.name === "9") toggleRunMutator(model.session, "cursed-floors")
   model.saveStatus = model.session.log[0] ?? "Hub updated."
@@ -517,21 +560,24 @@ function handleHubKey(key: KeyEvent) {
 function handleVillageKey(key: KeyEvent) {
   if (key.name === "g") {
     model.seed = randomSeed()
-    startRun()
+    startVillageDescent()
     return
   }
   if (key.name === "1") {
     buildHubStation(model.session, "blacksmith")
+    playAudioEvent("village-build")
     model.saveStatus = model.session.log[0] ?? "Blacksmith checked."
     return
   }
   if (key.name === "3") {
     const coins = sellLootToVillage(model.session)
+    playAudioEvent(coins > 0 ? "item-pickup" : "menu-cancel")
     model.saveStatus = coins > 0 ? `Sold loot for ${coins} coins.` : model.session.log[0] ?? "No loot to sell."
     return
   }
   if (key.name === "4") {
     prepareFood(model.session)
+    playAudioEvent("village-build")
     model.saveStatus = model.session.log[0] ?? "Food prepared."
     return
   }
@@ -546,6 +592,7 @@ function handleVillageKey(key: KeyEvent) {
   }
   if (key.name === "m") {
     const sale = runVillageShopSale(model.session)
+    playAudioEvent(sale ? "item-pickup" : "menu-cancel")
     model.saveStatus = sale?.reaction ?? model.session.log[0] ?? "No market sale."
     return
   }
@@ -711,6 +758,7 @@ function handleSkillCheckKey(key: KeyEvent) {
       return
     }
     if (isConfirmKey(key)) {
+      playAudioEvent("d20-roll")
       const roll = resolveSkillCheck(model.session)
       if (roll) startDiceRollAnimation(roll.d20)
     }
@@ -1024,12 +1072,14 @@ function handleCombatKey(key: KeyEvent) {
     return
   }
   if (key.name === "f") {
+    playAudioEvent("d20-roll")
     const roll = attemptFlee(model.session)
     if (roll) startDiceRollAnimation(roll.d20)
     return
   }
   if (isConfirmKey(key)) {
     const previousRoll = model.session.combat.lastRoll
+    playAudioEvent("d20-roll")
     performCombatAction(model.session)
     const nextRoll = model.session.combat.lastRoll
     if (nextRoll && nextRoll !== previousRoll) startDiceRollAnimation(nextRoll.d20)
@@ -1045,10 +1095,12 @@ function cycleCombatSkill(delta: number) {
 function confirmMenu() {
   if (model.screen === "start") {
     if (currentStartItemDisabled(model)) {
+      playAudioEvent("menu-cancel")
       model.saveStatus = model.internetStatus === "checking" ? "Checking internet before enabling cloud login." : "Offline: cloud login and AI admin sync are disabled."
       void refreshInternetStatus()
       return
     }
+    playAudioEvent("menu-confirm")
     const item = currentStartItem(model)
     if (item === "Continue last") loadLatestSave()
     if (item === "New descent") startRun()
@@ -1079,6 +1131,7 @@ function confirmMenu() {
     return
   }
 
+  playAudioEvent("menu-confirm")
   if (model.screen === "character") {
     model.classIndex = model.menuIndex
     model.session.hero.appearance = normalizeHeroAppearance(currentClass(model).id, model.session.hero.appearance)
@@ -1096,7 +1149,7 @@ function confirmMenu() {
 
 function startRun() {
   if (!acquireRunSlot()) return
-  model.session = createSession(model.seed, currentMode(model).id, currentClass(model).id, model.session.hero.name, model.session.hero.appearance, model.settings.startWithTutorial)
+  model.session = createSession(model.seed, currentMode(model).id, currentClass(model).id, currentPlayerName(), model.session.hero.appearance, model.settings.startWithTutorial)
   submittedSession = null
   clearCameraReturnAnimation(false)
   setScreen("game", "The descent opens.", "portal")
@@ -1107,10 +1160,30 @@ function startRun() {
   model.bookIndex = 0
   model.bookTabIndex = 0
   model.cutsceneChoiceIndex = 0
-  model.saveStatus = `${currentMode(model).name} run started. Press Ctrl+S or F5 to save locally.`
+  model.saveStatus = `${currentMode(model).name} run started. Press Ctrl+S to save locally.`
   lastManualSaveSignature = ""
   connectLobby()
   autosaveCurrentRun("new-run")
+}
+
+function startVillageDescent() {
+  if (!acquireRunSlot()) return
+  model.session = createNextDescentSession(model.session, model.seed)
+  model.classIndex = classIndexFor(model.session.hero.classId)
+  model.modeIndex = modeIndexFor(model.session.mode)
+  submittedSession = null
+  clearCameraReturnAnimation(false)
+  setScreen("game", "Next descent opens.", "portal")
+  model.dialog = null
+  model.cameraFocus = null
+  model.uiHidden = !model.settings.showUi
+  model.bookIndex = 0
+  model.bookTabIndex = 0
+  model.cutsceneChoiceIndex = 0
+  model.saveStatus = "Village progress carried into the next descent. Press Ctrl+S to save locally."
+  lastManualSaveSignature = ""
+  connectLobby()
+  autosaveCurrentRun("village-descent")
 }
 
 function introCameraPoint(session: GameSession) {
@@ -1219,7 +1292,7 @@ function wrapSaveIndex(index: number) {
 function loadLatestSave() {
   refreshSaveList()
   if (!model.saves.length) {
-    model.saveStatus = "No local saves yet. Start a descent and press Ctrl+S or F5."
+    model.saveStatus = "No local saves yet. Start a descent and press Ctrl+S."
     model.menuIndex = 1
     return
   }
@@ -1323,8 +1396,12 @@ function changeCurrentSetting() {
   if (item.id === "diceSkin") model.settings.diceSkin = cycleValue(model.settings.diceSkin, diceSkinIds)
   if (item.id === "backgroundFx") model.settings.backgroundFx = cycleValue(model.settings.backgroundFx, ["low", "normal", "dense"])
   if (item.id === "tileScale") model.settings.tileScale = cycleValue(model.settings.tileScale, mapScaleOptions)
+  if (item.id === "muteAudio") model.settings.muteAudio = !model.settings.muteAudio
+  if (item.id === "masterVolume") model.settings.masterVolume = cycleVolume(model.settings.masterVolume)
   if (item.id === "music") model.settings.music = !model.settings.music
+  if (item.id === "musicVolume") model.settings.musicVolume = cycleVolume(model.settings.musicVolume)
   if (item.id === "sound") model.settings.sound = !model.settings.sound
+  if (item.id === "sfxVolume") model.settings.sfxVolume = cycleVolume(model.settings.sfxVolume)
   saveUserSettings("Settings saved locally.")
 }
 
@@ -1385,6 +1462,7 @@ function handleInputKey(key: KeyEvent) {
 function saveUserSettings(status: string) {
   saveSettings(model.settings)
   model.saveStatus = status
+  syncAudio()
 }
 
 function toggleRunUi() {
@@ -1394,6 +1472,15 @@ function toggleRunUi() {
 }
 
 const mapScaleOptions: UserSettings["tileScale"][] = ["overview", "wide", "medium", "close"]
+const volumeSteps = [0, 0.25, 0.5, 0.75, 1] as const
+
+function cycleVolume(value: number) {
+  let current = 0
+  for (let index = 1; index < volumeSteps.length; index++) {
+    if (Math.abs(volumeSteps[index] - value) < Math.abs(volumeSteps[current] - value)) current = index
+  }
+  return volumeSteps[(current + 1) % volumeSteps.length] ?? 0.75
+}
 
 function adjustMapScale(delta: number) {
   const index = mapScaleOptions.indexOf(model.settings.tileScale)
@@ -1415,6 +1502,7 @@ function setScreen(screen: ScreenId, label: string, kind: ScreenTransition["kind
 }
 
 function startScreenTransition(from: ScreenId, to: ScreenId, label: string, kind: ScreenTransition["kind"]) {
+  if (kind !== "screen") playTransitionAudio(kind)
   if (kind === "screen" || model.settings.reduceMotion) {
     model.screenTransition = null
     return
@@ -1510,6 +1598,7 @@ function queueScreenTransitionFrame() {
 
 function refresh() {
   if (destroyed) return
+  syncAudio()
   syncToastLifetimes()
   const width = renderer.terminalWidth
   const height = renderer.terminalHeight
@@ -1521,10 +1610,45 @@ function refresh() {
   if (model.screen === "game" && model.session.toasts.length) queueToastFrame()
 }
 
+function syncAudio() {
+  const key = [
+    model.screen,
+    model.dialog ?? "none",
+    model.settings.muteAudio,
+    model.settings.music,
+    model.settings.sound,
+    model.settings.masterVolume,
+    model.settings.musicVolume,
+    model.settings.sfxVolume,
+  ].join(":")
+  if (key === lastAudioSyncKey) return
+  lastAudioSyncKey = key
+  void audioController.sync({ screen: model.screen, dialog: model.dialog }, model.settings).then((status) => {
+    if (destroyed || model.audioStatus === status) return
+    model.audioStatus = status
+    if (model.screen === "settings" || model.screen === "controls") refresh()
+  })
+}
+
+function playAudioEvent(eventId: AudioEventId) {
+  void audioController.playEvent(eventId, model.settings)
+}
+
+function playTransitionAudio(kind: ScreenTransition["kind"]) {
+  if (kind !== "portal") return
+  playAudioEvent("teleport-start")
+  setTimeout(() => {
+    if (!destroyed) playAudioEvent("teleport-end")
+  }, Math.max(120, transitionDurationForKind(kind) - 80))
+}
+
 function syncToastLifetimes() {
   const now = Date.now()
   for (const toast of model.session.toasts) {
-    if (!toastCreatedAt.has(toast.id)) toastCreatedAt.set(toast.id, now)
+    if (!toastCreatedAt.has(toast.id)) {
+      toastCreatedAt.set(toast.id, now)
+      playToastAudio(toast)
+    }
   }
   model.session.toasts = model.session.toasts.filter((toast, index) => {
     const created = toastCreatedAt.get(toast.id) ?? now
@@ -1534,6 +1658,33 @@ function syncToastLifetimes() {
   for (const id of toastCreatedAt.keys()) {
     if (!activeIds.has(id)) toastCreatedAt.delete(id)
   }
+  for (const id of sfxToastIds) {
+    if (!activeIds.has(id)) sfxToastIds.delete(id)
+  }
+}
+
+function playToastAudio(toast: RunToast) {
+  if (sfxToastIds.has(toast.id)) return
+  const eventId = audioEventForToast(toast)
+  if (!eventId) return
+  sfxToastIds.add(toast.id)
+  playAudioEvent(eventId)
+}
+
+function audioEventForToast(toast: RunToast): AudioEventId | null {
+  const title = toast.title.toLowerCase()
+  const text = toast.text.toLowerCase()
+  if (title.includes("critical")) return "combat-crit"
+  if (title.includes("attack hit")) return "combat-hit"
+  if (title.includes("attack missed") || title.includes("flee failed") || text.includes("miss")) return "combat-block"
+  if (title.includes("talent check succeeded")) return "d20-success"
+  if (title.includes("talent check failed") || title.includes("run ended")) return "d20-fail"
+  if (title.includes("door opened") || title.includes("gate")) return "gate-open"
+  if (title.includes("book updated") || title.includes("weakness found")) return "book-update"
+  if (title.includes("quest") || title.includes("find the final gate") || title.includes("dungeon cleared") || title.includes("level ")) return "quest-update"
+  if (title.includes("item used") || title.includes("potion used") || title.includes("trade complete") || title.endsWith(" found")) return "item-pickup"
+  if (title.includes("village") || title.includes("blacksmith") || title.includes("food")) return "village-build"
+  return toast.tone === "success" ? "d20-success" : toast.tone === "danger" ? "d20-fail" : null
 }
 
 function queueToastFrame() {
@@ -1617,6 +1768,7 @@ function destroyApp() {
   destroyed = true
   closeLobbySocket()
   releaseRunSlot()
+  audioController.dispose()
   if (diceTimer) clearTimeout(diceTimer)
   diceTimer = null
   if (moveTimer) clearTimeout(moveTimer)
@@ -1686,8 +1838,9 @@ function connectLobby() {
   try {
     const socketUrl = new URL("/ws", lobbyUrl)
     socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:"
-    socketUrl.searchParams.set("name", env("OPENDUNGEON_PLAYER_NAME", "DUNGEON_PLAYER_NAME") || model.session.hero.name)
+    socketUrl.searchParams.set("name", currentPlayerName())
     socketUrl.searchParams.set("role", "player")
+    socketUrl.searchParams.set("clientId", localLobbyClientId)
     const socket = new WebSocket(socketUrl)
     lobbySocket = socket
     socket.on("open", () => {
@@ -1699,6 +1852,9 @@ function connectLobby() {
     socket.on("close", () => {
       if (lobbySocket === socket) lobbySocket = null
       lobbyConnectedPlayers = 0
+      model.remotePlayers = []
+      model.coopGateStatus = ""
+      clearCoopTutorialHold()
     })
     socket.on("error", () => {
       model.session.log.unshift("Lobby connection failed.")
@@ -1711,10 +1867,12 @@ function connectLobby() {
 
 function syncLobbyState() {
   if (!lobbySocket || lobbySocket.readyState !== WebSocket.OPEN) return
+  const checkpoint = tutorialCoopCheckpoint(model.session)
   lobbySocket.send(
     JSON.stringify({
       type: "sync",
       state: {
+        classId: model.session.hero.classId,
         floor: model.session.floor,
         turn: model.session.turn,
         hp: model.session.hp,
@@ -1726,6 +1884,9 @@ function syncLobbyState() {
         x: model.session.player.x,
         y: model.session.player.y,
         combatActive: model.session.combat.active,
+        tutorialStage: checkpoint.stage,
+        tutorialReady: checkpoint.ready,
+        tutorialCompleted: checkpoint.completed,
       },
     }),
   )
@@ -1733,21 +1894,99 @@ function syncLobbyState() {
 
 function updateLobbyStatus(text: string) {
   try {
-    const snapshot = JSON.parse(text) as { players?: unknown[]; syncWarnings?: string[] }
+    const snapshot = JSON.parse(text) as Partial<LobbySnapshot>
     const players = Array.isArray(snapshot.players) ? snapshot.players.length : 0
     if (players && players !== lobbyConnectedPlayers) {
       lobbyConnectedPlayers = players
       model.session.log.unshift(`Lobby players online: ${players}.`)
-      refresh()
     }
+    model.remotePlayers = remotePlayersFromSnapshot(snapshot)
+    applyCoopTutorialGateHolds()
     const warning = Array.isArray(snapshot.syncWarnings) ? snapshot.syncWarnings[0] : ""
     if (warning && model.session.log[0] !== warning) {
       model.session.log.unshift(warning)
-      refresh()
     }
+    refresh()
   } catch {
     return
   }
+}
+
+function remotePlayersFromSnapshot(snapshot: Partial<LobbySnapshot>): RemotePlayerMarker[] {
+  if (!Array.isArray(snapshot.coopStates)) return []
+  return snapshot.coopStates.flatMap((state) => {
+    const sync = state as Partial<CoopSyncState>
+    if (!sync.playerId || sync.playerId === localLobbyClientId) return []
+    const name = String(sync.name || "Crawler").trim()
+    return [
+      {
+        id: sync.playerId,
+        name: name || "Crawler",
+        classId: isHeroClass(sync.classId) ? sync.classId : "ranger",
+        floor: Math.max(1, Math.floor(Number(sync.floor) || 1)),
+        x: Math.floor(Number(sync.x) || 0),
+        y: Math.floor(Number(sync.y) || 0),
+        hp: Math.max(0, Math.floor(Number(sync.hp) || 0)),
+        level: Math.max(1, Math.floor(Number(sync.level) || 1)),
+        connected: sync.connected !== false,
+        tutorialStage: cleanRemoteTutorialStage(sync.tutorialStage),
+        tutorialReady: Boolean(sync.tutorialReady),
+        tutorialCompleted: Boolean(sync.tutorialCompleted),
+      },
+    ]
+  })
+}
+
+function applyCoopTutorialGateHolds() {
+  if (model.session.mode !== "coop") {
+    clearCoopTutorialHold()
+    return
+  }
+  const checkpoint = tutorialCoopCheckpoint(model.session)
+  if (checkpoint.completed || checkpoint.stage === "complete" || lobbyConnectedPlayers <= 1) {
+    clearCoopTutorialHold()
+    return
+  }
+
+  const waiting: string[] = []
+  const expectedRemoteCount = Math.max(0, lobbyConnectedPlayers - 1)
+  const connectedRemotes = model.remotePlayers.filter((player) => player.connected)
+  if (connectedRemotes.length < expectedRemoteCount) waiting.push("party sync")
+
+  for (const remote of connectedRemotes) {
+    if (!remoteReadyForTutorialStage(remote, checkpoint.stage)) waiting.push(remote.name)
+  }
+
+  setTutorialCoopGateHold(model.session, checkpoint.stage, waiting)
+  model.coopGateStatus = waiting.length ? `Waiting for ${waiting.join(", ")} before ${tutorialGateLabel(checkpoint.stage)}.` : ""
+}
+
+function clearCoopTutorialHold() {
+  setTutorialCoopGateHold(model.session, null, [])
+}
+
+function remoteReadyForTutorialStage(remote: RemotePlayerMarker, stage: Exclude<ReturnType<typeof tutorialCoopCheckpoint>["stage"], "complete">) {
+  if (remote.tutorialCompleted) return true
+  const remoteStage = cleanRemoteTutorialStage(remote.tutorialStage)
+  if (tutorialStageRank(remoteStage) > tutorialStageRank(stage)) return true
+  return remoteStage === stage && remote.tutorialReady
+}
+
+function cleanRemoteTutorialStage(value: unknown) {
+  return value === "movement" || value === "npc-check" || value === "combat" || value === "complete" ? value : "complete"
+}
+
+function tutorialStageRank(stage: string) {
+  if (stage === "movement") return 0
+  if (stage === "npc-check") return 1
+  if (stage === "combat") return 2
+  return 3
+}
+
+function tutorialGateLabel(stage: string) {
+  if (stage === "movement") return "Area II opens"
+  if (stage === "npc-check") return "Area III opens"
+  return "the tutorial completes"
 }
 
 function closeLobbySocket() {
@@ -1755,6 +1994,9 @@ function closeLobbySocket() {
   lobbySocket = null
   lobbySocketUrl = ""
   lobbyConnectedPlayers = 0
+  model.remotePlayers = []
+  model.coopGateStatus = ""
+  clearCoopTutorialHold()
 }
 
 function maybeSubmitLobbyResult() {
@@ -1762,7 +2004,7 @@ function maybeSubmitLobbyResult() {
   if (!lobbyUrl || model.session.status === "running" || submittedSession === model.session) return
   submittedSession = model.session
   const result = {
-    name: env("OPENDUNGEON_PLAYER_NAME", "DUNGEON_PLAYER_NAME") || model.session.hero.name,
+    name: currentPlayerName(),
     status: model.session.status,
     floor: model.session.floor,
     turns: model.session.turn,
@@ -1789,6 +2031,10 @@ function maybeSubmitLobbyResult() {
 
 function lobbyUrlFromConfig() {
   return cliJoin?.lobbyUrl || normalizeLobbyBaseUrl(env("OPENDUNGEON_LOBBY_URL", "DUNGEON_LOBBY_URL") || "")
+}
+
+function currentPlayerName() {
+  return playerNameFromEnv() || model.session.hero.name
 }
 
 function seedFromEnv() {
@@ -1848,7 +2094,17 @@ function autosaveSignature(session: GameSession) {
 }
 
 function isSaveKey(key: KeyEvent) {
-  return model.screen === "game" && ((key.ctrl && key.name === "s") || key.name === "f5")
+  return model.screen === "game" && key.ctrl && key.name === "s"
+}
+
+function isMuteKey(key: KeyEvent) {
+  return key.ctrl && key.name === "o"
+}
+
+function toggleAudioMute() {
+  model.settings.muteAudio = !model.settings.muteAudio
+  saveUserSettings(model.settings.muteAudio ? "Audio muted. Press Ctrl+O to unmute." : "Audio unmuted.")
+  if (model.screen === "game") addToast(model.session, "audio-mute", model.settings.muteAudio ? "Audio muted" : "Audio unmuted")
 }
 
 function isConfirmKey(key: KeyEvent) {

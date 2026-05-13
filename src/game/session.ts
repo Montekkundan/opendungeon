@@ -234,11 +234,16 @@ export type RunToast = {
 
 export type TutorialStageId = "movement" | "npc-check" | "combat" | "complete"
 export type TutorialActionId = "move" | "move-up" | "move-down" | "move-left" | "move-right" | "inventory" | "quests" | "book" | "npc" | "talent-check" | "combat-start" | "combat-end"
+export type TutorialCoopGateHold = {
+  stage: Exclude<TutorialStageId, "complete">
+  waitingNames: string[]
+}
 
 export type RunTutorialState = {
   enabled: boolean
   completed: boolean
   stage: TutorialStageId
+  coopGateHold: TutorialCoopGateHold | null
   gatePoints: Point[]
   movementSteps: number
   movedUp: boolean
@@ -1524,11 +1529,40 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
   return session
 }
 
+export function createNextDescentSession(previous: GameSession, seed: number): GameSession {
+  const next = createSession(seed, previous.mode, previous.hero.classId, previous.hero.name, previous.hero.appearance, false)
+  next.hub = normalizeHubState(previous.hub, previous.mode, previous.hero.name)
+  next.hub.lastCutsceneId = null
+  next.hub.relationshipLog.unshift(`New descent opened from the village with seed ${seed}.`)
+  trimHubLog(next.hub)
+  next.equipment = normalizeEquipment(previous.equipment, previous.hero.classId)
+
+  const preparedFood = next.hub.preparedFood.filter((item) => !item.startsWith("Recipe:")).slice(0, 2)
+  for (const food of preparedFood.reverse()) {
+    if (!next.inventory.includes(food)) next.inventory.unshift(food)
+    if (food === "Focus broth") next.maxFocus += 1
+  }
+  next.focus = next.maxFocus
+  applyMutatorPressure(next)
+  refreshBalanceDashboard(next)
+  rememberKnowledge(next, {
+    id: "village-next-descent",
+    title: "Prepared Descent",
+    text: "The village can preserve coins, stations, trust, houses, farm state, food, weapons, content packs, and active mutators between runs.",
+    kind: "hub",
+    floor: next.floor,
+  })
+  addToast(next, "Next descent", "Village progress carried forward. Find the Final Gate.", "success")
+  pushSessionMessage(next, "Village preparations carried into the next descent.")
+  return next
+}
+
 function createTutorialState(enabled = false): RunTutorialState {
   return {
     enabled,
     completed: !enabled,
     stage: enabled ? "movement" : "complete",
+    coopGateHold: null,
     gatePoints: [],
     movementSteps: 0,
     movedUp: false,
@@ -1874,10 +1908,12 @@ function tutorialMoveAction(dx: number, dy: number): TutorialActionId {
 export function currentTutorialPrompt(session: GameSession) {
   const tutorial = session.tutorial
   if (!tutorial.enabled || tutorial.completed || tutorial.disabledAfterDeath || session.deaths > 0) return null
+  const coopNote = session.mode === "coop" ? " In co-op, every connected crawler must finish this checkpoint." : ""
   if (tutorial.stage === "movement") {
+    const hold = tutorialGateHold(session, "movement")
     return {
       title: "Area I - Movement",
-      text: "Use arrows, WASD, or Vim keys to move in each direction. Open the basic journals before the east gate unlocks.",
+      text: `Use arrows, WASD, or Vim keys to move in each direction. Open the basic journals before the east gate unlocks.${coopNote}`,
       steps: [
         `Up ${doneText(tutorial.movedUp)}`,
         `Down ${doneText(tutorial.movedDown)}`,
@@ -1887,37 +1923,56 @@ export function currentTutorialPrompt(session: GameSession) {
         `Quests J/O ${doneText(tutorial.openedQuests)}`,
         `Book B ${doneText(tutorial.openedBook)}`,
       ],
-      footer: movementTutorialComplete(tutorial) ? "Gate open. Go east into Area II." : "The gate opens when every row is done.",
+      footer: hold ? `Waiting for ${formatCoopWaitingNames(hold.waitingNames)} before Area II opens.` : movementTutorialComplete(tutorial) ? "Gate open. Go east into Area II." : "The gate opens when every row is done.",
     }
   }
   if (tutorial.stage === "npc-check") {
     const talked = tutorial.talkedToNpc
+    const hold = tutorialGateHold(session, "npc-check")
     return {
       title: "Area II - People and Artifacts",
       text: talked
-        ? "Take the relic artifact. Talent checks roll d20 + stat + luck + level, and Bound relics add +1 to later checks. Enter rolls; Esc steps away."
-        : "Walk to the NPC and bump or press E nearby. Conversations use 1-3 to choose, Enter to confirm, and Esc to leave. NPCs remember what you already asked.",
+        ? `Take the relic artifact. Talent checks roll d20 + stat + luck + level, and Bound relics add +1 to later checks. Enter rolls; Esc steps away.${coopNote}`
+        : `Walk to the NPC and bump or press E nearby. Conversations use 1-3 to choose, Enter to confirm, and Esc to leave. NPCs remember what you already asked.${coopNote}`,
       steps: [
         `Talk to NPC ${doneText(tutorial.talkedToNpc)}`,
         `Take relic check ${doneText(tutorial.handledTalentCheck)}`,
       ],
-      footer: tutorial.handledTalentCheck ? "Second gate open. Go east into Area III." : "Finish the relic lesson to unlock the next gate.",
+      footer: hold ? `Waiting for ${formatCoopWaitingNames(hold.waitingNames)} before Area III opens.` : tutorial.handledTalentCheck ? "Second gate open. Go east into Area III." : "Finish the relic lesson to unlock the next gate.",
     }
   }
   if (tutorial.stage === "combat") {
+    const hold = tutorialGateHold(session, "combat")
     return {
       title: "Area III - Fighting",
       text: tutorial.combatStarted
-        ? "Finish the fight. Choose skills with 1-6 or up/down, Tab changes target, Enter rolls, H uses a potion, and F tries to flee."
-        : "Bump the enemy to start combat. Initiative locks movement until the fight is resolved.",
+        ? `Finish the fight. Choose skills with 1-6 or up/down, Tab changes target, Enter rolls, H uses a potion, and F tries to flee.${coopNote}`
+        : `Bump the enemy to start combat. Initiative locks movement until the fight is resolved.${coopNote}`,
       steps: [
         `Start combat ${doneText(tutorial.combatStarted)}`,
         `Finish combat ${doneText(tutorial.combatFinished)}`,
       ],
-      footer: tutorial.combatFinished ? "Tutorial complete. Use the stairs when ready." : "The exit stays gated until the fight is over.",
+      footer: hold ? `Waiting for ${formatCoopWaitingNames(hold.waitingNames)} before the tutorial closes.` : tutorial.combatFinished ? "Tutorial complete. Use the stairs when ready." : "The exit stays gated until the fight is over.",
     }
   }
   return null
+}
+
+export function tutorialCoopCheckpoint(session: GameSession) {
+  const tutorial = session.tutorial
+  if (!tutorial.enabled || tutorial.disabledAfterDeath || session.deaths > 0) return { stage: "complete" as TutorialStageId, ready: true, completed: true }
+  if (tutorial.completed || tutorial.stage === "complete") return { stage: "complete" as TutorialStageId, ready: true, completed: true }
+  if (tutorial.stage === "movement") return { stage: tutorial.stage, ready: movementTutorialComplete(tutorial), completed: false }
+  if (tutorial.stage === "npc-check") return { stage: tutorial.stage, ready: tutorial.talkedToNpc && tutorial.handledTalentCheck, completed: false }
+  return { stage: tutorial.stage, ready: tutorial.combatStarted && tutorial.combatFinished, completed: false }
+}
+
+export function setTutorialCoopGateHold(session: GameSession, stage: Exclude<TutorialStageId, "complete"> | null, waitingNames: string[]) {
+  const tutorial = session.tutorial
+  if (!tutorial.enabled || tutorial.completed || tutorial.disabledAfterDeath || session.deaths > 0) return
+  const names = [...new Set(waitingNames.map((name) => cleanConversationText(name, 24)).filter(Boolean))].slice(0, 4)
+  tutorial.coopGateHold = stage && names.length ? { stage, waitingNames: names } : null
+  advanceTutorial(session)
 }
 
 function advanceTutorial(session: GameSession) {
@@ -1925,7 +1980,13 @@ function advanceTutorial(session: GameSession) {
   if (!tutorial.enabled || tutorial.completed || tutorial.disabledAfterDeath || session.deaths > 0) return
 
   if (tutorial.stage === "movement" && movementTutorialComplete(tutorial)) {
+    const hold = tutorialGateHold(session, "movement")
+    if (hold) {
+      pushTutorialHoldLog(session, "Area I gate", hold)
+      return
+    }
     tutorial.stage = "npc-check"
+    tutorial.coopGateHold = null
     openTutorialGate(session, 0)
     session.log.unshift("Area I gate opens. Move east and talk to the NPC.")
     trimLog(session)
@@ -1933,7 +1994,13 @@ function advanceTutorial(session: GameSession) {
   }
 
   if (tutorial.stage === "npc-check" && tutorial.talkedToNpc && tutorial.handledTalentCheck) {
+    const hold = tutorialGateHold(session, "npc-check")
+    if (hold) {
+      pushTutorialHoldLog(session, "Area II gate", hold)
+      return
+    }
     tutorial.stage = "combat"
+    tutorial.coopGateHold = null
     openTutorialGate(session, 1)
     session.log.unshift("Area II gate opens. Move east and finish the fight.")
     trimLog(session)
@@ -1941,7 +2008,13 @@ function advanceTutorial(session: GameSession) {
   }
 
   if (tutorial.stage === "combat" && tutorial.combatStarted && tutorial.combatFinished) {
+    const hold = tutorialGateHold(session, "combat")
+    if (hold) {
+      pushTutorialHoldLog(session, "Tutorial", hold)
+      return
+    }
     tutorial.stage = "complete"
+    tutorial.coopGateHold = null
     tutorial.completed = true
     session.log.unshift("Tutorial complete. The descent is open.")
     trimLog(session)
@@ -1959,8 +2032,16 @@ function tutorialGateMessageForPoint(session: GameSession, point: Point) {
   if (!tutorial.enabled || tutorial.completed || tutorial.disabledAfterDeath || session.deaths > 0) return null
   const gateIndex = tutorial.gatePoints.findIndex((gate) => samePoint(gate, point))
   if (gateIndex < 0 || tileAt(session.dungeon, point) !== "door") return null
-  if (gateIndex === 0 && tutorial.stage === "movement") return "Area I gate is locked. Finish the movement, Pack, Quest, and Book rows first."
-  if (gateIndex === 1 && (tutorial.stage === "movement" || tutorial.stage === "npc-check")) return "Area II gate is locked. Talk to the NPC and finish the relic talent check first."
+  if (gateIndex === 0 && tutorial.stage === "movement") {
+    const hold = tutorialGateHold(session, "movement")
+    if (hold) return `Area I gate waits for ${formatCoopWaitingNames(hold.waitingNames)}.`
+    return "Area I gate is locked. Finish the movement, Pack, Quest, and Book rows first."
+  }
+  if (gateIndex === 1 && (tutorial.stage === "movement" || tutorial.stage === "npc-check")) {
+    const hold = tutorialGateHold(session, "npc-check")
+    if (hold) return `Area II gate waits for ${formatCoopWaitingNames(hold.waitingNames)}.`
+    return "Area II gate is locked. Talk to the NPC and finish the relic talent check first."
+  }
   return null
 }
 
@@ -1972,6 +2053,24 @@ function openTutorialGate(session: GameSession, index: number) {
 function movementTutorialComplete(tutorial: RunTutorialState) {
   const movedAllDirections = tutorial.movedUp && tutorial.movedDown && tutorial.movedLeft && tutorial.movedRight
   return (movedAllDirections || tutorial.movementSteps >= 4) && tutorial.openedInventory && tutorial.openedQuests && tutorial.openedBook
+}
+
+function tutorialGateHold(session: GameSession, stage: Exclude<TutorialStageId, "complete">) {
+  const hold = session.tutorial.coopGateHold
+  return hold?.stage === stage && hold.waitingNames.length ? hold : null
+}
+
+function pushTutorialHoldLog(session: GameSession, labelText: string, hold: TutorialCoopGateHold) {
+  const message = `${labelText} waits for ${formatCoopWaitingNames(hold.waitingNames)}.`
+  if (session.log[0] !== message) {
+    session.log.unshift(message)
+    trimLog(session)
+  }
+}
+
+function formatCoopWaitingNames(names: string[]) {
+  if (names.length <= 2) return names.join(" and ")
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`
 }
 
 function doneText(done: boolean) {
@@ -2705,7 +2804,7 @@ export function applyOpeningStoryBranch(session: GameSession, branchId: string):
   if (branch.id === "check-wound") session.focus = Math.min(session.maxFocus, session.focus + 1)
 
   session.log.unshift(branch.text)
-  addToast(session, "Opening choice", branch.label, "info")
+  addToast(session, "Opening choice", branch.text, "info")
   trimLog(session)
   return branch.text
 }
@@ -3351,6 +3450,7 @@ function normalizeTutorialState(value: unknown): RunTutorialState {
     enabled,
     completed,
     stage: completed ? "complete" : stage,
+    coopGateHold: normalizeTutorialCoopGateHold(source.coopGateHold),
     gatePoints: normalizeTutorialGatePoints(source.gatePoints),
     movementSteps: Math.max(0, Math.floor(Number(source.movementSteps) || 0)),
     movedUp: Boolean(source.movedUp),
@@ -3367,6 +3467,13 @@ function normalizeTutorialState(value: unknown): RunTutorialState {
     disabledAfterDeath: Boolean(source.disabledAfterDeath),
     handoffShown: Boolean(source.handoffShown),
   }
+}
+
+function normalizeTutorialCoopGateHold(value: unknown): TutorialCoopGateHold | null {
+  const source = value && typeof value === "object" ? (value as Partial<TutorialCoopGateHold>) : null
+  if (!source || !(source.stage === "movement" || source.stage === "npc-check" || source.stage === "combat")) return null
+  const waitingNames = Array.isArray(source.waitingNames) ? source.waitingNames.map((name) => cleanConversationText(name, 24)).filter(Boolean).slice(0, 4) : []
+  return waitingNames.length ? { stage: source.stage, waitingNames } : null
 }
 
 function normalizeTutorialGatePoints(value: unknown): Point[] {

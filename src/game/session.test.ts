@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   chooseConversationOption,
   chooseLevelUpTalent,
+  createNextDescentSession,
   createSession,
   currentBiome,
   enemyBehaviorText,
@@ -31,7 +32,9 @@ import {
   refreshBalanceDashboard,
   runVillageShopSale,
   sellLootToVillage,
+  setTutorialCoopGateHold,
   toggleRunMutator,
+  tutorialCoopCheckpoint,
   unlockHub,
   upgradeWeapon,
   visitVillageLocation,
@@ -312,6 +315,30 @@ describe("game session", () => {
     expect(session.world.quests[0]?.title).toBe("Find the Final Gate")
   })
 
+  test("co-op tutorial gates wait for party checkpoints before opening", () => {
+    const session = createSession(1234, "coop", "ranger", "Mira", undefined, true)
+    const [gateOne] = session.tutorial.gatePoints
+
+    setTutorialCoopGateHold(session, "movement", ["Sol"])
+    recordTutorialAction(session, "move-up")
+    recordTutorialAction(session, "move-down")
+    recordTutorialAction(session, "move-left")
+    recordTutorialAction(session, "move-right")
+    recordTutorialAction(session, "inventory")
+    recordTutorialAction(session, "quests")
+    recordTutorialAction(session, "book")
+
+    expect(tutorialCoopCheckpoint(session)).toMatchObject({ stage: "movement", ready: true, completed: false })
+    expect(session.tutorial.stage).toBe("movement")
+    expect(tileAt(session.dungeon, gateOne!)).toBe("door")
+    expect(session.log[0]).toContain("waits for Sol")
+
+    setTutorialCoopGateHold(session, null, [])
+
+    expect(session.tutorial.stage).toBe("npc-check")
+    expect(tileAt(session.dungeon, gateOne!)).toBe("floor")
+  })
+
   test("death increments the run counter and disables the current tutorial", () => {
     const session = createSession(1234, "solo", "ranger", "Mira", undefined, true)
     const trap = { x: session.player.x + 1, y: session.player.y }
@@ -528,6 +555,33 @@ describe("game session", () => {
     expect(session.hub.activeMutators).toContain("hard-mode")
     expect(session.equipment.weapon?.name).toContain("+1")
     expect(session.hub.trust.blacksmith.level).toBeGreaterThanOrEqual(0)
+  })
+
+  test("next descent preserves village meta-progression and preparation", () => {
+    const session = createSession(1234, "coop", "ranger", "Mira", undefined, true)
+    unlockHub(session)
+    session.hub.coins = 260
+    expect(buildHubStation(session, "blacksmith")).toBe(true)
+    expect(buildHubStation(session, "kitchen")).toBe(true)
+    expect(prepareFood(session)).toBe("Travel rations")
+    expect(upgradeWeapon(session)?.bonusDamage).toBe(1)
+    expect(toggleRunMutator(session, "hard-mode")).toBe(true)
+    expect(cycleContentPack(session).active).toBe("high-contrast")
+
+    const next = createNextDescentSession(session, 9999)
+    expect(next.seed).toBe(9999)
+    expect(next.floor).toBe(1)
+    expect(next.tutorial.enabled).toBe(false)
+    expect(next.hub.unlocked).toBe(true)
+    expect(next.hub.stations.blacksmith.built).toBe(true)
+    expect(next.hub.stations.kitchen.built).toBe(true)
+    expect(next.hub.activeMutators).toContain("hard-mode")
+    expect(next.hub.contentPacks.active).toBe("high-contrast")
+    expect(next.hub.coins).toBe(session.hub.coins)
+    expect(next.hub.houses.length).toBe(session.hub.houses.length)
+    expect(next.inventory).toContain("Travel rations")
+    expect(next.equipment.weapon?.bonusDamage).toBe(1)
+    expect(next.maxHp).toBeLessThanOrEqual(session.maxHp)
   })
 
   test("village screen systems cover movement, schedules, shop pricing, co-op homes, content packs, cutscenes, and balance", () => {

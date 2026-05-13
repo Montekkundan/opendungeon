@@ -19,6 +19,7 @@ import {
   fleeDc,
   fleeModifier,
   focusCostForSkill,
+  heroClassIds,
   hubStationIds,
   pointKey,
   skillCheckFormulaText,
@@ -86,6 +87,21 @@ export type ScreenTransition = {
   kind: "screen" | "portal" | "village"
 }
 
+export type RemotePlayerMarker = {
+  id: string
+  name: string
+  classId: HeroClass
+  floor: number
+  x: number
+  y: number
+  hp: number
+  level: number
+  connected: boolean
+  tutorialStage?: string
+  tutorialReady?: boolean
+  tutorialCompleted?: boolean
+}
+
 export type AppModel = {
   screen: ScreenId
   dialog: DialogId
@@ -104,6 +120,9 @@ export type AppModel = {
   settingsTabIndex: number
   settingsIndex: number
   settingsReturnScreen: ScreenId
+  audioStatus: string
+  remotePlayers: RemotePlayerMarker[]
+  coopGateStatus: string
   inputMode: InputMode
   uiHidden: boolean
   inventoryIndex: number
@@ -217,7 +236,7 @@ const tutorialTabs = [
     name: "Saves",
     description: "Manual saves, autosaves, backups, and quit flow",
     body: [
-      "Ctrl+S or F5 writes a manual local save. The title Save screen lets you load, rename, delete, and inspect thumbnails for local runs.",
+      "Ctrl+S writes a manual local save. The title Save screen lets you load, rename, delete, and inspect thumbnails for local runs.",
       "Autosave keeps one rolling slot after important run changes and on a timer while you play. It is separate from manual saves so quick recovery stays simple.",
       "If you close a run with newer changes than the last manual save, the game asks whether to Save & Close, Close Anyway, or Cancel.",
     ],
@@ -273,8 +292,12 @@ const settingsOptions = [
   { id: "tileScale", tab: "visuals", name: "Camera FOV", text: "Wide shows more rooms; close keeps sprite detail.", control: "slider" },
   { id: "diceSkin", tab: "visuals", name: "Dice skin", text: "Faceted polyhedral dice color used in combat rolls.", control: "tabs" },
   { id: "backgroundFx", tab: "visuals", name: "Background FX", text: "How much title-screen dungeon rain appears.", control: "slider" },
-  { id: "music", tab: "audio", name: "Music", text: "Stored for the future audio layer.", control: "switch" },
-  { id: "sound", tab: "audio", name: "SFX", text: "Stored for combat and loot feedback later.", control: "switch" },
+  { id: "muteAudio", tab: "audio", name: "Mute all", text: "Ctrl+O toggles all audio.", control: "switch" },
+  { id: "masterVolume", tab: "audio", name: "Master volume", text: "Overall game audio level.", control: "slider" },
+  { id: "music", tab: "audio", name: "Music", text: "Loops title/menu and dungeon tracks.", control: "switch" },
+  { id: "musicVolume", tab: "audio", name: "Music volume", text: "Separate volume for looping music.", control: "slider" },
+  { id: "sound", tab: "audio", name: "SFX", text: "Combat, UI, loot, dice, gate, village.", control: "switch" },
+  { id: "sfxVolume", tab: "audio", name: "SFX volume", text: "Separate volume for future SFX and UI cues.", control: "slider" },
 ] as const
 type SettingOption = (typeof settingsOptions)[number]
 
@@ -570,7 +593,7 @@ function drawSaves(canvas: Canvas, model: AppModel) {
     canvas.border(listX, listY, listW, 6, UI.edgeDim)
     drawMiniIcon(canvas, listX + 3, listY + 2, "scroll", 8, 2)
     canvas.write(listX + 14, listY + 2, "No local saves yet.", UI.ink, UI.panel2)
-    canvas.write(listX + 14, listY + 3, "Start a run, then press Ctrl+S or F5.", UI.soft, UI.panel2)
+    canvas.write(listX + 14, listY + 3, "Start a run, then press Ctrl+S.", UI.soft, UI.panel2)
   } else {
     model.saves.slice(offset, offset + rows).forEach((save, visibleIndex) => {
       const index = offset + visibleIndex
@@ -721,6 +744,13 @@ function drawSettings(canvas: Canvas, model: AppModel) {
     if (detailH > 11) drawSettingRow(canvas, detailX + 3, listY + 11, detailW - 6, "Run", `${model.session.mode} floor ${model.session.floor}/${model.session.finalFloor}`)
     if (detailH > 13) drawSettingRow(canvas, detailX + 3, listY + 13, detailW - 6, "Assets", activeAssetPack.name)
     if (detailH > 15) canvas.write(detailX + 3, listY + 15, "Run facts live here now so the play HUD can stay quiet.", UI.soft, UI.panel)
+  } else if (activeTab.id === "audio") {
+    drawMiniIcon(canvas, detailX + 3, listY + 3, "focus-gem", 8, 3)
+    if (detailH > 7) drawSettingRow(canvas, detailX + 3, listY + 7, detailW - 6, "Track", model.screen === "game" ? "dungeon-loop" : "title-settings-loop")
+    if (detailH > 9) drawSettingRow(canvas, detailX + 3, listY + 9, detailW - 6, "Shortcut", "Ctrl+O mute")
+    if (detailH > 11) drawSettingRow(canvas, detailX + 3, listY + 11, detailW - 6, "Master", formatPercent(model.settings.masterVolume))
+    if (detailH > 13) drawSettingRow(canvas, detailX + 3, listY + 13, detailW - 6, "Status", model.audioStatus)
+    if (detailH > 15) canvas.write(detailX + 3, listY + 15, trim("OpenTUI audio starts when enabled.", detailW - 6), UI.soft, UI.panel)
   } else {
     drawMiniIcon(canvas, detailX + 3, listY + 3, "focus-gem", 8, 3)
     if (detailW > 28 && detailH > 7) drawD20Sprite(canvas, detailX + detailW - 15, listY + 3, 20, d20FrameCount() - 1, 10, 4, model.settings.diceSkin)
@@ -757,7 +787,7 @@ function drawControls(canvas: Canvas, model: AppModel) {
     ["Run", "R rests outside combat. Esc pauses. Save manager is inside Pause."],
     ["Accessibility", accessibilitySummary(model.settings)],
     ["Visuals", `Camera ${model.settings.tileScale}. UI ${onOff(model.settings.showUi)}. Dice ${diceSkinName(model.settings.diceSkin)}.`],
-    ["Audio", `Music ${onOff(model.settings.music)}. SFX ${onOff(model.settings.sound)}.`],
+    ["Audio", `Ctrl+O mute. Music ${onOff(model.settings.music)}. SFX ${onOff(model.settings.sound)}. Master ${formatPercent(model.settings.masterVolume)}.`],
 ]
 
   const visibleRows = Math.max(4, Math.min(rows.length, Math.floor((height - 8) / 2)))
@@ -822,16 +852,16 @@ function drawTutorial(canvas: Canvas, model: AppModel) {
 function drawGame(canvas: Canvas, model: AppModel) {
   const session = model.session
   const moveAnimation = activePlayerMoveAnimation(model)
-  drawMap(canvas, session, model.debugView, model.settings, model.animationFrame, moveAnimation, model.cameraFocus ?? null)
+  drawMap(canvas, session, model.debugView, model.settings, model.animationFrame, moveAnimation, model.cameraFocus ?? null, model.remotePlayers)
   if (!model.uiHidden) {
     drawHud(canvas, session)
-    if (!model.debugView && model.settings.showMinimap) drawMinimap(canvas, session)
+    if (!model.debugView && model.settings.showMinimap) drawMinimap(canvas, session, model.remotePlayers)
     if (!model.debugView) drawQuickbar(canvas, session, model.diceRollAnimation, model.settings)
     if (session.combat.active) drawCombatPanel(canvas, session, model.diceRollAnimation, model.settings)
     if (session.conversation && !session.combat.active && !session.skillCheck) drawConversationPanel(canvas, session)
-    drawToasts(canvas, session)
   }
   if (!model.debugView) drawTutorialCoach(canvas, session)
+  if (!model.uiHidden) drawToasts(canvas, session)
   if (session.status !== "running") drawRunEnd(canvas, session)
   if (session.skillCheck) drawSkillCheckModal(canvas, session, model.diceRollAnimation, model.settings)
   if (session.levelUp) drawLevelUpModal(canvas, session)
@@ -949,6 +979,7 @@ function drawMap(
   animationFrame = session.turn,
   playerMoveAnimation: PlayerMoveAnimation | null = null,
   cameraFocus: CameraFocus = null,
+  remotePlayers: RemotePlayerMarker[] = [],
 ) {
   const tileSize = mapTileSize(canvas, debugView, settings.tileScale)
   const tileWidth = tileSize.width
@@ -961,6 +992,7 @@ function drawMap(
   const targets = combatTargets(session)
   const selectedTargetId = session.combat.active ? targets[session.combat.selectedTarget]?.id : undefined
   const previewRadius = cameraFocus ? Math.max(4, Math.floor(Math.min(viewWidth, viewHeight) * 0.3)) : 0
+  const remotes = remotePlayersOnFloor(remotePlayers, session.floor)
 
   for (let sy = 0; sy < viewHeight; sy++) {
     for (let sx = 0; sx < viewWidth; sx++) {
@@ -971,6 +1003,7 @@ function drawMap(
       const visible = session.visible.has(pointKey(point)) || previewVisible
       const seen = session.seen.has(pointKey(point)) || previewVisible
       const actor = visible ? actorAt(session.dungeon.actors, point) : undefined
+      const remote = visible ? remotePlayerAt(remotes, point) : undefined
       const screenX = sx * tileWidth
       const screenY = sy * tileHeight
 
@@ -994,6 +1027,11 @@ function drawMap(
           playerMoveAnimation ? animationFrame : session.turn,
           playerMoveAnimation?.direction,
         )
+        const stacked = remotePlayerAt(remotes, point)
+        if (stacked) drawRemoteStackBadge(canvas, screenX, screenY, tileWidth, tileHeight, stacked, remotes.filter((player) => player.x === x && player.y === y).length)
+      }
+      else if (remote) {
+        drawRemotePlayerSprite(canvas, screenX, screenY, tileWidth, tileHeight, remote, debugView, animationFrame)
       }
       else if (actor) {
         drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, actorSpriteId(actor.kind), debugView, actorAnimation(actor.id === selectedTargetId, session), actor.id === selectedTargetId ? animationFrame : 0)
@@ -1025,7 +1063,7 @@ function mapTileSize(canvas: Canvas, debugView: boolean, preference: UserSetting
   return { width: 10, height: 5 }
 }
 
-function drawMinimap(canvas: Canvas, session: GameSession) {
+function drawMinimap(canvas: Canvas, session: GameSession, remotePlayers: RemotePlayerMarker[] = []) {
   if (canvas.width < 96 || canvas.height < 28) return
   const width = Math.min(38, Math.max(32, Math.floor(canvas.width * 0.22)))
   const availableHeight = canvas.height - gameQuickbarHeight(canvas) - gameHudHeight(canvas) - 4
@@ -1048,6 +1086,7 @@ function drawMinimap(canvas: Canvas, session: GameSession) {
   let objectiveVisible = false
   const title = objective ? `Radar  goal ${objectiveDirectionLabel(session.player, objective)}` : "Radar"
   canvas.write(x + 2, y, trim(title, width - 4), UI.gold, bg)
+  const remotes = remotePlayersOnFloor(remotePlayers, session.floor)
 
   for (let row = 0; row < innerH; row++) {
     for (let col = 0; col < innerW; col++) {
@@ -1059,8 +1098,10 @@ function drawMinimap(canvas: Canvas, session: GameSession) {
       const seen = session.seen.has(key)
       let marker = minimapTileMarker(session.dungeon.tiles[mapY]?.[mapX] ?? "void", visible, seen)
       const actor = visible ? actorAt(session.dungeon.actors, point) : undefined
+      const remote = visible ? remotePlayerAt(remotes, point) : undefined
 
       if (actor) marker = minimapActorMarker(actor.kind)
+      if (remote) marker = { ch: "&", fg: UI.cyan }
       if (objective && objective.x === mapX && objective.y === mapY) {
         marker = { ch: "◆", fg: UI.gold }
         objectiveVisible = true
@@ -1074,7 +1115,7 @@ function drawMinimap(canvas: Canvas, session: GameSession) {
   if (objective && !objectiveVisible) drawMinimapObjectivePointer(canvas, objective, startX, startY, innerX, innerY, innerW, innerH, bg)
   const detail = objective ? `Goal ${objectiveDistanceText(session.player, objective)}  floor ${session.floor}` : `Floor ${session.floor}`
   canvas.write(x + 1, y + height - 3, trim(detail, width - 2), UI.brass, bg)
-  canvas.write(x + 1, y + height - 2, trim("@you !foe nNPC $shop >exit ◆", width - 2), UI.soft, bg)
+  canvas.write(x + 1, y + height - 2, trim("@you &ally !foe nNPC $shop >exit ◆", width - 2), UI.soft, bg)
 }
 
 function drawRunMapDialog(canvas: Canvas, model: AppModel, x: number, y: number, width: number, height: number) {
@@ -1088,7 +1129,7 @@ function drawRunMapDialog(canvas: Canvas, model: AppModel, x: number, y: number,
   const statsX = mapX + mapW + 3
 
   drawPanel(canvas, mapX, mapY, mapW, mapH, "Full Map", UI.edge)
-  drawFullDungeonMap(canvas, session, mapX + 2, mapY + 2, mapW - 4, mapH - 4)
+  drawFullDungeonMap(canvas, session, model.remotePlayers, mapX + 2, mapY + 2, mapW - 4, mapH - 4)
 
   drawPanel(canvas, statsX, mapY, statsW, mapH, "Run Stats", UI.edgeDim)
   const rows: Array<[string, string, string?]> = [
@@ -1114,7 +1155,7 @@ function drawRunMapDialog(canvas: Canvas, model: AppModel, x: number, y: number,
   const objectiveText = objective ? `Goal ${objectiveDistanceText(session.player, objective)}` : "Goal none on this floor"
   const legendY = mapY + mapH - 4
   canvas.write(statsX + 2, legendY, trim(objectiveText, statsW - 4), objective ? UI.gold : UI.muted, UI.panel)
-  canvas.write(statsX + 2, legendY + 2, trim("@ you  ! enemy  n npc  ? artifact  > exit", statsW - 4), UI.soft, UI.panel)
+  canvas.write(statsX + 2, legendY + 2, trim("@ you  & ally  ! enemy  n npc  ? artifact  > exit", statsW - 4), UI.soft, UI.panel)
   canvas.write(x + 4, y + height - 4, trim("M or Esc close. Unseen artifact and secret counts stay as ?? until discovered.", width - 8), UI.muted, UI.panel)
 }
 
@@ -1124,7 +1165,7 @@ function drawMapStatRow(canvas: Canvas, x: number, y: number, width: number, lab
   canvas.write(x + 16, y, trim(value, width - 18), valueColor, UI.panel2)
 }
 
-function drawFullDungeonMap(canvas: Canvas, session: GameSession, x: number, y: number, width: number, height: number) {
+function drawFullDungeonMap(canvas: Canvas, session: GameSession, remotePlayers: RemotePlayerMarker[], x: number, y: number, width: number, height: number) {
   const bg = "#0b1218"
   canvas.fill(x, y, width, height, " ", bg, bg)
   if (width <= 0 || height <= 0) return
@@ -1154,6 +1195,7 @@ function drawFullDungeonMap(canvas: Canvas, session: GameSession, x: number, y: 
   }
   const objective = activeQuestObjectivePoint(session)
   if (objective) drawScaledMapPoint(canvas, session, objective, x, y, width, height, "◆", UI.gold, bg)
+  for (const remote of remotePlayersOnFloor(remotePlayers, session.floor)) drawScaledMapPoint(canvas, session, remote, x, y, width, height, "&", UI.cyan, bg)
   drawScaledMapPoint(canvas, session, session.player, x, y, width, height, "@", UI.focus, bg)
 }
 
@@ -2787,6 +2829,38 @@ function actorAnimation(selected: boolean, session: GameSession): SpriteAnimatio
   return "idle"
 }
 
+function remotePlayersOnFloor(remotePlayers: RemotePlayerMarker[], floor: number) {
+  return remotePlayers.filter((player) => player.connected && player.floor === floor)
+}
+
+function remotePlayerAt(remotePlayers: RemotePlayerMarker[], point: { x: number; y: number }) {
+  return remotePlayers.find((player) => player.x === point.x && player.y === point.y)
+}
+
+function drawRemotePlayerSprite(canvas: Canvas, x: number, y: number, width: number, height: number, remote: RemotePlayerMarker, debugView: boolean, frameSeed: number) {
+  if (debugView) {
+    canvas.write(x, y, remoteInitial(remote.name).repeat(2), UI.cyan)
+    return
+  }
+
+  drawSprite(canvas, x, y, width, height, classSprite(remoteHeroClass(remote.classId)), debugView, "idle", frameSeed + remote.name.length)
+  if (width >= 8 && height >= 5) canvas.write(x + 1, y + height - 1, trim(remote.name, width - 2), UI.cyan)
+  else canvas.write(x + Math.max(0, width - 2), y, remoteInitial(remote.name), UI.cyan)
+}
+
+function drawRemoteStackBadge(canvas: Canvas, x: number, y: number, width: number, _height: number, remote: RemotePlayerMarker, count: number) {
+  const label = count > 1 ? `+${count}` : `+${remoteInitial(remote.name)}`
+  canvas.write(x + Math.max(0, width - label.length - 1), y, label, UI.cyan)
+}
+
+function remoteInitial(name: string) {
+  return (name.trim()[0] || "&").toUpperCase()
+}
+
+function remoteHeroClass(classId: string): HeroClass {
+  return (heroClassIds as readonly string[]).includes(classId) ? (classId as HeroClass) : "ranger"
+}
+
 function classSprite(classId: HeroClass, appearance?: HeroAppearance): PixelSpriteId {
   return heroSpriteForAppearance(classId, appearance) as PixelSpriteId
 }
@@ -2878,12 +2952,13 @@ function drawDialog(canvas: Canvas, model: AppModel) {
     const rows = [
       ["Move", "Arrows / WASD"],
       ["Confirm", "Enter / Space"],
-      ["Save", "Ctrl+S or F5 saves locally; Esc then M opens run saves"],
+      ["Save", "Ctrl+S saves locally; Esc then M opens run saves"],
       ["Pack", "I inventory, B book, M map, V village, J quests, O quests in Vim mode, H potion, L log"],
       ["Combat", "Tab target, 1-6 skill, F flee, Enter rolls d20"],
       ["Camera", "- wider FOV, = closer view"],
       ["Overlay", "U hides or shows the UI for this run"],
       ["Run", "R rest, Esc pause, Q quit prompt"],
+      ["Audio", "Ctrl+O mutes or unmutes music and SFX. Audio volume lives in Settings."],
     ]
     rows.forEach((row, index) => {
       const rowY = y + 4 + index * 2
@@ -3048,6 +3123,10 @@ function settingValue(model: AppModel, id: (typeof settingsOptions)[number]["id"
   if (id === "diceSkin") return diceSkinName(settings.diceSkin)
   if (id === "backgroundFx") return settings.backgroundFx
   if (id === "tileScale") return settings.tileScale
+  if (id === "muteAudio") return onOff(settings.muteAudio)
+  if (id === "masterVolume") return formatPercent(settings.masterVolume)
+  if (id === "musicVolume") return formatPercent(settings.musicVolume)
+  if (id === "sfxVolume") return formatPercent(settings.sfxVolume)
   if (id === "music") return onOff(settings.music)
   return onOff(settings.sound)
 }
@@ -3055,6 +3134,7 @@ function settingValue(model: AppModel, id: (typeof settingsOptions)[number]["id"
 function settingSliderValues(id: SettingOption["id"]) {
   if (id === "tileScale") return ["overview", "wide", "medium", "close"]
   if (id === "backgroundFx") return ["low", "normal", "dense"]
+  if (id === "masterVolume" || id === "musicVolume" || id === "sfxVolume") return ["0%", "25%", "50%", "75%", "100%"]
   return ["off", "on"]
 }
 
@@ -3072,6 +3152,10 @@ function controlMoveText(scheme: UserSettings["controlScheme"]) {
 
 function accessibilitySummary(settings: UserSettings) {
   return `High contrast ${onOff(settings.highContrast)}. Reduce motion ${onOff(settings.reduceMotion)}.`
+}
+
+function formatPercent(value: number) {
+  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`
 }
 
 function onOff(value: boolean) {

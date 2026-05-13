@@ -1,0 +1,14 @@
+Bountiful Bits - 10x10 RPG Assets Top-Down Tileset
+Author: VEXED
+Source: https://v3x3d.itch.io/bountiful-bits
+License: Creative Commons Zero v1.0 Universal
+
+Imported file:
+- Colored/no-background/Civilized-no-bg.png
+
+Project target:
+- assets/opendungeon-assets/runtime/tiles/vexed-bountiful-bits-civilized-10x10.png
+
+Notes verified from the current itch.io page:
+- The asset page lists "Asset license: Creative Commons Zero v1.0 Universal".
+- The asset page states that the tiles can be used in commercial projects and modified.

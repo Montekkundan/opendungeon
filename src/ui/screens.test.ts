@@ -38,7 +38,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: skillCheckModel(),
-      expectedHash: "2e5440e5",
+      expectedHash: "e5099664",
       requiredText: ["Talent Check", "Whispering Relic", "Total >= difficulty", "Enter roll d20", "Esc step away"],
     },
     {
@@ -46,7 +46,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: combatModel(),
-      expectedHash: "fe9181b2",
+      expectedHash: "e6df33e5",
       requiredText: ["Turn Combat", "Order", "Shado", "Necroman", "Weakness"],
     },
     {
@@ -117,6 +117,36 @@ test("multiplayer picker only shows multiplayer modes", () => {
   expect(text).toContain("Solo runs start from New descent")
   expect(text).toContain("opendungeon join http://127.0.0.1:3737")
   expect(text).not.toContain("One crawl, local run.")
+})
+
+test("co-op game screen renders remote party members on the map and radar", () => {
+  const session = createSession(1234, "coop", "ranger", "Mira")
+  const output = draw(
+    modelFor("game", session, {
+      remotePlayers: [
+        {
+          id: "remote-sol",
+          name: "Sol",
+          classId: "cleric",
+          floor: session.floor,
+          x: session.player.x + 1,
+          y: session.player.y,
+          hp: 19,
+          level: 1,
+          connected: true,
+          tutorialStage: "movement",
+          tutorialReady: false,
+          tutorialCompleted: false,
+        },
+      ],
+    }),
+    120,
+    40,
+  )
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Sol")
+  expect(text).toContain("&ally")
 })
 
 test("normal screen changes do not draw transition banners", () => {
@@ -208,6 +238,20 @@ test("cloud profile screen draws account once and names local-only action clearl
   expect(text).not.toContain("Use local profile")
 })
 
+test("audio settings use portable shortcuts and keep panel copy bounded", () => {
+  const output = draw(modelFor("settings", createSession(1234), { settingsTabIndex: 4, settingsIndex: 0 }), 136, 44)
+  const text = screenText(output.chunks)
+  const rows = text.split("\n")
+
+  expect(rows).toHaveLength(44)
+  expect(rows.every((row) => row.length === 136)).toBe(true)
+  expect(text).toContain("Ctrl+O toggles all audio.")
+  expect(text).toContain("Ctrl+O mute")
+  expect(text).toContain("OpenTUI audio starts when enabled.")
+  expect(text).not.toContain(["F", "8"].join(""))
+  expect(text).not.toContain("function")
+})
+
 test("new descent story scene shows branch choices and cutscene controls", () => {
   const session = createSession(1234)
   playLocalCutscene(session, "waking-cell")
@@ -217,6 +261,16 @@ test("new descent story scene shows branch choices and cutscene controls", () =>
   expect(text).toContain("I have been here before")
   expect(text).toContain("Follow the voice")
   expect(text).toContain("Enter answer")
+})
+
+test("opening story outcome is visible in the run even when tutorial coach is open", () => {
+  const session = createSession(1234, "solo", "ranger", "Mira", undefined, true)
+  applyOpeningStoryBranch(session, "read-ledger")
+  const output = draw(modelFor("game", session), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Opening choice")
+  expect(text).toContain("ledger page lists")
 })
 
 test("opening story branches change run state", () => {
@@ -231,6 +285,7 @@ test("opening story branches change run state", () => {
   expect(session.inventory[0]).toBe("Ledger scrap")
   expect(session.focus).toBeGreaterThanOrEqual(beforeFocus)
   expect(session.knowledge.map((entry) => entry.title)).toContain("Ledger Scrap")
+  expect(session.toasts[0]?.text).toContain("The wound is old")
 })
 
 test("quest journal only lists discovered chains at the start", () => {
@@ -269,7 +324,7 @@ test("minimap renders a local radar with objective direction", () => {
 
   expect(text).toContain("Radar  goal E15")
   expect(text).toContain("Goal E15 (15 steps)")
-  expect(text).toContain("@you !foe nNPC $shop >exit")
+  expect(text).toContain("@you &ally")
   expect(text).not.toContain("Mini map")
 })
 
@@ -411,6 +466,9 @@ function modelFor(screen: ScreenId, session = createSession(1234), overrides: Pa
     settingsTabIndex: 0,
     settingsIndex: 0,
     settingsReturnScreen: "start",
+    audioStatus: "Audio ready.",
+    remotePlayers: [],
+    coopGateStatus: "",
     inputMode: null,
     uiHidden: false,
     inventoryIndex: 0,

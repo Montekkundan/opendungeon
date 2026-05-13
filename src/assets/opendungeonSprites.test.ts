@@ -72,6 +72,8 @@ describe("opendungeon runtime sprites", () => {
     const slime = animatedPixelSprite("slime", "attack-melee", 2, 16, 8)
     const wall = pixelSprite("wall-a", 16, 8)
     const sword = pixelSprite("sword", 14, 7)
+    const door = pixelSprite("door", 10, 5)
+    const trap = pixelSprite("trap", 10, 5)
     const d20 = d20RollSprite(20, 11, 16, 8, defaultDiceSkin)
     const portrait = portraitSprite("portrait.boss-minotaur", 18, 9)
 
@@ -80,6 +82,8 @@ describe("opendungeon runtime sprites", () => {
     expect(hasVisibleCells(slime)).toBe(true)
     expect(wall.cells.flat().every((cell) => cell.bg)).toBe(true)
     expect(hasVisibleCells(sword)).toBe(true)
+    expect(hasVisibleCells(door)).toBe(true)
+    expect(hasVisibleCells(trap)).toBe(true)
     expect(hasVisibleCells(d20)).toBe(true)
     expect(hasVisibleCells(portrait)).toBe(true)
     expect(colorCount(d20)).toBeGreaterThan(3)
@@ -89,10 +93,13 @@ describe("opendungeon runtime sprites", () => {
     const files = runtimeAssetFiles()
     for (const file of [
       "assets/opendungeon-assets/licenses/project-owned-generated-assets.txt",
+      "assets/opendungeon-assets/licenses/project-owned-audio.txt",
       "assets/opendungeon-assets/runtime/actors/tiny-ranger/walk.png",
       "assets/opendungeon-assets/runtime/actors/tiny-ranger/walk-left.png",
       "assets/opendungeon-assets/runtime/actors/tiny-ranger/walk-right.png",
       "assets/opendungeon-assets/runtime/actors/tiny-ranger/walk-up.png",
+      "assets/opendungeon-assets/runtime/audio/dungeon-loop.mp3",
+      "assets/opendungeon-assets/runtime/audio/title-settings-loop.mp3",
       "assets/opendungeon-assets/runtime/actors/tiny-warden/walk.png",
       "assets/opendungeon-assets/runtime/actors/tiny-arcanist/walk.png",
       "assets/opendungeon-assets/runtime/actors/tiny-ghoul/walk.png",
@@ -106,6 +113,7 @@ describe("opendungeon runtime sprites", () => {
       "assets/opendungeon-assets/runtime/portraits/portraits-project-owned.png",
       "assets/opendungeon-assets/runtime/sprite-metadata.json",
       "assets/opendungeon-assets/runtime/tiles/terminal-terrain-8x8.png",
+      "assets/opendungeon-assets/runtime/tiles/vexed-bountiful-bits-civilized-10x10.png",
       "assets/opendungeon-assets/skills/ai-admin-sprite-generation.md",
     ]) {
       expect(files).toContain(file)
@@ -127,6 +135,7 @@ describe("opendungeon runtime sprites", () => {
     expect(existsSync("assets/opendungeon-assets/runtime/actors/tiny-ranger/idle.png")).toBe(true)
     expect(existsSync("assets/opendungeon-assets/runtime/actors/tiny-ghoul/idle.png")).toBe(true)
     expect(existsSync("assets/opendungeon-assets/runtime/tiles/terminal-terrain-8x8.png")).toBe(true)
+    expect(existsSync("assets/opendungeon-assets/runtime/tiles/vexed-bountiful-bits-civilized-10x10.png")).toBe(true)
     expect(existsSync("assets/opendungeon-assets/runtime/icons/kettoman-rpg-icons-16x16.png")).toBe(true)
     expect(existsSync("assets/opendungeon-assets/runtime/icons/opendungeon-terminal-icons-8x8.png")).toBe(true)
     expect(existsSync("assets/opendungeon-assets/runtime/icons/piiixl-terminal-icons-8x8.png")).toBe(true)
