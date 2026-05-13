@@ -8,17 +8,22 @@ import { authStatusReport, formatAuthStatus } from "../cloud/authStatus.js"
 import { buildCloudSaveBrowserState } from "../cloud/cloudSaves.js"
 import {
   actorAt,
+  combatMatchupText,
   combatModifier,
   combatSkills,
   combatTargets,
   currentBiome,
+  currentTutorialPrompt,
   enemyBehaviorText,
+  enemyStrategyText,
   fleeDc,
   fleeModifier,
   focusCostForSkill,
   hubStationIds,
   pointKey,
+  skillCheckFormulaText,
   skillCheckModifier,
+  skillCheckOutcomeText,
   statusEffectsFor,
   startingLoadout,
   villageLocationIds,
@@ -34,9 +39,11 @@ import { actorLabel } from "../game/glyphs.js"
 import { saveDirectory, type SaveSummary } from "../game/saveStore.js"
 import { profilePath, type UserSettings } from "../game/settingsStore.js"
 import { formatModifier, statAbbreviations, statLabels, statLine, statsForClass } from "../game/stats.js"
-import { clamp, easeOutCubic, wrap } from "../shared/numeric.js"
+import { openingStoryBranches } from "../game/story.js"
+import { clamp, wrap } from "../shared/numeric.js"
 import { titleUpdateNotice, type UpdateStatus } from "../system/updateCheck.js"
 import { Canvas } from "./canvas.js"
+import { teleportTileSprite, teleportTransitionFrame } from "./teleportAnimation.js"
 
 type TileRenderStyle = {
   fg: string
@@ -102,6 +109,7 @@ export type AppModel = {
   inventoryIndex: number
   inventoryDragIndex: number | null
   bookIndex: number
+  bookTabIndex: number
   questIndex: number
   tutorialIndex: number
   internetStatus: InternetStatus
@@ -112,6 +120,7 @@ export type AppModel = {
   diceRollAnimation?: DiceRollAnimation | null
   cameraFocus?: CameraFocus
   screenTransition?: ScreenTransition | null
+  cutsceneChoiceIndex?: number
 }
 
 const startItems = ["Continue last", "New descent", "Load save", "Character", "Multiplayer", "Cloud login", "Tutorial", "Settings", "Controls", "Quit"]
@@ -180,8 +189,8 @@ const tutorialTabs = [
     name: "Book",
     description: "Memory, notes, NPC clues, and discoveries",
     body: [
-      "Open the Book with B. It stores what the crawler knows: recovered memories, physical notes, recipes, tool parts, village deeds, rare fossils, boss memories, keepsakes, NPC advice, and hub rumors.",
-      "Walking over collectible tiles, talking to NPCs, and resolving note-like checks can add entries. The Book is the long-term way to understand why the player woke with no memory.",
+      "Open the Book with B. It stores what the crawler knows: recovered memories, physical notes, recipes, tool parts, village deeds, rare fossils, boss memories, keepsakes, NPC advice, hub rumors, and monster notes.",
+      "Walking over collectible tiles, talking to NPCs, resolving checks, and finding monster weaknesses can add entries. Tabs separate story, people, and monsters.",
       "Later physical notes, village trust, portal-room upgrades, and AI-admin story changes should all write readable entries here.",
     ],
   },
@@ -224,14 +233,34 @@ const tutorialTabs = [
   },
 ] as const
 
+const bookTabs = [
+  { id: "all", name: "All", description: "Every recovered entry in newest-first order." },
+  { id: "story", name: "Story", description: "Memories, notes, relic records, and tutorial lessons." },
+  { id: "people", name: "People", description: "NPC conversations, hub rumors, and village knowledge." },
+  { id: "monsters", name: "Monsters", description: "Monstrary entries, combat behavior, and discovered weaknesses." },
+] as const
+
 export function tutorialTabCount() {
   return tutorialTabs.length
+}
+
+export function bookTabCount() {
+  return bookTabs.length
+}
+
+export function bookEntriesForTab(session: GameSession, tabIndex: number) {
+  const tab = bookTabs[clamp(tabIndex, 0, bookTabs.length - 1)] ?? bookTabs[0]
+  if (tab.id === "story") return session.knowledge.filter((entry) => entry.kind === "memory" || entry.kind === "note" || entry.kind === "tutorial")
+  if (tab.id === "people") return session.knowledge.filter((entry) => entry.kind === "npc" || entry.kind === "hub")
+  if (tab.id === "monsters") return session.knowledge.filter((entry) => entry.kind === "monster")
+  return session.knowledge
 }
 
 const settingsOptions = [
   { id: "username", tab: "profile", name: "Player name", text: "Saved locally and later used by cloud sync.", control: "input" },
   { id: "showUi", tab: "profile", name: "Show UI", text: "Default overlay visibility for future runs.", control: "switch" },
   { id: "showMinimap", tab: "profile", name: "Show minimap", text: "Default minimap visibility with quest objective marker.", control: "switch" },
+  { id: "startWithTutorial", tab: "profile", name: "Start with tutorial", text: "Gate each new descent behind movement, NPC, check, and combat basics.", control: "switch" },
   { id: "runSeed", tab: "run", name: "Seed", text: "World seed for replaying this crawl.", control: "readonly" },
   { id: "runMode", tab: "run", name: "Mode", text: "Current multiplayer/run mode.", control: "readonly" },
   { id: "runFloor", tab: "run", name: "Floor", text: "Current floor and final floor target.", control: "readonly" },
@@ -513,8 +542,8 @@ function drawMode(canvas: Canvas, model: AppModel) {
 
   const selectedMode = multiplayerModeForSelection(model.menuIndex)
   canvas.write(x + 4, y + height - 5, "Solo runs start from New descent on the title screen.", UI.muted, UI.panel)
-  canvas.write(x + 4, y + height - 4, `Host lobby: bun run host -- --mode ${selectedMode.id} --seed ${model.seed}`, UI.soft, UI.panel)
-  canvas.write(x + 4, y + height - 3, "Friends reuse the shared seed for co-op or race runs.", UI.muted, UI.panel)
+  canvas.write(x + 4, y + height - 4, `Host local: bun run host -- --host 127.0.0.1 --mode ${selectedMode.id} --seed ${model.seed}`, UI.soft, UI.panel)
+  canvas.write(x + 4, y + height - 3, "Open another terminal tab with opendungeon join http://127.0.0.1:3737.", UI.muted, UI.panel)
   drawFooter(canvas, [
     ["Enter", "start"],
     ["Esc", "title"],
@@ -722,7 +751,7 @@ function drawControls(canvas: Canvas, model: AppModel) {
     ["Menus", "Arrows always work. WASD follows the selected control scheme."],
     ["Combat", "Tab selects an enemy. 1-6 selects a skill. Enter rolls d20. F flees."],
     ["Inventory", "I opens pack. Arrows select. Enter applies. Mouse can drag slots."],
-    ["Book", "B opens memory, note, NPC, tutorial, and hub discoveries."],
+    ["Book", "B opens story, people, monster, tutorial, and hub discoveries."],
     ["Quests", "J opens the quest journal. Use O instead when Vim movement is active."],
     ["Map", "M opens the full dungeon map and current run stats."],
     ["Run", "R rests outside combat. Esc pauses. Save manager is inside Pause."],
@@ -802,6 +831,7 @@ function drawGame(canvas: Canvas, model: AppModel) {
     if (session.conversation && !session.combat.active && !session.skillCheck) drawConversationPanel(canvas, session)
     drawToasts(canvas, session)
   }
+  if (!model.debugView) drawTutorialCoach(canvas, session)
   if (session.status !== "running") drawRunEnd(canvas, session)
   if (session.skillCheck) drawSkillCheckModal(canvas, session, model.diceRollAnimation, model.settings)
   if (session.levelUp) drawLevelUpModal(canvas, session)
@@ -825,12 +855,14 @@ function drawVillage(canvas: Canvas, model: AppModel) {
   const sideX = mapX + mapW + 3
   const sideW = width - (sideX - x) - 4
   const selected = villageLocations[hub.village.selectedLocation]
-  drawPanel(canvas, sideX, mapY, sideW, 7, selected.label, UI.gold)
+  drawPanel(canvas, sideX, mapY, sideW, 9, selected.label, UI.gold)
   canvas.write(sideX + 3, mapY + 2, trim(selected.text, sideW - 6), UI.ink, UI.panel)
   canvas.write(sideX + 3, mapY + 4, trim(`Coins ${hub.coins}  Loot sold ${hub.lootSold}  Pack ${hub.contentPacks.active}`, sideW - 6), UI.soft, UI.panel)
   canvas.write(sideX + 3, mapY + 5, trim(`Farm permissions ${hub.village.sharedFarm.permissions}`, sideW - 6), UI.soft, UI.panel)
+  canvas.write(sideX + 3, mapY + 6, trim("First loop: 3 sell loot, 1 blacksmith, 4 food.", sideW - 6), UI.gold, UI.panel)
+  canvas.write(sideX + 3, mapY + 7, trim("G starts the next descent when ready.", sideW - 6), UI.focus, UI.panel)
 
-  const scheduleY = mapY + 8
+  const scheduleY = mapY + 10
   drawPanel(canvas, sideX, scheduleY, sideW, 9, "NPC Schedule", UI.edge)
   hub.village.schedules.slice(0, 5).forEach((schedule, index) => {
     const rowY = scheduleY + 2 + index
@@ -859,6 +891,8 @@ function drawVillage(canvas: Canvas, model: AppModel) {
     ["C", "pack"],
     ["B", "balance"],
     ["N", "cutscene"],
+    ["1/3/4", "prep"],
+    ["G", "descent"],
     ["Esc", "dungeon"],
   ])
 }
@@ -944,7 +978,7 @@ function drawMap(
         const style = tileStyle(session, x, y, true, visible, seen)
         drawTileBlock(canvas, screenX, screenY, tileWidth, tileHeight, style)
       } else {
-        drawAssetTile(canvas, screenX, screenY, tileWidth, tileHeight, session, x, y, visible, seen)
+        drawAssetTile(canvas, screenX, screenY, tileWidth, tileHeight, session, x, y, visible, seen, settings.reduceMotion ? 0 : animationFrame)
       }
 
       if (session.player.x === x && session.player.y === y) {
@@ -1290,6 +1324,7 @@ function drawAssetTile(
   y: number,
   visible: boolean,
   seen: boolean,
+  animationFrame = 0,
 ) {
   const tile = session.dungeon.tiles[y]?.[x] ?? "void"
   if (!seen || tile === "void") {
@@ -1306,7 +1341,7 @@ function drawAssetTile(
   drawPixelBlock(canvas, screenX, screenY, floorSprite(x, y, tileWidth, tileHeight), dim)
   if (!visible) return
   if (tile === "door") canvas.write(screenX + Math.floor(tileWidth / 2), screenY + Math.floor(tileHeight / 2), "+", UI.gold)
-  if (tile === "stairs") drawPixelBlock(canvas, screenX, screenY, pixelSprite("stairs", tileWidth, tileHeight), 1)
+  if (tile === "stairs") drawPixelBlock(canvas, screenX, screenY, teleportTileSprite(tileWidth, tileHeight, animationFrame + x * 3 + y * 5), 1)
   if (tile === "potion") drawPixelBlock(canvas, screenX, screenY, pixelSprite("potion", tileWidth, tileHeight), 1)
   if (tile === "relic") drawPixelBlock(canvas, screenX, screenY, pixelSprite("relic", tileWidth, tileHeight), 1)
   if (tile === "chest") drawPixelBlock(canvas, screenX, screenY, pixelSprite("chest", tileWidth, tileHeight), 1)
@@ -1468,7 +1503,7 @@ function drawHud(canvas: Canvas, session: GameSession) {
   if (canvas.width < 96 || height < 5) {
     canvas.fill(0, 0, canvas.width, Math.min(4, canvas.height), " ", cleanPanel, cleanPanel)
     if (canvas.height > 4) canvas.fill(0, 4, canvas.width, 1, " ", "#0b1118", "#0b1118")
-    const hero = trim(`${session.hero.name} · ${formatBiome(currentBiome(session))} · ${session.floorModifier.name} · ${session.gold}g`, Math.max(16, canvas.width - 34))
+    const hero = trim(`${session.hero.name} · ${formatBiome(currentBiome(session))} · ${session.floorModifier.name} · ${session.gold}g · D ${session.deaths}`, Math.max(16, canvas.width - 34))
     canvas.write(1, 0, hero, UI.ink, cleanPanel)
     drawHudBar(canvas, 1, 1, Math.max(12, Math.floor(canvas.width * 0.32)), "HP", session.hp, session.maxHp, UI.hp, UI.hpBack)
     drawHudBar(canvas, Math.floor(canvas.width * 0.43), 1, Math.max(10, Math.floor(canvas.width * 0.25)), "FOCUS", session.focus, session.maxFocus, UI.focus, UI.focusBack)
@@ -1483,7 +1518,7 @@ function drawHud(canvas: Canvas, session: GameSession) {
 
   const infoX = x + 14
   const contentW = width - 17
-  canvas.write(infoX, 1, trim(`${session.hero.name}  LV ${session.level}  XP ${session.xp}/${session.level * 10}  ${session.gold}g`, Math.floor(contentW * 0.48)), UI.gold, UI.panel)
+  canvas.write(infoX, 1, trim(`${session.hero.name}  LV ${session.level}  XP ${session.xp}/${session.level * 10}  ${session.gold}g  Deaths ${session.deaths}`, Math.floor(contentW * 0.48)), UI.gold, UI.panel)
   canvas.write(infoX + Math.floor(contentW * 0.5), 1, trim(`${session.hero.title} · ${formatBiome(currentBiome(session))} · ${session.floorModifier.name}`, Math.floor(contentW * 0.48)), UI.soft, UI.panel)
   drawHudBar(canvas, infoX, 2, Math.max(20, Math.floor(contentW * 0.42)), "HP", session.hp, session.maxHp, UI.hp, UI.hpBack)
   drawHudBar(canvas, infoX + Math.floor(contentW * 0.48), 2, Math.max(20, Math.floor(contentW * 0.42)), "FOCUS", session.focus, session.maxFocus, UI.focus, UI.focusBack)
@@ -1515,6 +1550,31 @@ function drawQuestHudLine(
   canvas.fill(x, y, 1, 1, " ", edge, edge)
   canvas.write(x + 2, y, trim(`Quest ${title}`, width - 10), UI.focus, bg)
   canvas.write(x + width - 6, y, `${completed}/${total}`, UI.soft, bg)
+}
+
+function drawTutorialCoach(canvas: Canvas, session: GameSession) {
+  const prompt = currentTutorialPrompt(session)
+  if (!prompt || canvas.width < 82 || canvas.height < 28) return
+  const width = Math.min(74, Math.max(56, Math.floor(canvas.width * 0.48)))
+  const x = Math.max(2, canvas.width - width - 2)
+  const y = gameHudHeight(canvas) + 1
+  const steps = "steps" in prompt && Array.isArray(prompt.steps) ? prompt.steps : []
+  const height = Math.min(12, Math.max(8, 7 + Math.ceil(steps.length / 2)))
+  canvas.fill(x, y, width, height, " ", "#0b1218", "#0b1218")
+  canvas.border(x, y, width, height, UI.gold)
+  canvas.write(x + 2, y + 1, trim(prompt.title, width - 4), UI.gold, "#0b1218")
+  writeWrapped(canvas, x + 2, y + 2, width - 4, [prompt.text], 2, UI.ink, "#0b1218")
+  const leftW = Math.floor((width - 6) / 2)
+  steps.slice(0, 8).forEach((step, index) => {
+    const done = step.endsWith("done")
+    const col = index % 2
+    const row = Math.floor(index / 2)
+    const stepX = x + 2 + col * (leftW + 2)
+    const stepY = y + 5 + row
+    canvas.write(stepX, stepY, done ? "[x]" : "[ ]", done ? UI.focus : UI.muted, "#0b1218")
+    canvas.write(stepX + 4, stepY, trim(step.replace(/\s+(done|needed)$/u, ""), leftW - 4), done ? UI.focus : UI.soft, "#0b1218")
+  })
+  if ("footer" in prompt && prompt.footer) canvas.write(x + 2, y + height - 2, trim(prompt.footer, width - 4), UI.brass, "#0b1218")
 }
 
 function drawToasts(canvas: Canvas, session: GameSession) {
@@ -1676,6 +1736,7 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
   const y = Math.max(1, canvas.height - gameQuickbarHeight(canvas) - height - 1)
   const targets = combatTargets(session)
   const selectedSkill = combatSkills[session.combat.selectedSkill]
+  const selectedTarget = targets[session.combat.selectedTarget]
   const roll = session.combat.lastRoll
   const playerStatus = formatStatusEffects(statusEffectsFor(session, "player"))
   const targetW = Math.max(26, Math.floor(width * 0.43))
@@ -1730,13 +1791,15 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
   canvas.write(actionX + Math.max(18, actionW - 25), fleeY, `DEX/LCK ${formatModifier(fleeModifier(session))}`, UI.gold, UI.panel2)
   canvas.write(actionX + actionW - 10, fleeY, `DC ${fleeDc(session)}`, UI.soft, UI.panel2)
 
-  const detailY = y + height - 7
+  const detailY = y + height - 8
   const detailW = width - diceW - 7
-  canvas.fill(x + 2, detailY, detailW, 4, " ", UI.panel2, UI.panel2)
-  canvas.border(x + 2, detailY, detailW, 4, UI.edgeDim)
-  const detail = roll?.skill === "Flee" ? "Escape check uses Dexterity, Luck, Endurance, and level." : selectedSkill.text
+  canvas.fill(x + 2, detailY, detailW, 5, " ", UI.panel2, UI.panel2)
+  canvas.border(x + 2, detailY, detailW, 5, UI.edgeDim)
+  const matchup = selectedTarget ? combatMatchupText(selectedSkill, selectedTarget.kind) : ""
+  const detail = roll?.skill === "Flee" ? "Escape check uses Dexterity, Luck, Endurance, and level." : `${selectedSkill.text} ${matchup}`
+  const strategy = enemyStrategyText(session, selectedTarget, selectedSkill)
   const statusLine = playerStatus ? `You: ${playerStatus}` : session.combat.message
-  writeWrapped(canvas, x + 4, detailY + 1, detailW - 4, [detail, statusLine], 2, UI.ink, UI.panel2)
+  writeWrapped(canvas, x + 4, detailY + 1, detailW - 4, [strategy, detail, statusLine], 3, UI.ink, UI.panel2)
 
   const diceX = x + width - diceW - 3
   const diceY = detailY
@@ -1804,7 +1867,7 @@ function drawSkillCheckModal(canvas: Canvas, session: GameSession, animation: Di
   if (!check) return
 
   const width = Math.min(92, canvas.width - 8)
-  const height = Math.min(20, canvas.height - 6)
+  const height = Math.min(22, canvas.height - 6)
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.floor((canvas.height - height) / 2)
   const roll = check.roll
@@ -1839,15 +1902,16 @@ function drawSkillCheckModal(canvas: Canvas, session: GameSession, animation: Di
   drawPixelBlock(canvas, infoX + infoW - 10, diceY + 4, pixelSprite(classSprite(session.hero.classId, session.hero.appearance), 8, 3), 0.85)
   canvas.write(infoX + 2, diceY + 5, trim(check.actor, infoW - 14), UI.gold, UI.panel2)
 
-  canvas.write(x + 4, y + height - 5, trim(check.prompt, width - 8), UI.soft, UI.panel)
+  writeWrapped(canvas, x + 4, y + height - 7, width - 8, [check.prompt], 2, UI.soft, UI.panel)
+  writeWrapped(canvas, x + 4, y + height - 5, width - 8, [skillCheckFormulaText(session, check)], 2, UI.ink, UI.panel)
   if (resolved) {
     const color = roll.success ? UI.focus : UI.hp
     canvas.fill(x + Math.floor(width / 2) - 12, y + height - 3, 24, 1, " ", UI.panel3, UI.panel3)
     writeCentered(canvas, x, y + height - 3, width, roll.success ? "SUCCESS" : "FAILURE", color, UI.panel3)
-    canvas.center(y + height - 2, trim(roll.consequence, width - 8), UI.ink, UI.panel)
+    canvas.center(y + height - 2, trim(skillCheckOutcomeText(check, roll.success), width - 8), UI.ink, UI.panel)
   } else {
-    canvas.center(y + height - 3, "Enter roll d20", UI.focus, UI.panel)
-    canvas.center(y + height - 2, "Stats, luck, and level are added before the consequence lands.", UI.muted, UI.panel)
+    canvas.center(y + height - 3, "Enter roll d20   Esc step away", UI.focus, UI.panel)
+    canvas.center(y + height - 2, "A d20 is a twenty-sided die; stats, luck, level, and relics add to it.", UI.muted, UI.panel)
   }
 }
 
@@ -1884,7 +1948,8 @@ function drawCheckBar(canvas: Canvas, x: number, y: number, width: number, label
   canvas.border(x, barY, width, 3, UI.edge)
   const fillWidth = clamp(Math.round(((Math.max(0, value) / max) * (width - 2))), 1, width - 2)
   canvas.fill(x + 1, barY + 1, fillWidth, 1, " ", color, color)
-  canvas.write(x + 2, barY + 1, trim(valueText, width - 4), UI.ink, color)
+  const valueFg = color === UI.gold || color === UI.focus ? "#101820" : "#ffffff"
+  canvas.write(x + 2, barY + 1, trim(valueText, width - 4), valueFg, color)
 }
 
 function writeCentered(canvas: Canvas, x: number, y: number, width: number, text: string, fg: string, bg?: string) {
@@ -2470,26 +2535,29 @@ function questProgress(session: GameSession, eventIds: string[]) {
 }
 
 function drawBookDialog(canvas: Canvas, model: AppModel, x: number, y: number, width: number, height: number) {
-  const entries = model.session.knowledge
+  const tabIndex = clamp(model.bookTabIndex, 0, bookTabs.length - 1)
+  const entries = bookEntriesForTab(model.session, tabIndex)
   const listX = x + 4
-  const listY = y + 4
+  const tabY = y + 3
+  const listY = y + 8
   const listW = Math.min(42, Math.floor((width - 10) * 0.4))
   const rowH = 2
-  const visibleRows = Math.max(4, Math.min(entries.length || 1, Math.floor((height - 8) / rowH)))
+  const visibleRows = Math.max(4, Math.min(entries.length || 1, Math.floor((height - 12) / rowH)))
   const offset = scrollOffset(model.bookIndex, visibleRows, entries.length)
   const selectedEntry = entries[clamp(model.bookIndex, 0, Math.max(0, entries.length - 1))]
 
-  canvas.write(listX, y + 3, "Known", UI.brass, UI.panel)
+  drawTabSelect(canvas, listX, tabY, width - 8, bookTabs, tabIndex)
+  canvas.write(listX, y + 7, `${bookTabs[tabIndex].name} entries`, UI.brass, UI.panel)
   drawScrollbar(canvas, listX + listW + 1, listY, visibleRows * rowH, offset, visibleRows, entries.length)
   entries.slice(offset, offset + visibleRows).forEach((entry, visibleIndex) => {
     const index = offset + visibleIndex
     drawBookListRow(canvas, listX, listY + visibleIndex * rowH, listW, entry, index === model.bookIndex)
   })
-  if (!entries.length) canvas.write(listX, listY, "No notes recovered yet.", UI.soft, UI.panel)
+  if (!entries.length) canvas.write(listX, listY, "No entries in this tab yet.", UI.soft, UI.panel)
 
   const detailX = listX + listW + 4
   const detailW = width - (detailX - x) - 4
-  const detailH = height - 8
+  const detailH = height - 12
   drawPanel(canvas, detailX, listY - 1, detailW, detailH, "Entry", UI.edge)
   if (!selectedEntry) return
 
@@ -2501,7 +2569,7 @@ function drawBookDialog(canvas: Canvas, model: AppModel, x: number, y: number, w
 
 function drawBookListRow(canvas: Canvas, x: number, y: number, width: number, entry: GameSession["knowledge"][number], selected: boolean) {
   const bg = selected ? cleanPanel3 : cleanPanel2
-  const color = entry.kind === "hub" ? UI.focus : entry.kind === "memory" ? UI.gold : selected ? UI.ink : UI.soft
+  const color = entry.kind === "monster" ? UI.ruby : entry.kind === "hub" ? UI.focus : entry.kind === "memory" ? UI.gold : selected ? UI.ink : UI.soft
   canvas.fill(x, y, width, 2, " ", bg, bg)
   if (selected) drawCleanBox(canvas, x, y, width, 2, UI.gold, bg)
   if (selected) canvas.fill(x, y, 1, 2, " ", UI.gold, UI.gold)
@@ -2515,6 +2583,7 @@ function bookKindLabel(kind: GameSession["knowledge"][number]["kind"]) {
   if (kind === "npc") return "NPC"
   if (kind === "tutorial") return "Tutorial"
   if (kind === "hub") return "Hub"
+  if (kind === "monster") return "Monster"
   return "Note"
 }
 
@@ -2522,6 +2591,7 @@ function bookEntryIcon(kind: GameSession["knowledge"][number]["kind"]): PixelSpr
   if (kind === "hub") return "stairs"
   if (kind === "npc") return "npc-oracle"
   if (kind === "memory") return "focus-gem"
+  if (kind === "monster") return "ghoul"
   return "scroll"
 }
 
@@ -2643,8 +2713,23 @@ function drawCutsceneDialog(canvas: Canvas, model: AppModel, x: number, y: numbe
   }
   drawMiniIcon(canvas, x + width - 14, y + 4, "focus-gem", 10, 3)
   canvas.write(x + 4, y + 4, trim(scene.title, width - 22), UI.gold, UI.panel)
-  writeWrapped(canvas, x + 4, y + 7, width - 8, scene.lines, height - 11, UI.ink, UI.panel)
-  const hint = scene.id === "waking-cell" ? "Enter begin descent  Esc skip. Camera preview points to the first lead." : "Enter close  Esc close. Scenes are saved in the Book."
+  const openingBranches = scene.id === "waking-cell" ? openingStoryBranches(model.session.hero.name) : []
+  const bodyHeight = openingBranches.length ? Math.max(3, height - 15) : height - 11
+  writeWrapped(canvas, x + 4, y + 7, width - 8, scene.lines, bodyHeight, UI.ink, UI.panel)
+  if (openingBranches.length) {
+    const selectedIndex = clamp(model.cutsceneChoiceIndex ?? 0, 0, openingBranches.length - 1)
+    const optionY = y + height - 8
+    canvas.write(x + 4, optionY - 1, "Answer the first memory", UI.brass, UI.panel)
+    openingBranches.forEach((option, index) => {
+      const rowY = optionY + index
+      const selected = index === selectedIndex
+      const bg = selected ? cleanPanel3 : UI.panel
+      if (selected) canvas.fill(x + 4, rowY, width - 8, 1, " ", bg, bg)
+      canvas.write(x + 6, rowY, `${index + 1}`, selected ? UI.gold : UI.muted, bg)
+      canvas.write(x + 10, rowY, trim(option.label, width - 16), selected ? UI.focus : UI.soft, bg)
+    })
+  }
+  const hint = openingBranches.length ? "1-3 choose  Enter answer  Esc skip." : "Enter close  Esc close. Scenes are saved in the Book."
   canvas.write(x + 4, y + height - 4, trim(hint, width - 8), UI.soft, UI.panel)
 }
 
@@ -2886,28 +2971,24 @@ function drawDungeonBackdrop(canvas: Canvas, seed: number, settings?: UserSettin
 function drawScreenTransition(canvas: Canvas, transition: ScreenTransition) {
   if (transition.kind === "screen") return
 
-  const elapsed = Date.now() - transition.startedAt
-  const progress = clamp(elapsed / Math.max(1, transition.durationMs), 0, 1)
-  if (progress >= 1) return
+  const frame = teleportTransitionFrame(transition.kind, transition.startedAt, transition.durationMs, canvas.height)
+  if (!frame) return
 
-  const shadeRows = Math.ceil((1 - easeOutCubic(progress)) * canvas.height)
-  const color = transition.kind === "portal" ? "#152d32" : "#18291c"
-  for (let row = 0; row < shadeRows; row++) {
+  for (let row = 0; row < frame.shadeRows; row++) {
     const top = row
     const bottom = canvas.height - row - 1
-    canvas.fill(0, top, canvas.width, 1, " ", color, color)
-    if (bottom !== top) canvas.fill(0, bottom, canvas.width, 1, " ", color, color)
+    if (row % 3 !== 1 || frame.progress < 0.52) canvas.fill(0, top, canvas.width, 1, frame.glyph, frame.shade, frame.shade)
+    if (bottom !== top && (row % 3 !== 1 || frame.progress < 0.52)) canvas.fill(0, bottom, canvas.width, 1, frame.glyph, frame.shade, frame.shade)
   }
 
-  if (progress < 0.72 && canvas.width >= 52 && canvas.height >= 18) {
+  if (frame.showCard && canvas.width >= 52 && canvas.height >= 18) {
     const width = Math.min(46, canvas.width - 8)
     const x = Math.floor((canvas.width - width) / 2)
     const y = Math.floor(canvas.height / 2) - 2
-    const title = transition.kind === "portal" ? "PORTAL" : "VILLAGE"
     canvas.fill(x, y, width, 4, " ", "#05070a", "#05070a")
-    canvas.border(x, y, width, 4, UI.focus)
-    canvas.center(y + 1, trim(title, width - 4), UI.focus, "#05070a")
-    canvas.center(y + 2, trim(transition.label, width - 4), UI.soft, "#05070a")
+    canvas.border(x, y, width, 4, frame.accent)
+    canvas.center(y + 1, trim(frame.title, width - 4), frame.accent, "#05070a")
+    canvas.center(y + 2, trim(transition.label, width - 4), frame.soft, "#05070a")
   }
 }
 
@@ -2946,7 +3027,7 @@ function formatInitiativeOrder(session: GameSession) {
 }
 
 function startItemDisabled(item: string, model: AppModel) {
-  return (item === "Multiplayer" || item === "Cloud login") && model.internetStatus !== "online"
+  return item === "Cloud login" && model.internetStatus !== "online"
 }
 
 function settingValue(model: AppModel, id: (typeof settingsOptions)[number]["id"]) {
@@ -2954,6 +3035,7 @@ function settingValue(model: AppModel, id: (typeof settingsOptions)[number]["id"
   if (id === "username") return settings.username
   if (id === "showUi") return onOff(settings.showUi)
   if (id === "showMinimap") return onOff(settings.showMinimap)
+  if (id === "startWithTutorial") return onOff(settings.startWithTutorial)
   if (id === "runSeed") return String(model.session.seed)
   if (id === "runMode") return model.session.mode
   if (id === "runFloor") return `${model.session.floor}/${model.session.finalFloor}`

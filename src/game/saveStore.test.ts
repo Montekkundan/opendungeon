@@ -41,6 +41,18 @@ describe("save store", () => {
     })
   })
 
+  test("supports process-scoped guest autosaves for local multiplayer clients", () => {
+    withSaveDirs(() => {
+      saveAutosave(createSession(1111, "coop"), "autosave-guest-a")
+      saveAutosave(createSession(2222, "coop"), "autosave-guest-b")
+
+      const autosaves = listSaves().filter((save) => save.slot === "autosave")
+
+      expect(autosaves).toHaveLength(2)
+      expect(autosaves.map((save) => save.id).sort()).toEqual(["autosave-guest-a", "autosave-guest-b"])
+    })
+  })
+
   test("exports and imports local save backups", () => {
     withSaveDirs(() => {
       const session = createSession(4444)
@@ -113,6 +125,7 @@ describe("save store", () => {
         cloudProvider: "github",
         highContrast: true,
         reduceMotion: true,
+        startWithTutorial: false,
         controlScheme: "vim",
       })
 
@@ -123,6 +136,7 @@ describe("save store", () => {
       expect(loaded.githubUsername).toBe("terminal-host")
       expect(loaded.cloudProvider).toBe("github")
       expect(loaded.highContrast).toBe(true)
+      expect(loaded.startWithTutorial).toBe(false)
       expect(loaded.controlScheme).toBe("vim")
     })
   })

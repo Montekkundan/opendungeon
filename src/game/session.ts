@@ -1,5 +1,5 @@
 import { createDungeon, enemyAi, setTile, tileAt, type Actor, type Dungeon, type EnemyAi, type Point } from "./dungeon.js"
-import { isBossActorId, isEnemyActorId, isNpcActorId, type NpcActorId } from "./domainTypes.js"
+import { isBossActorId, isEnemyActorId, isNpcActorId, type EnemyActorId, type NpcActorId } from "./domainTypes.js"
 import { actorLabel as label } from "./glyphs.js"
 import {
   applyLevelGrowth,
@@ -25,11 +25,12 @@ import {
 } from "../world/worldConfig.js"
 import { clamp, wrap } from "../shared/numeric.js"
 import { normalizeHeroAppearance, type HeroAppearance } from "./appearance.js"
-import { bossStoryLine, collectibleKnowledgeEntry, floorKnowledgeEntry, initialKnowledgeEntries, localNpcStoryDialog, openingStoryText, skillCheckKnowledgeEntry, victoryStoryText, type StoryKnowledge } from "./story.js"
+import { bossStoryLine, collectibleKnowledgeEntry, floorKnowledgeEntry, initialKnowledgeEntries, localNpcStoryDialog, openingStoryBranches, openingStoryText, skillCheckKnowledgeEntry, victoryStoryText, type StoryKnowledge } from "./story.js"
 
 export type MultiplayerMode = "solo" | "coop" | "race"
 export const heroClassIds = ["warden", "arcanist", "ranger", "duelist", "cleric", "engineer", "witch", "grave-knight"] as const
 export type HeroClass = (typeof heroClassIds)[number]
+const tutorialStartingWound = 6
 
 export type Hero = {
   name: string
@@ -51,6 +52,7 @@ export type FloorModifier = {
 }
 
 export type CombatSkillId = "strike" | "aimed-shot" | "arcane-burst" | "smite" | "shadow-hex" | "lucky-riposte"
+export type CombatAffinity = "physical" | "precision" | "arcane" | "holy" | "shadow" | "luck"
 export type StatusEffectId = "guarded" | "weakened" | "burning"
 export type TalentId =
   | "iron-vow"
@@ -96,6 +98,7 @@ export type CombatSkill = {
   id: CombatSkillId
   name: string
   stat: StatId
+  affinity: CombatAffinity
   cost: number
   dc: number
   damage: number
@@ -114,6 +117,8 @@ export type CombatRoll = {
   stat: StatId
   skill: string
   target: string
+  affinity?: CombatAffinity
+  matchup?: "weak" | "resisted" | "neutral"
 }
 
 export type CombatInitiativeEntry = {
@@ -176,6 +181,13 @@ export type ConversationOption = {
   text: string
 }
 
+export type ConversationMemory = {
+  actorId: string
+  kind: NpcActorId
+  floor: number
+  askedOptionIds: string[]
+}
+
 export type ConversationState = {
   id: string
   actorId: string
@@ -199,7 +211,7 @@ export type LevelUpState = {
   choices: LevelUpChoice[]
 }
 
-export type KnowledgeEntryKind = "memory" | "note" | "npc" | "tutorial" | "hub"
+export type KnowledgeEntryKind = "memory" | "note" | "npc" | "tutorial" | "hub" | "monster"
 
 export type KnowledgeEntry = {
   id: string
@@ -218,6 +230,30 @@ export type RunToast = {
   text: string
   tone: ToastTone
   turn: number
+}
+
+export type TutorialStageId = "movement" | "npc-check" | "combat" | "complete"
+export type TutorialActionId = "move" | "move-up" | "move-down" | "move-left" | "move-right" | "inventory" | "quests" | "book" | "npc" | "talent-check" | "combat-start" | "combat-end"
+
+export type RunTutorialState = {
+  enabled: boolean
+  completed: boolean
+  stage: TutorialStageId
+  gatePoints: Point[]
+  movementSteps: number
+  movedUp: boolean
+  movedDown: boolean
+  movedLeft: boolean
+  movedRight: boolean
+  openedInventory: boolean
+  openedQuests: boolean
+  openedBook: boolean
+  talkedToNpc: boolean
+  handledTalentCheck: boolean
+  combatStarted: boolean
+  combatFinished: boolean
+  disabledAfterDeath: boolean
+  handoffShown: boolean
 }
 
 export const hubStationIds = ["quarry", "blacksmith", "kitchen", "storage", "farm", "upgrade-bench"] as const
@@ -394,6 +430,9 @@ export type GameSession = {
   combat: CombatState
   skillCheck: SkillCheckState | null
   conversation: ConversationState | null
+  conversationMemory: Record<string, ConversationMemory>
+  tutorial: RunTutorialState
+  deaths: number
   statusEffects: StatusEffect[]
   world: WorldConfig
   worldLog: WorldLogEntry[]
@@ -799,7 +838,11 @@ export function rememberKnowledge(session: GameSession, entry: StoryKnowledge | 
   const normalized = normalizeKnowledgeEntry({ ...entry, discoveredAtTurn: session.turn })
   if (!normalized) return null
   const existing = session.knowledge.find((candidate) => candidate.id === normalized.id)
-  if (existing) return existing
+  if (existing) {
+    const discoveredAtTurn = existing.discoveredAtTurn
+    Object.assign(existing, normalized, { discoveredAtTurn })
+    return existing
+  }
   session.knowledge.unshift(normalized)
   while (session.knowledge.length > 80) session.knowledge.pop()
   return normalized
@@ -1244,24 +1287,27 @@ export const combatSkills: CombatSkill[] = [
     id: "strike",
     name: "Strike",
     stat: "strength",
+    affinity: "physical",
     cost: 0,
     dc: 10,
     damage: 3,
-    text: "Reliable melee attack.",
+    text: "Reliable physical attack. Good when Strength is your best stat.",
   },
   {
     id: "aimed-shot",
     name: "Aimed Shot",
     stat: "dexterity",
+    affinity: "precision",
     cost: 1,
     dc: 13,
     damage: 5,
-    text: "Harder hit with ranger precision.",
+    text: "Precision hit. Good against fragile or evasive enemies.",
   },
   {
     id: "arcane-burst",
     name: "Arcane Burst",
     stat: "intelligence",
+    affinity: "arcane",
     cost: 2,
     dc: 15,
     damage: 8,
@@ -1279,6 +1325,7 @@ export const combatSkills: CombatSkill[] = [
     id: "smite",
     name: "Smite",
     stat: "faith",
+    affinity: "holy",
     cost: 1,
     dc: 12,
     damage: 4,
@@ -1295,6 +1342,7 @@ export const combatSkills: CombatSkill[] = [
     id: "shadow-hex",
     name: "Shadow Hex",
     stat: "mind",
+    affinity: "shadow",
     cost: 1,
     dc: 12,
     damage: 3,
@@ -1311,6 +1359,7 @@ export const combatSkills: CombatSkill[] = [
     id: "lucky-riposte",
     name: "Lucky Riposte",
     stat: "luck",
+    affinity: "luck",
     cost: 1,
     dc: 14,
     damage: 6,
@@ -1325,7 +1374,83 @@ export const combatSkills: CombatSkill[] = [
   },
 ]
 
-export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", classId: HeroClass = "ranger", heroName = "Mira", appearance?: Partial<HeroAppearance> | null): GameSession {
+type MonsterProfile = {
+  family: string
+  behavior: string
+  strategy: string
+  lore: string
+  weaknesses: CombatAffinity[]
+  resists: CombatAffinity[]
+}
+
+const monsterProfiles: Record<EnemyActorId, MonsterProfile> = {
+  slime: {
+    family: "ooze",
+    behavior: "Slow pursuit. It blocks corridors and wins if you let it grind down turns.",
+    strategy: "Use Arcane Burst or Aimed Shot before it pins you. Strike works, but it does not teach much.",
+    lore: "Slimes are failed storage spells. Heat and precise cuts keep them from splitting around the blade.",
+    weaknesses: ["arcane", "precision"],
+    resists: ["physical"],
+  },
+  ghoul: {
+    family: "undead",
+    behavior: "Direct chase with punishing contact damage.",
+    strategy: "Smite is the clean answer. Guard before trading hits if your HP is low.",
+    lore: "A ghoul is hunger with old bones wrapped around it. Shrine light makes the hunger lose its shape.",
+    weaknesses: ["holy"],
+    resists: ["shadow"],
+  },
+  necromancer: {
+    family: "caster",
+    behavior: "Ranged pressure. Protected necromancers are harder while rust squires stand near them.",
+    strategy: "Close distance, break guards, then use Smite or Strike. Shadow Hex buys time but is resisted.",
+    lore: "Necromancers read the dungeon ledger backward. Interrupting the body matters more than arguing with the spell.",
+    weaknesses: ["holy", "physical"],
+    resists: ["shadow", "arcane"],
+  },
+  "gallows-wisp": {
+    family: "spirit",
+    behavior: "Stalker movement that pressures lines of sight.",
+    strategy: "Shadow Hex or Lucky Riposte catches it when normal weapon timing feels wrong.",
+    lore: "Wisps pull fear into a loop. Luck and shadow break the loop because neither follows a straight road.",
+    weaknesses: ["shadow", "luck"],
+    resists: ["physical"],
+  },
+  "rust-squire": {
+    family: "armored",
+    behavior: "Guard pattern. It protects casters and bosses nearby.",
+    strategy: "Arcane Burst or Shadow Hex cracks the armor. Do not waste weak physical hits into the shell.",
+    lore: "The armor remembers its orders better than the person inside. Hexes make the order stutter.",
+    weaknesses: ["arcane", "shadow"],
+    resists: ["physical", "precision"],
+  },
+  "carrion-moth": {
+    family: "skittish",
+    behavior: "Fragile, evasive movement. It flees when hurt and can waste turns.",
+    strategy: "Aimed Shot is best. Lucky Riposte also works if you expect it to dart back in.",
+    lore: "Carrion moths follow breath, not blood. A careful shot pins the wing before the swarm scatters.",
+    weaknesses: ["precision", "luck"],
+    resists: ["holy"],
+  },
+  "crypt-mimic": {
+    family: "ambush",
+    behavior: "Ambush threat hidden around loot routes.",
+    strategy: "Strike or Smite after it reveals itself. Precision shots glance off the false box.",
+    lore: "A mimic learns the shape of greed. Force and faith both remind it that the shape is not real.",
+    weaknesses: ["physical", "holy"],
+    resists: ["precision"],
+  },
+  "grave-root-boss": {
+    family: "root boss",
+    behavior: "Phase-shifting boss. The second phase gets meaner after half HP.",
+    strategy: "Smite and Arcane Burst are the best finishers. Keep focus for phase two instead of spending everything early.",
+    lore: "The grave-root binds every failed ending together. Light severs the knot; arcane fire cauterizes it.",
+    weaknesses: ["holy", "arcane"],
+    resists: ["shadow"],
+  },
+}
+
+export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", classId: HeroClass = "ranger", heroName = "Mira", appearance?: Partial<HeroAppearance> | null, startWithTutorial = false): GameSession {
   const dungeon = createDungeon(seed, 1)
   const stats = statsForClass(classId)
   const maxHp = derivedMaxHp(stats)
@@ -1346,7 +1471,7 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
     floor: 1,
     floorModifier,
     player: { ...dungeon.playerStart },
-    hp: maxHp,
+    hp: startWithTutorial ? Math.max(1, maxHp - tutorialStartingWound) : maxHp,
     maxHp,
     focus: maxFocus,
     maxFocus,
@@ -1375,6 +1500,9 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
     },
     skillCheck: null,
     conversation: null,
+    conversationMemory: {},
+    tutorial: createTutorialState(startWithTutorial),
+    deaths: 0,
     statusEffects: [],
     world,
     worldLog: [
@@ -1389,10 +1517,111 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
     hub: createHubState(mode, heroName),
     equipment: createStartingEquipment(classId),
   }
+  if (session.tutorial.enabled) prepareTutorialArea(session)
   for (const entry of initialKnowledgeEntries()) rememberKnowledge(session, entry)
   addToast(session, "Awake", "No memory, one weapon, and a dungeon that knows your steps.", "info")
   revealAroundPlayer(session)
   return session
+}
+
+function createTutorialState(enabled = false): RunTutorialState {
+  return {
+    enabled,
+    completed: !enabled,
+    stage: enabled ? "movement" : "complete",
+    gatePoints: [],
+    movementSteps: 0,
+    movedUp: false,
+    movedDown: false,
+    movedLeft: false,
+    movedRight: false,
+    openedInventory: false,
+    openedQuests: false,
+    openedBook: false,
+    talkedToNpc: false,
+    handledTalentCheck: false,
+    combatStarted: false,
+    combatFinished: false,
+    disabledAfterDeath: false,
+    handoffShown: false,
+  }
+}
+
+function prepareTutorialArea(session: GameSession) {
+  const roomW = 11
+  const roomH = 9
+  const totalW = roomW * 3 + 2
+  const start = session.player
+  const x0 = clamp(start.x - Math.floor(roomW / 2), 2, Math.max(2, session.dungeon.width - totalW - 2))
+  const y0 = clamp(start.y - Math.floor(roomH / 2), 2, Math.max(2, session.dungeon.height - roomH - 2))
+  const centerY = y0 + Math.floor(roomH / 2)
+  const gateOne = { x: x0 + roomW, y: centerY }
+  const gateTwo = { x: x0 + roomW * 2 + 1, y: centerY }
+  const rooms = [
+    { x: x0, y: y0, width: roomW, height: roomH },
+    { x: x0 + roomW + 1, y: y0, width: roomW, height: roomH },
+    { x: x0 + roomW * 2 + 2, y: y0, width: roomW, height: roomH },
+  ]
+  const bounds = {
+    x: x0 - 1,
+    y: y0 - 1,
+    width: totalW + 2,
+    height: roomH + 2,
+  }
+
+  for (let y = bounds.y; y < bounds.y + bounds.height; y++) {
+    for (let x = bounds.x; x < bounds.x + bounds.width; x++) setTile(session.dungeon, { x, y }, "wall")
+  }
+  for (const room of rooms) {
+    for (let y = room.y; y < room.y + room.height; y++) {
+      for (let x = room.x; x < room.x + room.width; x++) setTile(session.dungeon, { x, y }, "floor")
+    }
+  }
+
+  setTile(session.dungeon, gateOne, "door")
+  setTile(session.dungeon, gateTwo, "door")
+  session.tutorial.gatePoints = [gateOne, gateTwo]
+  session.player = { x: x0 + Math.floor(roomW / 2), y: centerY }
+  session.dungeon.playerStart = { ...session.player }
+  session.dungeon.actors = session.dungeon.actors.filter((actor) => !pointInRect(actor.position, bounds))
+
+  const npcPoint = { x: rooms[1].x + 3, y: centerY }
+  const checkPoint = { x: rooms[1].x + 7, y: centerY }
+  const enemyPoint = { x: rooms[2].x + 3, y: centerY }
+  const stairsPoint = { x: rooms[2].x + roomW - 2, y: centerY }
+
+  if (npcPoint) {
+    session.dungeon.actors.push({
+      id: "tutorial-wound-surgeon",
+      kind: "wound-surgeon",
+      position: { ...npcPoint },
+      hp: 1,
+      maxHp: 1,
+      damage: 0,
+    })
+  }
+
+  setTile(session.dungeon, checkPoint, "relic")
+  setTile(session.dungeon, stairsPoint, "stairs")
+
+  if (enemyPoint) {
+    session.dungeon.actors.push({
+      id: "tutorial-slime",
+      kind: "slime",
+      position: { ...enemyPoint },
+      hp: 3,
+      maxHp: 3,
+      damage: 1,
+      phase: 1,
+      ai: {
+        ...enemyAi("slime", enemyPoint, 0, session.floor),
+        pattern: "sentinel",
+        alerted: false,
+        aggroRadius: 1,
+        leashRadius: 2,
+      },
+    })
+  }
 }
 
 export function tryMove(session: GameSession, dx: number, dy: number) {
@@ -1414,6 +1643,7 @@ export function tryMove(session: GameSession, dx: number, dy: number) {
   }
   if (session.conversation) session.conversation = null
 
+  const previous = { ...session.player }
   const next = { x: session.player.x + dx, y: session.player.y + dy }
   const actor = actorAt(session.dungeon.actors, next)
 
@@ -1430,13 +1660,31 @@ export function tryMove(session: GameSession, dx: number, dy: number) {
     return
   }
 
+  const gateMessage = tutorialGateMessageForPoint(session, next)
+  if (gateMessage) {
+    session.log.unshift(gateMessage)
+    revealAroundPlayer(session)
+    trimLog(session)
+    return
+  }
+
   session.player = next
+  recordTutorialAction(session, tutorialMoveAction(dx, dy))
 
   if (tile === "door") {
     unlockDoor(session, next)
   } else if (tile === "stairs") {
     if (hasFinalGuardian(session)) {
+      session.player = previous
       session.log.unshift("The final gate is sealed by the necromancer.")
+      trimLog(session)
+      return
+    }
+    const stairsGateMessage = tutorialGateMessage(session)
+    if (stairsGateMessage) {
+      session.player = previous
+      session.log.unshift(stairsGateMessage)
+      revealAroundPlayer(session)
       trimLog(session)
       return
     }
@@ -1574,6 +1822,7 @@ export function resolveSkillCheck(session: GameSession): SkillCheckRoll | null {
 
   check.status = "resolved"
   check.roll = roll
+  recordTutorialAction(session, "talent-check")
   applySkillCheckConsequence(session, check, roll)
   advanceTurn(session)
   return roll
@@ -1583,6 +1832,152 @@ export function dismissSkillCheck(session: GameSession) {
   if (session.skillCheck?.status === "resolved") session.skillCheck = null
 }
 
+export function cancelSkillCheck(session: GameSession) {
+  const check = session.skillCheck
+  if (!check || check.status !== "pending") return false
+  session.skillCheck = null
+  recordTutorialAction(session, "talent-check")
+  session.log.unshift(`${check.title}: skipped. You step away before the roll.`)
+  addToast(session, "Talent check skipped", "Esc leaves the check unresolved.", "info")
+  trimLog(session)
+  return true
+}
+
+export function recordTutorialAction(session: GameSession, action: TutorialActionId) {
+  const tutorial = session.tutorial
+  if (!tutorial.enabled || tutorial.completed || tutorial.disabledAfterDeath || session.deaths > 0) return
+
+  if (action === "move" || action.startsWith("move-")) tutorial.movementSteps += 1
+  if (action === "move-up") tutorial.movedUp = true
+  if (action === "move-down") tutorial.movedDown = true
+  if (action === "move-left") tutorial.movedLeft = true
+  if (action === "move-right") tutorial.movedRight = true
+  if (action === "inventory") tutorial.openedInventory = true
+  if (action === "quests") tutorial.openedQuests = true
+  if (action === "book") tutorial.openedBook = true
+  if (action === "npc") tutorial.talkedToNpc = true
+  if (action === "talent-check") tutorial.handledTalentCheck = true
+  if (action === "combat-start") tutorial.combatStarted = true
+  if (action === "combat-end") tutorial.combatFinished = true
+
+  advanceTutorial(session)
+}
+
+function tutorialMoveAction(dx: number, dy: number): TutorialActionId {
+  if (dy < 0) return "move-up"
+  if (dy > 0) return "move-down"
+  if (dx < 0) return "move-left"
+  if (dx > 0) return "move-right"
+  return "move"
+}
+
+export function currentTutorialPrompt(session: GameSession) {
+  const tutorial = session.tutorial
+  if (!tutorial.enabled || tutorial.completed || tutorial.disabledAfterDeath || session.deaths > 0) return null
+  if (tutorial.stage === "movement") {
+    return {
+      title: "Area I - Movement",
+      text: "Use arrows, WASD, or Vim keys to move in each direction. Open the basic journals before the east gate unlocks.",
+      steps: [
+        `Up ${doneText(tutorial.movedUp)}`,
+        `Down ${doneText(tutorial.movedDown)}`,
+        `Left ${doneText(tutorial.movedLeft)}`,
+        `Right ${doneText(tutorial.movedRight)}`,
+        `Pack I ${doneText(tutorial.openedInventory)}`,
+        `Quests J/O ${doneText(tutorial.openedQuests)}`,
+        `Book B ${doneText(tutorial.openedBook)}`,
+      ],
+      footer: movementTutorialComplete(tutorial) ? "Gate open. Go east into Area II." : "The gate opens when every row is done.",
+    }
+  }
+  if (tutorial.stage === "npc-check") {
+    const talked = tutorial.talkedToNpc
+    return {
+      title: "Area II - People and Artifacts",
+      text: talked
+        ? "Take the relic artifact. Talent checks roll d20 + stat + luck + level, and Bound relics add +1 to later checks. Enter rolls; Esc steps away."
+        : "Walk to the NPC and bump or press E nearby. Conversations use 1-3 to choose, Enter to confirm, and Esc to leave. NPCs remember what you already asked.",
+      steps: [
+        `Talk to NPC ${doneText(tutorial.talkedToNpc)}`,
+        `Take relic check ${doneText(tutorial.handledTalentCheck)}`,
+      ],
+      footer: tutorial.handledTalentCheck ? "Second gate open. Go east into Area III." : "Finish the relic lesson to unlock the next gate.",
+    }
+  }
+  if (tutorial.stage === "combat") {
+    return {
+      title: "Area III - Fighting",
+      text: tutorial.combatStarted
+        ? "Finish the fight. Choose skills with 1-6 or up/down, Tab changes target, Enter rolls, H uses a potion, and F tries to flee."
+        : "Bump the enemy to start combat. Initiative locks movement until the fight is resolved.",
+      steps: [
+        `Start combat ${doneText(tutorial.combatStarted)}`,
+        `Finish combat ${doneText(tutorial.combatFinished)}`,
+      ],
+      footer: tutorial.combatFinished ? "Tutorial complete. Use the stairs when ready." : "The exit stays gated until the fight is over.",
+    }
+  }
+  return null
+}
+
+function advanceTutorial(session: GameSession) {
+  const tutorial = session.tutorial
+  if (!tutorial.enabled || tutorial.completed || tutorial.disabledAfterDeath || session.deaths > 0) return
+
+  if (tutorial.stage === "movement" && movementTutorialComplete(tutorial)) {
+    tutorial.stage = "npc-check"
+    openTutorialGate(session, 0)
+    session.log.unshift("Area I gate opens. Move east and talk to the NPC.")
+    trimLog(session)
+    return
+  }
+
+  if (tutorial.stage === "npc-check" && tutorial.talkedToNpc && tutorial.handledTalentCheck) {
+    tutorial.stage = "combat"
+    openTutorialGate(session, 1)
+    session.log.unshift("Area II gate opens. Move east and finish the fight.")
+    trimLog(session)
+    return
+  }
+
+  if (tutorial.stage === "combat" && tutorial.combatStarted && tutorial.combatFinished) {
+    tutorial.stage = "complete"
+    tutorial.completed = true
+    session.log.unshift("Tutorial complete. The descent is open.")
+    trimLog(session)
+  }
+}
+
+function tutorialGateMessage(session: GameSession) {
+  const prompt = currentTutorialPrompt(session)
+  if (!prompt || session.floor !== 1) return null
+  return `${prompt.title}: ${prompt.text}`
+}
+
+function tutorialGateMessageForPoint(session: GameSession, point: Point) {
+  const tutorial = session.tutorial
+  if (!tutorial.enabled || tutorial.completed || tutorial.disabledAfterDeath || session.deaths > 0) return null
+  const gateIndex = tutorial.gatePoints.findIndex((gate) => samePoint(gate, point))
+  if (gateIndex < 0 || tileAt(session.dungeon, point) !== "door") return null
+  if (gateIndex === 0 && tutorial.stage === "movement") return "Area I gate is locked. Finish the movement, Pack, Quest, and Book rows first."
+  if (gateIndex === 1 && (tutorial.stage === "movement" || tutorial.stage === "npc-check")) return "Area II gate is locked. Talk to the NPC and finish the relic talent check first."
+  return null
+}
+
+function openTutorialGate(session: GameSession, index: number) {
+  const point = session.tutorial.gatePoints[index]
+  if (point && tileAt(session.dungeon, point) === "door") setTile(session.dungeon, point, "floor")
+}
+
+function movementTutorialComplete(tutorial: RunTutorialState) {
+  const movedAllDirections = tutorial.movedUp && tutorial.movedDown && tutorial.movedLeft && tutorial.movedRight
+  return (movedAllDirections || tutorial.movementSteps >= 4) && tutorial.openedInventory && tutorial.openedQuests && tutorial.openedBook
+}
+
+function doneText(done: boolean) {
+  return done ? "done" : "needed"
+}
+
 export function combatModifier(session: GameSession, stat: StatId) {
   return session.level + statModifier(session.stats[stat] + equipmentStatBonus(session, stat))
 }
@@ -1590,7 +1985,11 @@ export function combatModifier(session: GameSession, stat: StatId) {
 export function skillCheckModifier(session: GameSession, stat: StatId) {
   const primary = statModifier(session.stats[stat] + equipmentStatBonus(session, stat))
   const luck = stat === "luck" ? 0 : Math.max(0, Math.floor(statModifier(session.stats.luck + equipmentStatBonus(session, "luck")) / 2))
-  return Math.floor(session.level / 2) + primary + luck
+  return Math.floor(session.level / 2) + primary + luck + skillCheckArtifactBonus(session)
+}
+
+function skillCheckArtifactBonus(session: GameSession) {
+  return session.inventory.includes("Bound relic") ? 1 : 0
 }
 
 export function currentBiome(session: GameSession) {
@@ -1626,6 +2025,9 @@ export function normalizeSessionAfterLoad(session: GameSession): GameSession {
   session.talents = normalizeTalents(session.hero.classId, session.talents)
   session.levelUp = normalizeLevelUp(session.hero.classId, session.levelUp, session.talents)
   session.conversation = normalizeConversation(session.conversation)
+  session.conversationMemory = normalizeConversationMemory(session.conversationMemory)
+  session.tutorial = normalizeTutorialState(session.tutorial)
+  session.deaths = Math.max(0, Math.floor(Number(session.deaths) || 0))
   session.statusEffects = normalizeStatusEffects(session.statusEffects)
   session.world ??= createWorldForSeed(session.seed, session.finalFloor || 5)
   session.worldLog ??= []
@@ -1679,7 +2081,8 @@ export function selectSkill(session: GameSession, index: number) {
   session.combat.selectedSkill = clamp(index, 0, combatSkills.length - 1)
   const skill = combatSkills[session.combat.selectedSkill]
   const modifier = combatModifier(session, skill.stat)
-  session.combat.message = `${skill.name}: d20 ${formatSigned(modifier)} ${statAbbreviations[skill.stat]} vs DC ${skill.dc + enemyDefenseBonus(combatTargets(session)[session.combat.selectedTarget]?.kind)}.`
+  const target = combatTargets(session)[session.combat.selectedTarget]
+  session.combat.message = `${skill.name}: d20 ${formatSigned(modifier)} ${statAbbreviations[skill.stat]} vs DC ${skill.dc + enemyDefenseBonus(target?.kind)}. ${combatMatchupText(skill, target?.kind)}`
 }
 
 export function focusCostForSkill(session: GameSession, skill: CombatSkill) {
@@ -1688,6 +2091,61 @@ export function focusCostForSkill(session: GameSession, skill: CombatSkill) {
     .filter((talent) => talent?.skillId === skill.id)
     .reduce((total, talent) => total + Math.max(0, talent.focusDiscount ?? 0), 0)
   return Math.max(0, skill.cost - discount)
+}
+
+export function combatAffinityLabel(affinity: CombatAffinity) {
+  if (affinity === "physical") return "Physical"
+  if (affinity === "precision") return "Precision"
+  if (affinity === "arcane") return "Arcane"
+  if (affinity === "holy") return "Holy"
+  if (affinity === "shadow") return "Shadow"
+  return "Luck"
+}
+
+export function combatMatchupFor(skill: CombatSkill, kind: Actor["kind"] | undefined) {
+  const profile = kind && isEnemyActorId(kind) ? monsterProfiles[kind] : null
+  const affinity = skill.affinity
+  const state: "weak" | "resisted" | "neutral" = profile?.weaknesses.includes(affinity) ? "weak" : profile?.resists.includes(affinity) ? "resisted" : "neutral"
+  return {
+    affinity,
+    state,
+    damageBonus: state === "weak" ? 2 : state === "resisted" ? -1 : 0,
+  }
+}
+
+export function combatMatchupText(skill: CombatSkill, kind: Actor["kind"] | undefined) {
+  const matchup = combatMatchupFor(skill, kind)
+  const affinity = combatAffinityLabel(matchup.affinity)
+  if (!kind || !isEnemyActorId(kind)) return `${skill.name} uses ${affinity}.`
+  if (matchup.state === "weak") return `${affinity} is strong here: +2 damage if the d20 hits.`
+  if (matchup.state === "resisted") return `${label(kind)} resists ${affinity}: -1 damage if it hits.`
+  return `${affinity} is neutral here. Roll d20 + ${statLabels[skill.stat]} modifier against DC.`
+}
+
+export function enemyStrategyText(session: GameSession, actor: Actor | undefined, skill?: CombatSkill) {
+  if (!actor || !isEnemyActorId(actor.kind)) return "Choose a target, then pick the skill tied to your best stat."
+  const profile = monsterProfiles[actor.kind]
+  const known = knownMonsterWeaknesses(session, actor.kind)
+  const knownText = known.length
+    ? `Known weak: ${known.map(combatAffinityLabel).join(", ")}.`
+    : "Weakness unknown. A correct hit writes it into the Book."
+  const matchup = skill ? ` ${combatMatchupText(skill, actor.kind)}` : ""
+  return `${knownText} ${profile.strategy}${matchup}`
+}
+
+export function skillCheckFormulaText(session: GameSession, check: SkillCheckState) {
+  const modifier = check.roll?.modifier ?? skillCheckModifier(session, check.stat)
+  return `Roll d20 ${formatSigned(modifier)} vs difficulty ${check.dc}. Total >= difficulty wins; 20 always succeeds and 1 fails.`
+}
+
+export function skillCheckOutcomeText(check: SkillCheckState, success: boolean) {
+  if (check.source === "chest") {
+    return success ? "You got gold and a Rollback scroll. Press I to inspect inventory." : "You salvaged a Bent lockpick and gold, but took damage. Press I to inspect inventory."
+  }
+  if (check.source === "relic") {
+    return success ? "You got a Bound relic, focus, gold, and XP. Press I to inspect inventory." : "You got a Cursed shard, but lost focus and took damage. Press I to inspect inventory."
+  }
+  return success ? "You got a Deploy nerve potion, healing, gold, and XP. Press I to inspect inventory." : "You salvaged a Cracked dew vial, but took damage. Press I to inspect inventory."
 }
 
 export function chooseLevelUpTalent(session: GameSession, index: number) {
@@ -1829,7 +2287,9 @@ export function performCombatAction(session: GameSession) {
   const damageBonus = Math.max(0, statModifier(session.stats[skill.stat] + equipmentStatBonus(session, skill.stat)))
   const talentDamage = talentDamageBonus(session, skill)
   const gearDamage = equipmentDamageBonus(session)
-  const damage = critical ? skill.damage + session.level + damageBonus + talentDamage + gearDamage + 3 : skill.damage + Math.floor(session.level / 2) + Math.floor(damageBonus / 2) + talentDamage + gearDamage
+  const baseDamage = critical ? skill.damage + session.level + damageBonus + talentDamage + gearDamage + 3 : skill.damage + Math.floor(session.level / 2) + Math.floor(damageBonus / 2) + talentDamage + gearDamage
+  const targetMatchup = combatMatchupFor(skill, target.kind)
+  const damage = Math.max(1, baseDamage + targetMatchup.damageBonus)
 
   session.combat.lastRoll = {
     d20,
@@ -1841,15 +2301,23 @@ export function performCombatAction(session: GameSession) {
     stat: skill.stat,
     skill: skill.name,
     target: label(target.kind),
+    affinity: skill.affinity,
+    matchup: targetMatchup.state,
   }
 
+  let pendingWeaknessToast: { kind: EnemyActorId; affinity: CombatAffinity } | null = null
   if (hit) {
     const affectedTargets = skill.area === "all" ? [...targets] : [target]
     const appliedEffects: StatusEffect[] = []
     const phaseMessages: string[] = []
+    const weaknessDiscoveries: Array<{ kind: EnemyActorId; affinity: CombatAffinity }> = []
     for (const affected of affectedTargets) {
-      const nextDamage = affected.id === target.id ? damage : Math.max(1, Math.floor(damage / 2))
+      const matchup = combatMatchupFor(skill, affected.kind)
+      const nextDamage = affected.id === target.id ? Math.max(1, baseDamage + matchup.damageBonus) : Math.max(1, Math.floor(baseDamage / 2) + matchup.damageBonus)
       affected.hp -= nextDamage
+      if (matchup.state === "weak" && isEnemyActorId(affected.kind) && rememberMonsterWeakness(session, affected.kind, matchup.affinity)) {
+        weaknessDiscoveries.push({ kind: affected.kind, affinity: matchup.affinity })
+      }
       const appliedEffect = applyCombatSkillEffect(session, skill, affected)
       if (appliedEffect) appliedEffects.push(appliedEffect)
       const phaseMessage = maybeAdvanceBossPhase(session, affected)
@@ -1858,22 +2326,28 @@ export function performCombatAction(session: GameSession) {
     const targetText = affectedTargets.length > 1 ? `${affectedTargets.length} targets` : label(target.kind)
     const effectText = appliedEffects.length ? ` ${appliedEffects[0].label} applied.` : ""
     const phaseText = phaseMessages.length ? ` ${phaseMessages[0]}` : ""
-    session.combat.message = `${skill.name} hits ${targetText} for ${damage}.${effectText}${phaseText}`
+    const matchupText = targetMatchup.state === "weak" ? ` ${combatAffinityLabel(skill.affinity)} weakness exploited.` : targetMatchup.state === "resisted" ? ` ${label(target.kind)} resists ${combatAffinityLabel(skill.affinity)}.` : ""
+    session.combat.message = `${skill.name} hits ${targetText} for ${damage}.${matchupText}${effectText}${phaseText}`
     session.log.unshift(`d20 ${d20}${formatSigned(modifier)} vs DC ${dc}: hit.`)
-    addToast(session, critical ? "Critical hit" : "Attack hit", `${skill.name}: ${total}/${dc} against ${targetText}.`, "success")
+    addToast(session, critical ? "Critical hit" : "Attack hit", `${skill.name}: ${total}/${dc} against ${targetText}. ${combatAffinityLabel(skill.affinity)} ${targetMatchup.state}.`, "success")
+    const discovered = weaknessDiscoveries[0]
+    if (discovered) pendingWeaknessToast = discovered
     for (const affected of affectedTargets) {
       if (affected.hp <= 0 && session.dungeon.actors.includes(affected)) defeatActor(session, affected)
     }
   } else {
     session.combat.message = `${skill.name} misses ${label(target.kind)}.`
     session.log.unshift(`d20 ${d20}${formatSigned(modifier)} vs DC ${dc}: miss.`)
-    addToast(session, "Attack missed", `${skill.name}: ${total}/${dc} against ${label(target.kind)}.`, "warning")
+    addToast(session, "Attack missed", `${skill.name}: ${total}/${dc} against ${label(target.kind)}. ${combatAffinityLabel(skill.affinity)} would be ${targetMatchup.state}.`, "warning")
   }
 
   if (combatTargets(session).length > 0) finishCombatRound(session, true)
   else {
     endCombat(session, "The room falls silent.")
     finishCombatRound(session, false)
+  }
+  if (pendingWeaknessToast) {
+    addToast(session, "Weakness found", `${label(pendingWeaknessToast.kind)} is weak to ${combatAffinityLabel(pendingWeaknessToast.affinity)}. Open B Book for the monster note.`, "success")
   }
 }
 
@@ -1890,6 +2364,10 @@ function startCombat(session: GameSession, actors: Actor[]) {
     .map((actor) => actor.id)
 
   if (actorIds.length === 0) return
+  for (const actorId of actorIds) {
+    const actor = session.dungeon.actors.find((candidate) => candidate.id === actorId)
+    if (actor) rememberMonsterSeen(session, actor)
+  }
   session.combat = {
     active: true,
     actorIds,
@@ -1906,6 +2384,7 @@ function startCombat(session: GameSession, actors: Actor[]) {
     session.log.unshift(bossLine)
     addToast(session, "Boss encounter", bossLine, "warning")
   }
+  recordTutorialAction(session, "combat-start")
   trimLog(session)
 }
 
@@ -1918,6 +2397,7 @@ function endCombat(session: GameSession, message: string) {
   session.combat.message = message
   session.log.unshift(message)
   addToast(session, "Fight over", message, "success")
+  recordTutorialAction(session, "combat-end")
   trimLog(session)
 }
 
@@ -1950,6 +2430,49 @@ function defeatMessage(kind: Actor["kind"]) {
   if (kind === "crypt-mimic") return "Crypt mimic cracked. False wood stops breathing."
   if (kind === "grave-root-boss") return "Grave-root boss severed. The dungeon root recoils."
   return "Necromancer silenced. Dead branch pruned."
+}
+
+function monsterKnowledgeId(kind: EnemyActorId) {
+  return `monster-${kind}`
+}
+
+function rememberMonsterSeen(session: GameSession, actor: Actor) {
+  const kind = actor.kind
+  if (!isEnemyActorId(kind)) return null
+  const existing = session.knowledge.find((entry) => entry.id === monsterKnowledgeId(kind))
+  if (existing) return existing
+  return rememberKnowledge(session, monsterKnowledgeEntry(kind, []))
+}
+
+function rememberMonsterWeakness(session: GameSession, kind: EnemyActorId, affinity: CombatAffinity) {
+  const profile = monsterProfiles[kind]
+  if (!profile.weaknesses.includes(affinity)) return false
+  const known = new Set(knownMonsterWeaknesses(session, kind))
+  const alreadyKnown = known.has(affinity)
+  known.add(affinity)
+  rememberKnowledge(session, monsterKnowledgeEntry(kind, [...known]))
+  if (!alreadyKnown) session.log.unshift(`Monster note updated: ${label(kind)} is weak to ${combatAffinityLabel(affinity)}.`)
+  return !alreadyKnown
+}
+
+function knownMonsterWeaknesses(session: GameSession, kind: EnemyActorId) {
+  const entry = session.knowledge.find((candidate) => candidate.id === monsterKnowledgeId(kind))
+  const match = (entry?.text ?? "").match(/Known weakness: ([^.]+)/)
+  const knownText = match?.[1] ?? ""
+  if (!knownText || knownText.includes("unknown")) return []
+  return monsterProfiles[kind].weaknesses.filter((affinity) => knownText.includes(combatAffinityLabel(affinity)))
+}
+
+function monsterKnowledgeEntry(kind: EnemyActorId, knownWeaknesses: CombatAffinity[]): Omit<KnowledgeEntry, "discoveredAtTurn"> {
+  const profile = monsterProfiles[kind]
+  const weaknessText = knownWeaknesses.length ? `Known weakness: ${knownWeaknesses.map(combatAffinityLabel).join(", ")}.` : "Known weakness: unknown. Hit with the right attack to reveal it."
+  const resistText = profile.resists.length ? `Resists: ${profile.resists.map(combatAffinityLabel).join(", ")}.` : "Resists: none found."
+  return {
+    id: monsterKnowledgeId(kind),
+    title: `${label(kind)} Monstrary`,
+    kind: "monster",
+    text: `${profile.family}. ${profile.behavior} Strategy: ${profile.strategy} ${weaknessText} ${resistText} Lore: ${profile.lore}`,
+  }
 }
 
 function startSkillCheck(session: GameSession, source: SkillCheckSource, point: Point) {
@@ -2007,8 +2530,9 @@ function applySkillCheckConsequence(session: GameSession, check: SkillCheckState
   else applySkillCheckFailure(session, check)
   completeWorldProgress(session, "loot", check.point, `${check.title}: ${roll.success ? "success" : "failure"}.`)
   rememberKnowledge(session, skillCheckKnowledgeEntry(check.source, session.floor, roll.success))
-  session.log.unshift(`${check.title}: ${roll.success ? "success" : "failure"} (${roll.total}/${roll.dc}).`)
-  addToast(session, roll.success ? "Roll succeeded" : "Roll failed", `${check.title}: ${roll.total}/${roll.dc}. ${roll.consequence}`, roll.success ? "success" : "danger")
+  const outcome = skillCheckOutcomeText(check, roll.success)
+  session.log.unshift(`${check.title}: ${roll.success ? "success" : "failure"} (${roll.total}/${roll.dc}). ${outcome}`)
+  addToast(session, roll.success ? "Talent check succeeded" : "Talent check failed", `${check.title}: ${roll.total}/${roll.dc}. ${outcome}`, roll.success ? "success" : "danger")
   trimLog(session)
 }
 
@@ -2102,6 +2626,7 @@ function startConversation(session: GameSession, actor: Actor): ConversationStat
   }
 
   session.conversation = conversation
+  recordTutorialAction(session, "npc")
   session.log.unshift(`${conversation.speaker}: ${conversation.text}`)
   rememberKnowledge(session, {
     id: `npc-${kind}-floor-${session.floor}`,
@@ -2129,8 +2654,18 @@ export function chooseConversationOption(session: GameSession, index = session.c
   if (!option) return conversation
 
   conversation.selectedOption = clamp(index, 0, Math.max(0, conversation.options.length - 1))
+  if (conversationOptionAlreadyHandled(session, conversation, option.id)) {
+    conversation.text = repeatedConversationText(conversation, option)
+    conversation.status = "completed"
+    session.log.unshift(`${conversation.speaker}: ${conversation.text}`)
+    addToast(session, "Already asked", `${conversation.speaker} has answered ${option.label.toLowerCase()}.`, "info")
+    trimLog(session)
+    return conversation
+  }
+
   conversation.text = option.text
   applyConversationOption(session, conversation, option.id)
+  if (option.id !== "trade") rememberConversationOption(session, conversation, option.id)
   session.log.unshift(`${conversation.speaker}: ${conversation.text}`)
   if (option.id !== "leave") {
     rememberKnowledge(session, {
@@ -2146,6 +2681,35 @@ export function chooseConversationOption(session: GameSession, index = session.c
   return conversation
 }
 
+export function applyOpeningStoryBranch(session: GameSession, branchId: string): string {
+  const branches = openingStoryBranches(session.hero.name)
+  const branch = branches.find((option) => option.id === branchId) ?? branches[0]
+  if (!branch) return "The first memory fades."
+
+  if (branch.id === "follow-voice") {
+    session.xp += 1
+    completeWorldProgress(session, "quest", session.player, "Followed the first voice from the waking cell.")
+  }
+
+  if (branch.id === "read-ledger") {
+    if (!session.inventory.includes("Ledger scrap")) session.inventory.unshift("Ledger scrap")
+    rememberKnowledge(session, {
+      id: "memory-ledger-scrap",
+      title: "Ledger Scrap",
+      text: "The waking-cell ledger names rooms before you find them. Someone has repeated this opening enough to annotate it.",
+      kind: "memory",
+      floor: session.floor,
+    })
+  }
+
+  if (branch.id === "check-wound") session.focus = Math.min(session.maxFocus, session.focus + 1)
+
+  session.log.unshift(branch.text)
+  addToast(session, "Opening choice", branch.label, "info")
+  trimLog(session)
+  return branch.text
+}
+
 function continueConversation(session: GameSession): ConversationState | null {
   const conversation = session.conversation
   if (!conversation) return null
@@ -2158,12 +2722,22 @@ function continueConversation(session: GameSession): ConversationState | null {
   }
 
   if (conversation.trade && !conversation.trade.purchased) {
+    if (conversationOptionAlreadyHandled(session, conversation, "trade")) {
+      conversation.status = "completed"
+      conversation.text = `You already bought ${conversation.trade.item} from me this descent. Come back after another run.`
+      session.log.unshift(`${conversation.speaker}: ${conversation.text}`)
+      addToast(session, "Already traded", conversation.trade.item, "info")
+      trimLog(session)
+      return conversation
+    }
+
     if (session.gold >= conversation.trade.price) {
       session.gold -= conversation.trade.price
       session.inventory.unshift(conversation.trade.item)
       conversation.trade.purchased = true
       conversation.status = "completed"
       conversation.text = `${conversation.trade.item} purchased for ${conversation.trade.price} gold.`
+      rememberConversationOption(session, conversation, "trade")
       session.log.unshift(`${conversation.speaker}: ${conversation.text}`)
       addToast(session, "Trade complete", `${conversation.trade.item} added to your pack.`, "success")
       const actor = session.dungeon.actors.find((candidate) => candidate.id === conversation.actorId)
@@ -2187,13 +2761,41 @@ function continueConversation(session: GameSession): ConversationState | null {
 function applyConversationOption(session: GameSession, conversation: ConversationState, optionId: string) {
   const actor = session.dungeon.actors.find((candidate) => candidate.id === conversation.actorId)
   if (optionId === "trade") return
-  if (optionId === "heal") session.hp = Math.min(session.maxHp, session.hp + 4)
+  if (optionId === "heal") session.hp = session.maxHp
   if (optionId === "blessing") session.focus = Math.min(session.maxFocus, session.focus + 3)
   if (optionId === "key") session.inventory.unshift("Bent lockpick")
   if (optionId === "map" || optionId === "route" || optionId === "rumor" || optionId === "warning" || optionId === "lore" || optionId === "advice") session.xp += 1
   if (optionId !== "leave") completeWorldProgress(session, "quest", actor?.position ?? session.player, `${conversation.speaker}: ${optionId}.`)
   conversation.status = optionId === "trade" ? "open" : "completed"
   if (optionId !== "trade") maybeLevelUp(session)
+}
+
+function conversationMemoryKey(conversation: Pick<ConversationState, "actorId" | "kind">, floor: number) {
+  return `${floor}:${conversation.actorId}:${conversation.kind}`
+}
+
+function conversationOptionAlreadyHandled(session: GameSession, conversation: ConversationState, optionId: string) {
+  if (optionId === "leave") return false
+  return session.conversationMemory[conversationMemoryKey(conversation, session.floor)]?.askedOptionIds.includes(optionId) ?? false
+}
+
+function rememberConversationOption(session: GameSession, conversation: ConversationState, optionId: string) {
+  if (optionId === "leave") return
+  const key = conversationMemoryKey(conversation, session.floor)
+  const memory = session.conversationMemory[key] ?? {
+    actorId: conversation.actorId,
+    askedOptionIds: [],
+    floor: session.floor,
+    kind: conversation.kind,
+  }
+  if (!memory.askedOptionIds.includes(optionId)) memory.askedOptionIds.push(optionId)
+  session.conversationMemory[key] = memory
+}
+
+function repeatedConversationText(conversation: ConversationState, option: ConversationOption) {
+  if (option.id === "rumor") return "You already asked for that rumor. Keep the first answer close; repeated whispers get worse."
+  if (option.id === "trade") return "That trade is already done for this descent."
+  return `You already asked about ${option.label.toLowerCase()}. I do not have a better answer until the dungeon changes.`
 }
 
 function adjacentNpc(session: GameSession) {
@@ -2306,6 +2908,7 @@ function descend(session: GameSession) {
     unlockHub(session, "The final gate opened and the village route became stable.")
     return
   }
+  const shouldShowTutorialHandoff = session.tutorial.enabled && session.tutorial.completed && !session.tutorial.handoffShown && session.deaths === 0
   session.floor += 1
   session.dungeon = createDungeon(session.seed, session.floor)
   session.floorModifier = floorModifierFor(session.seed, session.floor)
@@ -2319,6 +2922,58 @@ function descend(session: GameSession) {
   session.log.unshift(`Floor ${session.floor}. ${session.floorModifier.name}. Same seed, darker shape.`)
   rememberKnowledge(session, floorKnowledgeEntry(session.floor))
   addToast(session, `Floor ${session.floor}`, session.floorModifier.text, "info")
+  if (shouldShowTutorialHandoff) applyPostTutorialHandoff(session)
+}
+
+function applyPostTutorialHandoff(session: GameSession) {
+  session.tutorial.handoffShown = true
+  const text = `You are on your own now. Find stairs, survive to Floor ${session.finalFloor}, and open the road home.`
+  focusFinalGateQuest(session)
+  session.log.unshift(text)
+  rememberKnowledge(session, {
+    id: "post-tutorial-handoff",
+    title: "Find the Final Gate",
+    text,
+    kind: "tutorial",
+    floor: session.floor,
+  })
+  addToast(session, "Find the Final Gate", text, "info")
+}
+
+function focusFinalGateQuest(session: GameSession) {
+  const existing = session.world.quests.find((quest) => quest.id === "quest-final-gate")
+  const objectiveEventIds = session.world.events
+    .filter((event) => event.status !== "completed" && worldEventFloor(session, event) >= session.floor && (event.type === "boss" || event.type === "quest"))
+    .slice(-4)
+    .map((event) => event.id)
+  const fallbackEventIds = session.world.events
+    .filter((event) => event.status !== "completed" && worldEventFloor(session, event) >= session.floor)
+    .slice(-4)
+    .map((event) => event.id)
+  const finalGateEventIds = objectiveEventIds.length ? objectiveEventIds : fallbackEventIds
+  const summary = `The tutorial is over. Descend through the remaining floors, survive to Floor ${session.finalFloor}, and open the road home.`
+
+  if (existing) {
+    existing.title = "Find the Final Gate"
+    existing.summary = summary
+    existing.status = "active"
+    existing.objectiveEventIds = finalGateEventIds
+    return
+  }
+
+  session.world.quests.unshift({
+    id: "quest-final-gate",
+    title: "Find the Final Gate",
+    summary,
+    status: "active",
+    objectiveEventIds: finalGateEventIds,
+    rewardEntityIds: [],
+    triggerEventIds: [],
+  })
+}
+
+function worldEventFloor(session: GameSession, event: WorldEvent) {
+  return session.world.anchors.find((anchor) => anchor.id === event.anchorId)?.floor ?? session.floor
 }
 
 function advanceTurn(session: GameSession) {
@@ -2326,12 +2981,7 @@ function advanceTurn(session: GameSession) {
   tickStatusEffects(session)
   if (!session.combat.active) moveEnemies(session)
   revealAroundPlayer(session)
-  if (session.hp <= 0) {
-    session.hp = 0
-    session.status = "dead"
-    session.log.unshift("You fall beneath the dungeon's build.")
-    addToast(session, "Run ended", "You fall beneath the dungeon's build.", "danger")
-  }
+  if (session.hp <= 0) markPlayerDeath(session)
   trimLog(session)
 }
 
@@ -2390,15 +3040,23 @@ function finishCombatRound(session: GameSession, enemiesAct: boolean) {
   if (session.combat.active) session.combat.round += 1
   session.turn += 1
   revealAroundPlayer(session)
-  if (session.hp <= 0) {
-    session.hp = 0
-    session.status = "dead"
-    session.log.unshift("You fall beneath the dungeon's build.")
-    addToast(session, "Run ended", "You fall beneath the dungeon's build.", "danger")
-  }
+  if (session.hp <= 0) markPlayerDeath(session)
   combatTargets(session)
   if (session.status === "running" && session.combat.active && session.combat.actorIds.length === 0) endCombat(session, "The room falls silent.")
   trimLog(session)
+}
+
+function markPlayerDeath(session: GameSession) {
+  if (session.status === "dead") return
+  session.hp = 0
+  session.status = "dead"
+  session.deaths += 1
+  if (session.tutorial.enabled && !session.tutorial.completed) {
+    session.tutorial.disabledAfterDeath = true
+    session.tutorial.enabled = false
+  }
+  session.log.unshift(`You fall beneath the dungeon's build. Deaths this run: ${session.deaths}.`)
+  addToast(session, "Run ended", `Deaths this run: ${session.deaths}.`, "danger")
 }
 
 function combatEnemyTurn(session: GameSession) {
@@ -2663,6 +3321,65 @@ function normalizeConversationOptions(kind: NpcActorId, options: unknown): Conve
   })
 }
 
+function normalizeConversationMemory(source: unknown): Record<string, ConversationMemory> {
+  if (!source || typeof source !== "object") return {}
+  const normalized: Record<string, ConversationMemory> = {}
+  for (const [key, raw] of Object.entries(source as Record<string, unknown>)) {
+    const value = raw && typeof raw === "object" ? (raw as Partial<ConversationMemory>) : null
+    const kind = typeof value?.kind === "string" && isNpcActorId(value.kind) ? value.kind : null
+    if (!value || typeof value.actorId !== "string" || !kind) continue
+    const askedOptionIds = Array.isArray(value.askedOptionIds)
+      ? [...new Set(value.askedOptionIds.filter((id): id is string => typeof id === "string").map((id) => cleanConversationText(id, 32)))].slice(0, 12)
+      : []
+    normalized[cleanConversationText(key, 96)] = {
+      actorId: cleanConversationText(value.actorId, 48),
+      kind,
+      floor: Math.max(1, Math.floor(Number(value.floor) || 1)),
+      askedOptionIds,
+    }
+  }
+  return normalized
+}
+
+function normalizeTutorialState(value: unknown): RunTutorialState {
+  const source = value && typeof value === "object" ? (value as Partial<RunTutorialState>) : null
+  if (!source) return createTutorialState(false)
+  const stage = source.stage === "movement" || source.stage === "npc-check" || source.stage === "combat" || source.stage === "complete" ? source.stage : source.completed ? "complete" : "movement"
+  const enabled = Boolean(source.enabled)
+  const completed = Boolean(source.completed) || stage === "complete" || !enabled
+  return {
+    enabled,
+    completed,
+    stage: completed ? "complete" : stage,
+    gatePoints: normalizeTutorialGatePoints(source.gatePoints),
+    movementSteps: Math.max(0, Math.floor(Number(source.movementSteps) || 0)),
+    movedUp: Boolean(source.movedUp),
+    movedDown: Boolean(source.movedDown),
+    movedLeft: Boolean(source.movedLeft),
+    movedRight: Boolean(source.movedRight),
+    openedInventory: Boolean(source.openedInventory),
+    openedQuests: Boolean(source.openedQuests),
+    openedBook: Boolean(source.openedBook),
+    talkedToNpc: Boolean(source.talkedToNpc),
+    handledTalentCheck: Boolean(source.handledTalentCheck),
+    combatStarted: Boolean(source.combatStarted),
+    combatFinished: Boolean(source.combatFinished),
+    disabledAfterDeath: Boolean(source.disabledAfterDeath),
+    handoffShown: Boolean(source.handoffShown),
+  }
+}
+
+function normalizeTutorialGatePoints(value: unknown): Point[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((point) => {
+    const raw = point && typeof point === "object" ? (point as Partial<Point>) : null
+    if (!raw) return []
+    const x = Math.floor(Number(raw.x))
+    const y = Math.floor(Number(raw.y))
+    return Number.isFinite(x) && Number.isFinite(y) ? [{ x, y }] : []
+  }).slice(0, 2)
+}
+
 function normalizeKnowledge(entries: unknown): KnowledgeEntry[] {
   if (!Array.isArray(entries)) return []
   const seenIds = new Set<string>()
@@ -2679,7 +3396,7 @@ function normalizeKnowledgeEntry(entry: unknown): KnowledgeEntry | null {
   if (!value) return null
   const kind = isKnowledgeKind(value.kind) ? value.kind : "note"
   const title = cleanBookText(value.title || "Unknown Note", 56)
-  const text = cleanBookText(value.text || "The page is too damaged to read.", 360)
+  const text = cleanBookText(value.text || "The page is too damaged to read.", 520)
   return {
     id: cleanId(value.id || slug(title)),
     title,
@@ -3006,7 +3723,11 @@ function createCutscene(id: CutsceneId, heroName = "Mira"): CutsceneState {
     "ending-remixed": "Remixed Ending",
   }
   const lines: Record<CutsceneId, string[]> = {
-    "waking-cell": [`${name}: "Huh... where am I?"`, "A note scratches itself into your book, and the dungeon camera drifts toward the first voice ahead.", "Move with WASD or arrows. Press E or Enter near people, doors, notes, and loot."],
+    "waking-cell": [
+      `${name}: "I have been here before. I just do not remember the door."`,
+      "A ledger page scratches itself into your Book while a voice waits somewhere beyond the first room.",
+      "Choose how to answer the first memory, then use WASD or arrows to move. Press E or Enter near people, doors, notes, and loot.",
+    ],
     "first-clear": [`${name} reaches the final gate with no memory, but the dungeon finally answers.`, "A road appears where the last wall used to be."],
     "village-unlock": ["The portal room lights one stone at a time.", "Beyond it, a village waits for loot, trust, houses, and another run."],
     "ending-rooted": ["The grave-root admits it was guarding the first memory, not stealing it.", "The village survives because you choose what returns through the portal."],
@@ -3195,7 +3916,7 @@ function isEquipmentRarity(value: unknown): value is EquipmentRarity {
 }
 
 function isKnowledgeKind(value: unknown): value is KnowledgeEntryKind {
-  return value === "memory" || value === "note" || value === "npc" || value === "tutorial" || value === "hub"
+  return value === "memory" || value === "note" || value === "npc" || value === "tutorial" || value === "hub" || value === "monster"
 }
 
 function normalizeTalents(classId: HeroClass, talents: unknown): TalentId[] {
@@ -3372,6 +4093,10 @@ function cardinalDirections() {
 
 function samePoint(left: Point, right: Point) {
   return left.x === right.x && left.y === right.y
+}
+
+function pointInRect(point: Point, rect: { x: number; y: number; width: number; height: number }) {
+  return point.x >= rect.x && point.y >= rect.y && point.x < rect.x + rect.width && point.y < rect.y + rect.height
 }
 
 function manhattan(a: Point, b: Point) {

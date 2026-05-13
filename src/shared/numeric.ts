@@ -15,7 +15,17 @@ export function easeOutCubic(progress: number) {
   return 1 - (1 - t) ** 3
 }
 
+export function easeOutQuart(progress: number) {
+  const t = clamp(progress, 0, 1)
+  return 1 - (1 - t) ** 4
+}
+
 export function easeInOutCubic(progress: number) {
   const t = clamp(progress, 0, 1)
   return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2
+}
+
+export function easeInOutQuart(progress: number) {
+  const t = clamp(progress, 0, 1)
+  return t < 0.5 ? 8 * t * t * t * t : 1 - (-2 * t + 2) ** 4 / 2
 }

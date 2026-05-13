@@ -2,6 +2,7 @@ import { FrameBufferRenderable, createCliRenderer, type KeyEvent, type MouseEven
 import WebSocket from "ws"
 import {
   addToast,
+  applyOpeningStoryBranch,
   createSession,
   cycleTarget,
   chooseConversationOption,
@@ -9,6 +10,7 @@ import {
   cycleConversationOption,
   attemptFlee,
   buildHubStation,
+  cancelSkillCheck,
   cycleContentPack,
   cycleSharedFarmPermission,
   heroClassIds,
@@ -24,6 +26,7 @@ import {
   prepareFood,
   performCombatAction,
   refreshBalanceDashboard,
+  recordTutorialAction,
   rest,
   resolveSkillCheck,
   runVillageShopSale,
@@ -33,12 +36,12 @@ import {
   tryMove,
   upgradeWeapon,
   visitVillageLocation,
-  unlockHub,
   usePotion,
   type GameSession,
   type HeroClass,
   type MultiplayerMode,
 } from "./game/session.js"
+import { openingStoryBranches } from "./game/story.js"
 import { deleteSave, exportSave, listSaves, loadSave, renameSave, saveAutosave, saveSession, type SaveSummary } from "./game/saveStore.js"
 import { handleSaveCommand, saveCommandHelp } from "./game/saveCli.js"
 import { loadSettings, saveSettings, type UserSettings } from "./game/settingsStore.js"
@@ -52,6 +55,8 @@ import {
   currentStartItem,
   currentStartItemDisabled,
   currentSettingItem,
+  bookEntriesForTab,
+  bookTabCount,
   inventoryGridInfo,
   inventoryHitTest,
   moveSelection,
@@ -67,14 +72,17 @@ import {
 } from "./ui/screens.js"
 import { shouldUseThreeRenderer } from "./rendering/threeAssets.js"
 import { authHelpText, handleAuthCommand } from "./cloud/authCli.js"
+import { loadAuthSession } from "./cloud/authStore.js"
 import { formatTerminalCapabilityReport, terminalCapabilityReport } from "./system/terminalDoctor.js"
 import { formatServerSetupReport, serverSetupReport } from "./system/serverSetupCheck.js"
 import { handleSetupCommand } from "./system/firstRunSetup.js"
+import { acquireLocalRunLock, releaseLocalRunLock, type LocalRunLock } from "./system/localRunLock.js"
 import { debugOverlaysEnabled } from "./system/debugFlags.js"
 import { checkInternetConnectivity } from "./net/connectivity.js"
 import { normalizeLobbyBaseUrl } from "./net/hostConfig.js"
 import { checkForUpdate, checkingUpdateStatus, handleUpdateCommand } from "./system/updateCheck.js"
-import { easeInOutCubic, lerp } from "./shared/numeric.js"
+import { easeInOutQuart, lerp } from "./shared/numeric.js"
+import { transitionDurationForKind } from "./ui/teleportAnimation.js"
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   console.log(`opendungeon ${version}
@@ -98,6 +106,8 @@ Usage:
 Environment:
   OPENDUNGEON_SAVE_DIR     Override local save directory
   OPENDUNGEON_PROFILE_DIR  Override local profile/settings directory
+  OPENDUNGEON_RUN_LOCK_DIR Override signed-in active-run lock directory
+  OPENDUNGEON_TERMINAL_APP Override the terminal app label used in duplicate-run messages
   OPENDUNGEON_ASSET_DIR    Override bundled asset directory
   OPENDUNGEON_TILE_SCALE   overview | wide | medium | close
   OPENDUNGEON_DEBUG_OVERLAY=1 enables debug map/console overlays
@@ -164,6 +174,7 @@ const model: AppModel = {
   inventoryIndex: 0,
   inventoryDragIndex: null,
   bookIndex: 0,
+  bookTabIndex: 0,
   questIndex: 0,
   tutorialIndex: 0,
   internetStatus: "checking",
@@ -174,6 +185,7 @@ const model: AppModel = {
   diceRollAnimation: null,
   cameraFocus: null,
   screenTransition: null,
+  cutsceneChoiceIndex: 0,
 }
 let submittedSession: GameSession | null = null
 let diceTimer: ReturnType<typeof setTimeout> | null = null
@@ -195,6 +207,8 @@ let lastManualSaveSignature = ""
 let lobbySocket: WebSocket | null = null
 let lobbySocketUrl = ""
 let lobbyConnectedPlayers = 0
+let activeRunLock: LocalRunLock | null = null
+const localGuestSessionId = crypto.randomUUID().slice(0, 8)
 const toastCreatedAt = new Map<string, number>()
 const toastTtlMs = 3200
 
@@ -364,6 +378,28 @@ function handleDialogKey(key: KeyEvent) {
     return
   }
   if (model.dialog === "cutscene") {
+    const openingBranches = model.session.hub.lastCutsceneId === "waking-cell" ? openingStoryBranches(model.session.hero.name) : []
+    if (openingBranches.length) {
+      if (/^[1-3]$/.test(key.name)) {
+        model.cutsceneChoiceIndex = clamp(Number(key.name) - 1, 0, openingBranches.length - 1)
+        return
+      }
+      if (isLeftKey(key) || isUpKey(key)) {
+        model.cutsceneChoiceIndex = (((model.cutsceneChoiceIndex ?? 0) - 1) % openingBranches.length + openingBranches.length) % openingBranches.length
+        return
+      }
+      if (isRightKey(key) || isDownKey(key)) {
+        model.cutsceneChoiceIndex = ((model.cutsceneChoiceIndex ?? 0) + 1) % openingBranches.length
+        return
+      }
+      if (isConfirmKey(key)) {
+        const branch = openingBranches[clamp(model.cutsceneChoiceIndex ?? 0, 0, openingBranches.length - 1)]
+        if (branch) model.saveStatus = applyOpeningStoryBranch(model.session, branch.id)
+        model.dialog = null
+        clearCameraReturnAnimation()
+        return
+      }
+    }
     if (key.name === "escape") {
       model.dialog = null
       clearCameraReturnAnimation()
@@ -371,7 +407,7 @@ function handleDialogKey(key: KeyEvent) {
     }
     if (isConfirmKey(key)) {
       model.dialog = null
-      startCameraReturnAnimation()
+      clearCameraReturnAnimation()
       return
     }
   }
@@ -412,15 +448,30 @@ function visibleQuestCount(session: GameSession) {
 }
 
 function handleBookKey(key: KeyEvent) {
-  const max = Math.max(0, model.session.knowledge.length - 1)
   if (key.name === "escape" || isConfirmKey(key)) {
     model.dialog = null
     return
   }
+  if (isLeftKey(key) || key.name === "[") {
+    model.bookTabIndex = (model.bookTabIndex + bookTabCount() - 1) % bookTabCount()
+    model.bookIndex = 0
+    return
+  }
+  if (isRightKey(key) || key.name === "]" || key.name === "tab") {
+    model.bookTabIndex = (model.bookTabIndex + 1) % bookTabCount()
+    model.bookIndex = 0
+    return
+  }
+  const max = Math.max(0, bookEntriesForTab(model.session, model.bookTabIndex).length - 1)
   if (isUpKey(key)) model.bookIndex = clamp(model.bookIndex - 1, 0, max)
   if (isDownKey(key)) model.bookIndex = clamp(model.bookIndex + 1, 0, max)
   if (key.name === "pageup") model.bookIndex = clamp(model.bookIndex - 5, 0, max)
   if (key.name === "pagedown") model.bookIndex = clamp(model.bookIndex + 5, 0, max)
+}
+
+function clampBookSelection() {
+  model.bookTabIndex = clamp(model.bookTabIndex, 0, Math.max(0, bookTabCount() - 1))
+  model.bookIndex = clamp(model.bookIndex, 0, Math.max(0, bookEntriesForTab(model.session, model.bookTabIndex).length - 1))
 }
 
 function handleHubKey(key: KeyEvent) {
@@ -464,6 +515,26 @@ function handleHubKey(key: KeyEvent) {
 }
 
 function handleVillageKey(key: KeyEvent) {
+  if (key.name === "g") {
+    model.seed = randomSeed()
+    startRun()
+    return
+  }
+  if (key.name === "1") {
+    buildHubStation(model.session, "blacksmith")
+    model.saveStatus = model.session.log[0] ?? "Blacksmith checked."
+    return
+  }
+  if (key.name === "3") {
+    const coins = sellLootToVillage(model.session)
+    model.saveStatus = coins > 0 ? `Sold loot for ${coins} coins.` : model.session.log[0] ?? "No loot to sell."
+    return
+  }
+  if (key.name === "4") {
+    prepareFood(model.session)
+    model.saveStatus = model.session.log[0] ?? "Food prepared."
+    return
+  }
   if (key.name === "escape") {
     setScreen("game", "Returning to dungeon.", "village")
     model.saveStatus = ""
@@ -635,6 +706,10 @@ function handleSkillCheckKey(key: KeyEvent) {
   const check = model.session.skillCheck
   if (!check) return
   if (check.status === "pending") {
+    if (key.name === "escape") {
+      cancelSkillCheck(model.session)
+      return
+    }
     if (isConfirmKey(key)) {
       const roll = resolveSkillCheck(model.session)
       if (roll) startDiceRollAnimation(roll.d20)
@@ -778,8 +853,8 @@ function handleMenuKey(key: KeyEvent) {
 function handleGameKey(key: KeyEvent) {
   if (model.session.status !== "running") {
     if (key.name === "v") {
-      if (model.session.hub.unlocked) setScreen("village", "Village road opens.", "village")
-      else model.dialog = "hub"
+      if (model.session.hub.unlocked) openVillageRoad("Village road opens.")
+      else blockVillageShortcut()
       return
     }
     if (isConfirmKey(key)) startRun()
@@ -832,6 +907,7 @@ function handleGameKey(key: KeyEvent) {
     model.dialog = "inventory"
     model.message = ""
     setInventoryIndex(model.inventoryIndex)
+    recordTutorialAction(model.session, "inventory")
     return
   }
   if (key.name === "l") {
@@ -844,23 +920,22 @@ function handleGameKey(key: KeyEvent) {
   }
   if (key.name === "b") {
     model.dialog = "book"
-    model.bookIndex = clamp(model.bookIndex, 0, Math.max(0, model.session.knowledge.length - 1))
+    clampBookSelection()
+    recordTutorialAction(model.session, "book")
     return
   }
   if (key.name === "v") {
-    if (!model.session.hub.unlocked && model.session.knowledge.some((entry) => entry.title.includes("Village Deed"))) unlockHub(model.session, "Village deed opened the portal room.")
     if (model.session.hub.unlocked) {
-      model.dialog = null
-      setScreen("village", "Village road opens.", "village")
+      openVillageRoad("Village road opens.")
       return
     }
-    startScreenTransition(model.screen, model.screen, "Village path is still locked.", "village")
-    model.dialog = "hub"
+    blockVillageShortcut()
     return
   }
   if (key.name === "o" || (key.name === "j" && model.settings.controlScheme !== "vim")) {
     model.dialog = "quests"
     model.questIndex = clamp(model.questIndex, 0, Math.max(0, visibleQuestCount(model.session) - 1))
+    recordTutorialAction(model.session, "quests")
     return
   }
   if (key.name === "r") {
@@ -900,9 +975,23 @@ function handleGameKey(key: KeyEvent) {
   const move = movementForKey(key, model.settings)
   if (move) {
     const before = { ...model.session.player }
+    const wasHubUnlocked = model.session.hub.unlocked
     tryMove(model.session, move.dx, move.dy)
     if (before.x !== model.session.player.x || before.y !== model.session.player.y) startPlayerMoveAnimation(moveDirection(move.dx, move.dy))
+    if ((model.session.status as GameSession["status"]) === "victory" && model.session.hub.unlocked && !wasHubUnlocked) openVillageRoad("The final gate opens to the village.", Boolean(model.session.hub.lastCutsceneId))
   }
+}
+
+function openVillageRoad(label: string, showCutscene = false) {
+  model.dialog = showCutscene ? "cutscene" : null
+  setScreen("village", label, "village")
+  model.saveStatus = label
+}
+
+function blockVillageShortcut() {
+  const text = "Village road is locked. Clear the dungeon or recover a village deed before using V."
+  addToast(model.session, "Village locked", text, "warning")
+  model.saveStatus = text
 }
 
 function handleLevelUpKey(key: KeyEvent) {
@@ -956,7 +1045,7 @@ function cycleCombatSkill(delta: number) {
 function confirmMenu() {
   if (model.screen === "start") {
     if (currentStartItemDisabled(model)) {
-      model.saveStatus = model.internetStatus === "checking" ? "Checking internet before enabling network features." : "Offline: multiplayer, cloud, and AI admin sync are disabled."
+      model.saveStatus = model.internetStatus === "checking" ? "Checking internet before enabling cloud login." : "Offline: cloud login and AI admin sync are disabled."
       void refreshInternetStatus()
       return
     }
@@ -1006,7 +1095,8 @@ function confirmMenu() {
 }
 
 function startRun() {
-  model.session = createSession(model.seed, currentMode(model).id, currentClass(model).id, model.session.hero.name, model.session.hero.appearance)
+  if (!acquireRunSlot()) return
+  model.session = createSession(model.seed, currentMode(model).id, currentClass(model).id, model.session.hero.name, model.session.hero.appearance, model.settings.startWithTutorial)
   submittedSession = null
   clearCameraReturnAnimation(false)
   setScreen("game", "The descent opens.", "portal")
@@ -1015,6 +1105,8 @@ function startRun() {
   model.cameraFocus = introCameraPoint(model.session)
   model.uiHidden = !model.settings.showUi
   model.bookIndex = 0
+  model.bookTabIndex = 0
+  model.cutsceneChoiceIndex = 0
   model.saveStatus = `${currentMode(model).name} run started. Press Ctrl+S or F5 to save locally.`
   lastManualSaveSignature = ""
   connectLobby()
@@ -1053,6 +1145,9 @@ function loadSelectedSave() {
     return
   }
 
+  const alreadyLocked = Boolean(activeRunLock)
+  if (!acquireRunSlot()) return
+
   try {
     pendingDeleteSaveId = null
     const session = loadSave(summary.id)
@@ -1071,6 +1166,7 @@ function loadSelectedSave() {
     lastAutosaveSignature = autosaveSignature(model.session)
     lastManualSaveSignature = summary.slot === "autosave" ? "" : lastAutosaveSignature
   } catch (error) {
+    if (!alreadyLocked) releaseRunSlot()
     const status = error instanceof Error ? error.message : "Save failed to load."
     refreshSaveList()
     model.saveStatus = status
@@ -1155,13 +1251,18 @@ function autosaveCurrentRun(_reason = "change") {
   const signature = autosaveSignature(model.session)
   if (signature === lastAutosaveSignature) return
   try {
-    const summary = saveAutosave(model.session)
+    const summary = saveAutosave(model.session, currentAutosaveId())
     lastAutosaveSignature = signature
     model.saves = listSaves()
     model.saveIndex = indexForSave(model.saves, summary)
   } catch (error) {
     model.saveStatus = error instanceof Error ? error.message : "Autosave failed."
   }
+}
+
+function currentAutosaveId() {
+  if (activeRunLock || model.session.mode === "solo") return undefined
+  return `autosave-${localGuestSessionId}`
 }
 
 function confirmCloud() {
@@ -1218,6 +1319,7 @@ function changeCurrentSetting() {
     model.uiHidden = !model.settings.showUi
   }
   if (item.id === "showMinimap") model.settings.showMinimap = !model.settings.showMinimap
+  if (item.id === "startWithTutorial") model.settings.startWithTutorial = !model.settings.startWithTutorial
   if (item.id === "diceSkin") model.settings.diceSkin = cycleValue(model.settings.diceSkin, diceSkinIds)
   if (item.id === "backgroundFx") model.settings.backgroundFx = cycleValue(model.settings.backgroundFx, ["low", "normal", "dense"])
   if (item.id === "tileScale") model.settings.tileScale = cycleValue(model.settings.tileScale, mapScaleOptions)
@@ -1323,7 +1425,7 @@ function startScreenTransition(from: ScreenId, to: ScreenId, label: string, kind
     label,
     kind,
     startedAt: Date.now(),
-    durationMs: kind === "portal" ? 1150 : kind === "village" ? 1000 : 520,
+    durationMs: transitionDurationForKind(kind),
   }
   queueScreenTransitionFrame()
 }
@@ -1352,7 +1454,7 @@ function startCameraReturnAnimation() {
     from: { ...from },
     to,
     startedAt: Date.now(),
-    durationMs: Math.min(1700, Math.max(900, 760 + distance * 44)),
+    durationMs: Math.min(2200, Math.max(1100, 900 + distance * 48)),
   }
   applyCameraReturnFrame()
 }
@@ -1369,7 +1471,7 @@ function applyCameraReturnFrame() {
   if (!animation || destroyed) return
 
   const progress = Math.min(1, Math.max(0, (Date.now() - animation.startedAt) / animation.durationMs))
-  const eased = easeInOutCubic(progress)
+  const eased = easeInOutQuart(progress)
   model.cameraFocus = {
     x: Math.round(lerp(animation.from.x, animation.to.x, eased)),
     y: Math.round(lerp(animation.from.y, animation.to.y, eased)),
@@ -1390,7 +1492,7 @@ function queueCameraReturnFrame() {
   cameraTimer = setTimeout(() => {
     cameraTimer = null
     applyCameraReturnFrame()
-  }, 50)
+  }, 33)
 }
 
 function queueScreenTransitionFrame() {
@@ -1514,6 +1616,7 @@ function hasUnsavedManualChanges() {
 function destroyApp() {
   destroyed = true
   closeLobbySocket()
+  releaseRunSlot()
   if (diceTimer) clearTimeout(diceTimer)
   diceTimer = null
   if (moveTimer) clearTimeout(moveTimer)
@@ -1532,6 +1635,7 @@ function destroyApp() {
 
 function closeRunToTitle(status: string) {
   closeLobbySocket()
+  releaseRunSlot()
   model.dialog = null
   model.diceRollAnimation = null
   model.playerMoveAnimation = null
@@ -1542,11 +1646,27 @@ function closeRunToTitle(status: string) {
   model.saveStatus = status
 }
 
+function acquireRunSlot() {
+  if (activeRunLock) return true
+  const result = acquireLocalRunLock({ session: loadAuthSession() })
+  if (!result.allowed) {
+    model.saveStatus = result.message
+    model.message = result.message
+    return false
+  }
+  activeRunLock = result.lock
+  return true
+}
+
+function releaseRunSlot() {
+  releaseLocalRunLock(activeRunLock)
+  activeRunLock = null
+}
+
 async function refreshInternetStatus() {
   const status = await checkInternetConnectivity()
   if (destroyed) return
   model.internetStatus = status
-  if (model.internetStatus !== "online" && model.session.mode !== "solo" && model.screen === "start") model.modeIndex = 0
   refresh()
 }
 

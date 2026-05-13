@@ -16,6 +16,7 @@ export type UserSettings = {
   reduceMotion: boolean
   showUi: boolean
   showMinimap: boolean
+  startWithTutorial: boolean
   backgroundFx: BackgroundFx
   tileScale: TileScalePreference
   diceSkin: DiceSkinId
@@ -40,6 +41,7 @@ export const defaultSettings: UserSettings = {
   reduceMotion: false,
   showUi: true,
   showMinimap: true,
+  startWithTutorial: true,
   backgroundFx: "normal",
   tileScale: "wide",
   diceSkin: defaultDiceSkin,
@@ -95,6 +97,7 @@ function normalizeSettings(settings: Partial<UserSettings>): UserSettings {
     reduceMotion: Boolean(settings.reduceMotion),
     showUi: settings.showUi !== false,
     showMinimap: settings.showMinimap !== false,
+    startWithTutorial: settings.startWithTutorial !== false,
     backgroundFx: asBackgroundFx(settings.backgroundFx),
     tileScale: asTileScale(settings.tileScale),
     diceSkin: asDiceSkin(settings.diceSkin),
