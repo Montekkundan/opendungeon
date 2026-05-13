@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createSession, playLocalCutscene, selectSkill, tryMove, unlockHub } from "../game/session.js"
+import { applyOpeningStoryBranch, createSession, playLocalCutscene, selectSkill, tryMove, unlockHub } from "../game/session.js"
 import { setTile } from "../game/dungeon.js"
 import { defaultSettings } from "../game/settingsStore.js"
 import { hashText } from "../shared/hash.js"
@@ -38,16 +38,16 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: skillCheckModel(),
-      expectedHash: "4022bae6",
-      requiredText: ["Talent Check", "Whispering Relic", "Enter roll d20"],
+      expectedHash: "2e5440e5",
+      requiredText: ["Talent Check", "Whispering Relic", "Total >= difficulty", "Enter roll d20", "Esc step away"],
     },
     {
       name: "combat",
       width: 120,
       height: 40,
       model: combatModel(),
-      expectedHash: "62186df1",
-      requiredText: ["Turn Combat", "Order", "Shado", "Necroman"],
+      expectedHash: "fe9181b2",
+      requiredText: ["Turn Combat", "Order", "Shado", "Necroman", "Weakness"],
     },
     {
       name: "settings",
@@ -70,16 +70,16 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("game", createSession(1234), { dialog: "book" }),
-      expectedHash: "4b02cc09",
-      requiredText: ["BOOK", "Known", "Waking Cell", "Portal Room"],
+      expectedHash: "caac3e41",
+      requiredText: ["BOOK", "All entries", "Story", "Monsters", "Waking Cell", "Portal Room"],
     },
     {
       name: "village",
       width: 120,
       height: 40,
       model: villageModel(),
-      expectedHash: "d6b0d4e7",
-      requiredText: ["Village", "Walkable Village", "NPC Schedule", "Market and Balance"],
+      expectedHash: "c762e204",
+      requiredText: ["Village", "Walkable Village", "NPC Schedule", "Market and Balance", "First loop", "G starts"],
     },
   ]
 
@@ -101,8 +101,8 @@ describe("terminal renderer snapshots", () => {
   }
 })
 
-test("title disables internet-only entries while offline", () => {
-  expect(currentStartItemDisabled(modelFor("start", createSession(1234), { menuIndex: 4, internetStatus: "offline" }))).toBe(true)
+test("title keeps local multiplayer available while offline", () => {
+  expect(currentStartItemDisabled(modelFor("start", createSession(1234), { menuIndex: 4, internetStatus: "offline" }))).toBe(false)
   expect(currentStartItemDisabled(modelFor("start", createSession(1234), { menuIndex: 5, internetStatus: "checking" }))).toBe(true)
   expect(currentStartItemDisabled(modelFor("start", createSession(1234), { menuIndex: 1, internetStatus: "offline" }))).toBe(false)
 })
@@ -115,6 +115,7 @@ test("multiplayer picker only shows multiplayer modes", () => {
   expect(text).toContain("Co-op")
   expect(text).toContain("Race")
   expect(text).toContain("Solo runs start from New descent")
+  expect(text).toContain("opendungeon join http://127.0.0.1:3737")
   expect(text).not.toContain("One crawl, local run.")
 })
 
@@ -207,14 +208,29 @@ test("cloud profile screen draws account once and names local-only action clearl
   expect(text).not.toContain("Use local profile")
 })
 
-test("new descent story scene shows narrator text and cutscene controls", () => {
+test("new descent story scene shows branch choices and cutscene controls", () => {
   const session = createSession(1234)
   playLocalCutscene(session, "waking-cell")
   const output = draw(modelFor("game", session, { dialog: "cutscene", cameraFocus: { x: session.player.x + 1, y: session.player.y } }), 100, 32)
   const text = screenText(output.chunks)
 
-  expect(text).toContain("Huh... where am I?")
-  expect(text).toContain("Enter begin descent")
+  expect(text).toContain("I have been here before")
+  expect(text).toContain("Follow the voice")
+  expect(text).toContain("Enter answer")
+})
+
+test("opening story branches change run state", () => {
+  const session = createSession(1234)
+  const beforeFocus = session.focus
+  const beforeInventoryCount = session.inventory.length
+
+  applyOpeningStoryBranch(session, "read-ledger")
+  applyOpeningStoryBranch(session, "check-wound")
+
+  expect(session.inventory.length).toBe(beforeInventoryCount + 1)
+  expect(session.inventory[0]).toBe("Ledger scrap")
+  expect(session.focus).toBeGreaterThanOrEqual(beforeFocus)
+  expect(session.knowledge.map((entry) => entry.title)).toContain("Ledger Scrap")
 })
 
 test("quest journal only lists discovered chains at the start", () => {
@@ -297,6 +313,33 @@ test("merchant response footer does not offer close-run from conversation", () =
   expect(text).not.toContain("Q close run")
 })
 
+test("active tutorial coach remains visible when run UI is hidden", () => {
+  const session = createSession(1234, "solo", "ranger", "Mira", undefined, true)
+  const output = draw(modelFor("game", session, { uiHidden: true }), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Area I - Movement")
+  expect(text).toContain("Up")
+  expect(text).toContain("Pack I")
+  expect(text).toContain("The gate opens")
+})
+
+test("book dialog separates monster entries into the monster tab", () => {
+  const session = createSession(1234)
+  const target = { x: session.player.x + 1, y: session.player.y }
+  setTile(session.dungeon, target, "floor")
+  session.dungeon.actors.push({ id: "book-slime", kind: "slime", position: target, hp: 12, damage: 0 })
+  tryMove(session, 1, 0)
+
+  const output = draw(modelFor("game", session, { dialog: "book", bookTabIndex: 3 }), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Monsters")
+  expect(text).toContain("Slime Monstrary")
+  expect(text).toContain("Known weakness")
+  expect(text).not.toContain("Waking Cell")
+})
+
 function skillCheckModel() {
   const session = createSession(1234)
   const target = { x: session.player.x + 1, y: session.player.y }
@@ -373,6 +416,7 @@ function modelFor(screen: ScreenId, session = createSession(1234), overrides: Pa
     inventoryIndex: 0,
     inventoryDragIndex: null,
     bookIndex: 0,
+    bookTabIndex: 0,
     questIndex: 0,
     tutorialIndex: 0,
     internetStatus: "online",
@@ -383,6 +427,7 @@ function modelFor(screen: ScreenId, session = createSession(1234), overrides: Pa
     diceRollAnimation: null,
     cameraFocus: null,
     screenTransition: null,
+    cutsceneChoiceIndex: 0,
     ...overrides,
   }
 }

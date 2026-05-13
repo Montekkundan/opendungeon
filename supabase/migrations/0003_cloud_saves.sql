@@ -17,9 +17,23 @@ alter table public.opendungeon_cloud_saves enable row level security;
 
 create policy "cloud saves are owner readable"
   on public.opendungeon_cloud_saves for select
-  using (auth.uid() = owner_id);
+  to authenticated
+  using ((select auth.uid()) = owner_id);
 
-create policy "cloud saves are owner writable"
-  on public.opendungeon_cloud_saves for all
-  using (auth.uid() = owner_id)
-  with check (auth.uid() = owner_id);
+create policy "cloud saves are owner insertable"
+  on public.opendungeon_cloud_saves for insert
+  to authenticated
+  with check ((select auth.uid()) = owner_id);
+
+create policy "cloud saves are owner updatable"
+  on public.opendungeon_cloud_saves for update
+  to authenticated
+  using ((select auth.uid()) = owner_id)
+  with check ((select auth.uid()) = owner_id);
+
+create policy "cloud saves are owner deletable"
+  on public.opendungeon_cloud_saves for delete
+  to authenticated
+  using ((select auth.uid()) = owner_id);
+
+grant select, insert, update, delete on table public.opendungeon_cloud_saves to authenticated;

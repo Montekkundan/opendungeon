@@ -64,8 +64,8 @@ export function saveSession(session: GameSession, label = "Manual save"): SaveSu
   return writeSessionSave(session, label, { slot: "manual" })
 }
 
-export function saveAutosave(session: GameSession): SaveSummary {
-  return writeSessionSave(session, "Autosave", { id: autosaveId, slot: "autosave" })
+export function saveAutosave(session: GameSession, id = autosaveId): SaveSummary {
+  return writeSessionSave(session, "Autosave", { id: safeId(id) || autosaveId, slot: "autosave" })
 }
 
 export function loadAutosave(): GameSession {

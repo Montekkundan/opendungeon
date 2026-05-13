@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   applyStatusEffect,
   attemptFlee,
+  cancelSkillCheck,
   combatModifier,
   combatSkills,
   createSession,
@@ -39,6 +40,21 @@ describe("d20 combat and skill checks", () => {
 
     expect(session.inventory[0]).not.toBe("Rusty blade")
     expect(session.dungeon.tiles[target.y][target.x]).toBe("floor")
+  })
+
+  test("talent checks explain d20 results and inventory rewards", () => {
+    const session = createSession(1234)
+    const target = { x: session.player.x + 1, y: session.player.y }
+    setTile(session.dungeon, target, "relic")
+    session.stats.intelligence = 60
+
+    tryMove(session, 1, 0)
+    const roll = resolveSkillCheck(session)
+
+    expect(roll?.success).toBe(true)
+    expect(session.toasts[0]).toMatchObject({ title: "Talent check succeeded", tone: "success" })
+    expect(session.toasts[0].text).toContain("Press I")
+    expect(session.inventory[0]).toBe("Bound relic")
   })
 
   test("bumping an enemy enters d20 combat", () => {
@@ -80,6 +96,25 @@ describe("d20 combat and skill checks", () => {
     expect(session.combat.lastRoll?.d20).toBeLessThanOrEqual(20)
     expect(session.combat.lastRoll?.modifier).toBe(combatModifier(session, "strength"))
     expect(session.turn).toBe(1)
+  })
+
+  test("combat weaknesses update monster Book entries", () => {
+    const session = createSession(1234)
+    addEnemyBesidePlayer(session, "weak-slime", "slime", 30, 0)
+    session.stats.intelligence = 60
+    session.focus = session.maxFocus
+
+    tryMove(session, 1, 0)
+    expect(session.knowledge.find((entry) => entry.id === "monster-slime")?.text).toContain("Known weakness: unknown")
+
+    selectSkill(session, 2)
+    performCombatAction(session)
+
+    const monsterEntry = session.knowledge.find((entry) => entry.id === "monster-slime")
+    expect(monsterEntry?.kind).toBe("monster")
+    expect(monsterEntry?.text).toContain("Known weakness: Arcane")
+    expect(session.toasts[0].title).toBe("Weakness found")
+    expect(session.toasts[0].text).toContain("Open B Book")
   })
 
   test("supports expanded combat skills beyond the original three slots", () => {
@@ -251,5 +286,19 @@ describe("d20 combat and skill checks", () => {
     expect(session.skillCheck?.roll?.total).toBe((roll?.d20 ?? 0) + (roll?.modifier ?? 0))
     expect(session.dungeon.tiles[target.y][target.x]).toBe("floor")
     expect(session.turn).toBe(1)
+  })
+
+  test("talent checks can be skipped without consuming the tile", () => {
+    const session = createSession(1234)
+    const target = { x: session.player.x + 1, y: session.player.y }
+    setTile(session.dungeon, target, "potion")
+
+    tryMove(session, 1, 0)
+
+    expect(session.skillCheck?.status).toBe("pending")
+    expect(cancelSkillCheck(session)).toBe(true)
+    expect(session.skillCheck).toBeNull()
+    expect(session.dungeon.tiles[target.y][target.x]).toBe("potion")
+    expect(session.log[0]).toContain("skipped")
   })
 })

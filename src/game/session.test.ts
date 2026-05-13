@@ -11,6 +11,7 @@ import {
   interactWithWorld,
   normalizeSessionAfterLoad,
   performCombatAction,
+  recordTutorialAction,
   rest,
   combatSkills,
   startingLoadout,
@@ -237,9 +238,92 @@ describe("game session", () => {
     const conversation = chooseConversationOption(session, 0)
 
     expect(conversation?.options[0].label).toBe("Patch wounds")
-    expect(session.hp).toBe(session.maxHp - 2)
+    expect(session.hp).toBe(session.maxHp)
     expect(session.conversation?.status).toBe("completed")
     expect(session.worldLog.length).toBeGreaterThan(1)
+  })
+
+  test("NPCs remember already-used choices for the current descent", () => {
+    const session = createSession(1234)
+    addEnemyBesidePlayer(session, "repeat-merchant", "merchant", 1, 0)
+
+    tryMove(session, 1, 0)
+    const first = chooseConversationOption(session, 1)
+    const xpAfterFirstRumor = session.xp
+    interactWithWorld(session)
+    tryMove(session, 1, 0)
+    const repeated = chooseConversationOption(session, 1)
+
+    expect(first?.text).toContain("pays best")
+    expect(repeated?.text).toContain("already asked")
+    expect(session.xp).toBe(xpAfterFirstRumor)
+    expect(session.toasts[0].title).toBe("Already asked")
+  })
+
+  test("tutorial gates three first-floor areas for movement, NPC checks, and combat", () => {
+    const session = createSession(1234, "solo", "ranger", "Mira", undefined, true)
+    const [gateOne, gateTwo] = session.tutorial.gatePoints
+    expect(session.hp).toBe(session.maxHp - 6)
+    expect(gateOne).toBeDefined()
+    expect(gateTwo).toBeDefined()
+    expect(tileAt(session.dungeon, gateOne!)).toBe("door")
+    expect(tileAt(session.dungeon, gateTwo!)).toBe("door")
+
+    session.player = { x: gateOne!.x - 1, y: gateOne!.y }
+    tryMove(session, 1, 0)
+
+    expect(session.floor).toBe(1)
+    expect(session.player).toEqual({ x: gateOne!.x - 1, y: gateOne!.y })
+    expect(session.log[0]).toContain("Area I gate is locked")
+
+    recordTutorialAction(session, "move-up")
+    recordTutorialAction(session, "move-down")
+    recordTutorialAction(session, "move-left")
+    recordTutorialAction(session, "move-right")
+    recordTutorialAction(session, "inventory")
+    recordTutorialAction(session, "quests")
+    recordTutorialAction(session, "book")
+    expect(session.tutorial.stage).toBe("npc-check")
+    expect(tileAt(session.dungeon, gateOne!)).toBe("floor")
+
+    const npc = session.dungeon.actors.find((actor) => actor.id === "tutorial-wound-surgeon")
+    const enemy = session.dungeon.actors.find((actor) => actor.id === "tutorial-slime")
+    expect(npc?.position.x).toBeGreaterThan(gateOne!.x)
+    expect(npc?.position.x).toBeLessThan(gateTwo!.x)
+    expect(enemy?.position.x).toBeGreaterThan(gateTwo!.x)
+
+    recordTutorialAction(session, "npc")
+    recordTutorialAction(session, "talent-check")
+    expect(session.tutorial.stage).toBe("combat")
+    expect(tileAt(session.dungeon, gateTwo!)).toBe("floor")
+
+    recordTutorialAction(session, "combat-start")
+    recordTutorialAction(session, "combat-end")
+    expect(session.tutorial.completed).toBe(true)
+
+    const stairs = session.dungeon.tiles.flatMap((row, y) => row.map((tile, x) => ({ tile, x, y }))).find((entry) => entry.tile === "stairs")
+    expect(stairs).toBeDefined()
+    session.player = { x: stairs!.x - 1, y: stairs!.y }
+    tryMove(session, 1, 0)
+    expect(session.floor).toBe(2)
+    expect(session.tutorial.handoffShown).toBe(true)
+    expect(session.log[0]).toContain("You are on your own now")
+    expect(session.toasts[0].title).toBe("Find the Final Gate")
+    expect(session.world.quests[0]?.title).toBe("Find the Final Gate")
+  })
+
+  test("death increments the run counter and disables the current tutorial", () => {
+    const session = createSession(1234, "solo", "ranger", "Mira", undefined, true)
+    const trap = { x: session.player.x + 1, y: session.player.y }
+    session.hp = 1
+    setTile(session.dungeon, trap, "trap")
+
+    tryMove(session, 1, 0)
+
+    expect(session.status).toBe("dead")
+    expect(session.deaths).toBe(1)
+    expect(session.tutorial.enabled).toBe(false)
+    expect(session.tutorial.disabledAfterDeath).toBe(true)
   })
 
   test("level-up talents create RPG build choices that affect later mechanics", () => {

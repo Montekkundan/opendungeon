@@ -39,11 +39,34 @@ bun install
 bun run dev
 ```
 
+Website:
+
+```bash
+bun run web
+bun run web:verify
+```
+
+`bun run web` uses Portless, so the stable local URL is `https://opendungeon.localhost`. On the first run, Portless may ask you to trust its local certificate authority. Re-running the command restarts the existing `opendungeon.localhost` dev route instead of keeping a stale Next.js lock.
+
+Supabase auth/profile setup uses the `opendungeon` project. Public local env files are already written for development; use the same values in Vercel:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://uablylzrcindbreehbuj.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_o-QLR6jUUh04QCm58di_8w_7bP4MGNt
+```
+
+Keep service-role keys server-only. The Next.js website only needs the publishable key.
+
 ### Multiplayer
 
 `localhost` only works on the same computer. For friends on the same Wi-Fi/LAN, host on `0.0.0.0` and share the LAN IP printed by the host.
 
 ```bash
+# Same laptop, multiple terminal tabs
+bun run host -- --host 127.0.0.1 --mode coop --seed 2423368 --port 3737
+OPENDUNGEON_PLAYER_NAME=Mira bun run dev join http://127.0.0.1:3737
+OPENDUNGEON_PLAYER_NAME=Nyx bun run dev join http://127.0.0.1:3737
+
 # Same Wi-Fi / LAN
 opendungeon-host --host 0.0.0.0 --mode coop --seed 2423368 --port 3737
 ```
@@ -66,6 +89,8 @@ For local source testing:
 ```bash
 bun run host -- --mode coop --seed 2423368 --port 3737
 ```
+
+Signed-in accounts are protected from duplicate local play: opening a second Ghostty tab with the same saved login shows an already-in-game message. Guest/local tabs are allowed, so multiple players can join from one laptop without logging in.
 
 Docker/server hosting:
 

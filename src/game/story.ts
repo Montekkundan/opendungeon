@@ -18,7 +18,7 @@ export type StoryKnowledge = {
   id: string
   title: string
   text: string
-  kind: "memory" | "note" | "npc" | "tutorial" | "hub"
+  kind: "memory" | "note" | "npc" | "tutorial" | "hub" | "monster"
   floor?: number
 }
 
@@ -52,6 +52,27 @@ export const localStoryBeats: StoryBeat[] = [
 
 export function openingStoryText() {
   return "You wake in the dungeon with no memory. The first lesson is simple: survive long enough to learn why the doors know you."
+}
+
+export function openingStoryBranches(heroName = "Mira"): ConversationOption[] {
+  const name = heroName.trim() || "Mira"
+  return [
+    {
+      id: "follow-voice",
+      label: "Follow the voice",
+      text: `${name} follows the first voice through the bars. The route ahead feels slightly less impossible.`,
+    },
+    {
+      id: "read-ledger",
+      label: "Read the ledger",
+      text: "The ledger page lists rooms you have not seen yet and leaves a scrap in your pack.",
+    },
+    {
+      id: "check-wound",
+      label: "Check the wound",
+      text: "The wound is old. You steady your breathing and recover a little focus before moving.",
+    },
+  ]
 }
 
 export function initialKnowledgeEntries(): StoryKnowledge[] {
@@ -211,7 +232,7 @@ const npcStoryBase: Record<NpcActorId, { speaker: string; text: string; floorHoo
     options: (floor, beat) => [
       { id: "map", label: "Mark map", text: `Venn marks ${beat.title}. Your next objective feels less like noise.` },
       { id: "route", label: "Ask route", text: `The route bends around floor ${floor}'s loudest room, then cuts back toward the stairs.` },
-      { id: "leave", label: "Leave", text: "The cartographer folds the map before the ink can crawl away." },
+      { id: "rumor", label: "Rumor", text: "The stairs do not move, but the rooms around them lie about distance. Trust doors you opened yourself." },
     ],
   },
   "wound-surgeon": {
@@ -221,7 +242,7 @@ const npcStoryBase: Record<NpcActorId, { speaker: string; text: string; floorHoo
     options: (_floor, beat) => [
       { id: "heal", label: "Patch wounds", text: `Iri stitches a mark shaped like ${beat.title}. Health returns.` },
       { id: "advice", label: "Ask advice", text: "Guard before the big swing. Survival is a rhythm, not a prayer." },
-      { id: "leave", label: "Leave", text: "The surgeon nods once and listens for footsteps." },
+      { id: "rumor", label: "Rumor", text: "If a check feels wrong, step back before the roll. Pride kills faster than poison." },
     ],
   },
   "shrine-keeper": {
@@ -231,7 +252,7 @@ const npcStoryBase: Record<NpcActorId, { speaker: string; text: string; floorHoo
     options: (_floor, beat) => [
       { id: "blessing", label: "Take blessing", text: `Sol rings the quiet bell for ${beat.title}. Focus gathers behind your eyes.` },
       { id: "lore", label: "Ask relic lore", text: "Relics answer stats, not wishes. Read the demand before you roll." },
-      { id: "leave", label: "Leave", text: "The shrine light thins, but it does not go out." },
+      { id: "rumor", label: "Rumor", text: "The dungeon records choices more faithfully than memories. Your Book is less fragile than your head." },
     ],
   },
   jailer: {
@@ -241,7 +262,7 @@ const npcStoryBase: Record<NpcActorId, { speaker: string; text: string; floorHoo
     options: (_floor, beat) => [
       { id: "warning", label: "Ask warning", text: `Maro scratches mimic tells beside ${beat.title}. False wood hates patient hands.` },
       { id: "key", label: "Request key", text: "A bent lockpick changes hands. It remembers one door too many." },
-      { id: "leave", label: "Leave", text: "The jailer counts keys under his breath." },
+      { id: "rumor", label: "Rumor", text: "A locked room is not always treasure. Sometimes it is a fight waiting for you to spend focus first." },
     ],
   },
   merchant: {
@@ -251,7 +272,7 @@ const npcStoryBase: Record<NpcActorId, { speaker: string; text: string; floorHoo
     options: (_floor, beat) => [
       { id: "trade", label: "Trade", text: `Pell opens the case marked ${beat.title}. The salve is ugly and useful.` },
       { id: "rumor", label: "Rumor", text: "The room that pays best usually sounds empty twice." },
-      { id: "leave", label: "Leave", text: "Keep your lantern covered. I may return." },
+      { id: "advice", label: "Ask advice", text: "Buy only what keeps the run moving. Greed is just another heavy item." },
     ],
   },
 }
