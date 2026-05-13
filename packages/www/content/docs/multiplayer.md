@@ -4,11 +4,19 @@ Multiplayer starts local-first. A host terminal owns the authoritative game sess
 
 For product planning, Multiplayer means the authored opendungeon story plus multiple players. Multiplayer with GM is a separate mode where a logged-in Dungeon Master can approve AI-assisted world changes from the website.
 
+## What Multiplayer is not
+
+Multiplayer is not a separate random sandbox. It keeps the Single Player story, mechanics, lore, curated assets, final-gate loop, and village progression. Co-op adds live players, shared state, and permissions around that authored loop.
+
+Multiplayer with GM is the separate sandbox-like path. GM worlds can receive approved lore, room, monster, quest, and sprite patches, but those changes belong to the GM-created Supabase world instead of the canonical Single Player story.
+
 ## Same laptop sessions
 
 You can open multiple terminal tabs on the same laptop and join the same local host. Unsigned guest sessions may run side by side. A signed-in account should not double-join from the same terminal app identity, so Ghostty sessions with the same logged-in identity should report that the account is already in a game.
 
 This makes one-laptop multiplayer testing a first-class feature. Contributors can run the host once, then launch several local clients from different terminal windows, terminal apps, or tabs. Each guest client can use a different `OPENDUNGEON_PLAYER_NAME`, while signed-in clients keep the account-safe active-run lock.
+
+The automated host smoke test covers this shape without opening terminal windows. It starts a real lobby host, connects two guest players and one spectator, sends sync packets, disconnects one player, and submits a result.
 
 ## Host and join
 
@@ -22,6 +30,14 @@ OPENDUNGEON_AUTH_DIR="$(mktemp -d)" OPENDUNGEON_PLAYER_NAME=Guest bun run dev --
 The `--` after `bun run dev` passes the `join` command to the terminal client. Use the `OPENDUNGEON_AUTH_DIR="$(mktemp -d)"` form when you want a guaranteed unsigned guest session even if your normal profile is logged in.
 
 For another device on the same network, replace `127.0.0.1` with the host machine LAN address printed by the host command.
+
+For LAN or a small private server, bind the host to all interfaces:
+
+```txt
+bun run host -- --host 0.0.0.0 --mode coop --seed 2423368 --port 3737
+```
+
+The browser page at the printed lobby URL is a status and invite page. It is not the game renderer. Players still join from terminal clients.
 
 ## Duplicate signed-in account check
 

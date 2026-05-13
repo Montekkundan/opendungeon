@@ -49,6 +49,10 @@ export default function CreatePage() {
                 server.
               </li>
               <li>
+                Keeps Multiplayer on the authored story loop. GM-created worlds
+                stay in the separate logged-in GM mode.
+              </li>
+              <li>
                 Keeps the website deploy simple on Vercel while we decide
                 whether to add Supabase Realtime or a dedicated server later.
               </li>
