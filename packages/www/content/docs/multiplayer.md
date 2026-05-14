@@ -97,6 +97,13 @@ opendungeon join https://play.example.com
 
 If you do not own a server, the planned website-hosted path is a Vercel Sandbox experiment: the signed-in host links their Vercel account, the website creates a sandbox under that account, runs `opendungeon-host` in detached mode, stores the public host URL in Supabase, and stops the sandbox after play. This keeps hosting costs on the host player's Vercel plan, but it still needs lifecycle limits, reconnects, cleanup, and billing guardrails before it should be treated as a supported player flow.
 
+Website-created lobbies now store a Sandbox host plan in Supabase metadata. That plan records the intended install command, detached host command, port, lifecycle, docs links, and guardrails, but it does not provision anything yet.
+
+```txt
+bun add -g @montekkundan/opendungeon
+opendungeon-host --host 0.0.0.0 --public-url "$OPENDUNGEON_PUBLIC_URL" --mode coop --seed 2423368 --port 3737
+```
+
 ## Future browser play
 
 A Vercel-only page can create invites, explain setup, and store profile state. Browser-native multiplayer needs an authoritative realtime service before the website can replace the CLI host. Supabase Realtime can help with presence and approved GM updates, but high-frequency gameplay should stay behind a host process, a dedicated realtime backend, or a future browser adapter that preserves the command-log model.

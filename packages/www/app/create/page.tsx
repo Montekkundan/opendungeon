@@ -1,12 +1,19 @@
 import { Command } from "@/components/command";
 import { Footer, Header } from "@/components/site-chrome";
 import { createLobby } from "@/lib/lobby";
+import { buildSandboxHostPlan } from "@/lib/sandbox-host";
 
 export const metadata = {
   title: "Create Lobby | opendungeon",
 };
 
 export default function CreatePage() {
+  const sandbox = buildSandboxHostPlan({
+    lobbyId: "preview-lobby",
+    mode: "coop",
+    seed: 2_423_368,
+  });
+
   return (
     <main data-page="opendungeon">
       <div data-component="container">
@@ -45,6 +52,19 @@ export default function CreatePage() {
           </section>
 
           <section>
+            <h2>Internet host plan</h2>
+            <p>
+              For friends outside your network, the supported path today is a
+              reachable `opendungeon-host` process on a machine you control. The
+              planned website-hosted path is Vercel Sandbox under the host
+              player's own Vercel account, with the resulting URL saved on the
+              Supabase lobby row.
+            </p>
+            <Command value={sandbox.commands.install} />
+            <Command value={sandbox.commands.launch} />
+          </section>
+
+          <section>
             <h2>What this handles</h2>
             <ul>
               <li>Creates a stable URL you can send to friends.</li>
@@ -61,9 +81,9 @@ export default function CreatePage() {
                 stay in the separate logged-in GM mode.
               </li>
               <li>
-                Keeps the website deploy simple on Vercel while we decide
-                whether to add a user-owned Vercel Sandbox host, Supabase
-                Realtime browser adapter, or dedicated server later.
+                Adds a concrete Vercel Sandbox plan to each saved lobby, while
+                actual provisioning stays blocked on account linking, runtime
+                limits, cleanup, and billing warnings.
               </li>
             </ul>
           </section>

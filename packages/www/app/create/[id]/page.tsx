@@ -4,6 +4,7 @@ import {
   lobbyCommands,
   lobbyModeLabel,
   lobbyModeSummary,
+  lobbySandboxPlan,
   normalizeLobbyMode,
   normalizeSeed,
 } from "@/lib/lobby";
@@ -26,6 +27,7 @@ export default async function LobbyPage({ params, searchParams }: PageProps) {
   const mode = normalizeLobbyMode(query.mode ?? id.split("-")[0] ?? "coop");
   const seed = normalizeSeed(query.seed ?? id.split("-")[1] ?? "2423368");
   const commands = lobbyCommands(mode, seed);
+  const sandbox = lobbySandboxPlan(id, mode, seed);
   const modeLabel = lobbyModeLabel(mode);
   const modeSummary = lobbyModeSummary(mode);
   const cloudStatus = cloudStatusMessage(query.cloud);
@@ -88,6 +90,24 @@ export default async function LobbyPage({ params, searchParams }: PageProps) {
               Vercel Sandbox hosting is planned as an opt-in path for logged-in
               hosts who connect their own Vercel account; until then, use a
               reachable host process or private LAN.
+            </p>
+          </section>
+
+          <section>
+            <h2>Vercel Sandbox plan</h2>
+            <p>{sandbox.summary}</p>
+            <Command value={sandbox.commands.install} />
+            <Command value={sandbox.commands.launch} />
+            <Command value={sandbox.commands.join} />
+            <ul>
+              {sandbox.steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ul>
+            <p>
+              Status: planned. Do not use Sandbox as the default multiplayer
+              host until account-linking, billing ownership, reconnect, and
+              cleanup guardrails are implemented.
             </p>
           </section>
         </article>

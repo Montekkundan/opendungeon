@@ -51,13 +51,19 @@ The later browser-native path can replace this only when the browser client has 
 
 ## Vercel Sandbox experiment
 
-Vercel Sandbox is a plausible future path for player-owned internet hosting, but it should be treated as an experiment before it becomes the default. The flow would be:
+Vercel Sandbox is a plausible future path for player-owned internet hosting, but it should be treated as an experiment before it becomes the default. `/create` now stores the planned Sandbox host shape in Supabase metadata so the invite, GM console, and future provisioning job agree on the same lifecycle. The flow would be:
 
 - The host player signs in to opendungeon, connects their Vercel account, and chooses a team/project that owns sandbox usage.
 - The website creates a sandbox under that host account, starts `opendungeon-host` with `runCommand({ detached: true })`, and exposes the sandbox port as the lobby URL.
 - Supabase stores the lobby id, owner id, sandbox id, host URL, mode, seed, GM world id, and cleanup status.
 - Snapshots can warm the sandbox so dependency install and package setup do not happen for every game session.
 - The website stops the sandbox when the lobby ends or expires.
+
+The planned sandbox launch command is:
+
+```txt
+opendungeon-host --host 0.0.0.0 --public-url "$OPENDUNGEON_PUBLIC_URL" --mode coop --seed 2423368 --port 3737
+```
 
 The limits matter for gameplay. Vercel documents a default sandbox timeout of 5 minutes, with configurable/extendable runtime up to 45 minutes on Hobby and 5 hours on Pro/Enterprise. Open ports are limited per sandbox. Installed system packages do not persist unless the prepared sandbox is snapshotted, and snapshot creation stops the sandbox that was captured.
 

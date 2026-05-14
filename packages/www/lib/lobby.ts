@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { buildSandboxHostPlan } from "@/lib/sandbox-host";
 import { supabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 
@@ -49,6 +50,14 @@ export function lobbyCommands(mode: LobbyMode, seed: number) {
   };
 }
 
+export function lobbySandboxPlan(
+  lobbyId: string,
+  mode: LobbyMode,
+  seed: number
+) {
+  return buildSandboxHostPlan({ lobbyId, mode, seed });
+}
+
 async function persistLobbyMetadata(
   lobbyId: string,
   mode: LobbyMode,
@@ -59,6 +68,7 @@ async function persistLobbyMetadata(
   }
 
   try {
+    const sandboxPlan = lobbySandboxPlan(lobbyId, mode, seed);
     const supabase = await createClient();
     const { data } = await supabase.auth.getUser();
     const user = data.user;
@@ -82,8 +92,8 @@ async function persistLobbyMetadata(
             mode,
           },
           sandbox: {
-            provider: "vercel",
-            status: "not-provisioned",
+            ...sandboxPlan.metadata,
+            lobbyId,
           },
           source: "website-create",
           status: "invite-created",
@@ -110,6 +120,13 @@ async function persistLobbyMetadata(
           commands: lobbyCommands(mode, seed),
           lobbyId,
           mode,
+          sandbox: {
+            commands: sandboxPlan.commands,
+            docs: sandboxPlan.docs,
+            guardrails: sandboxPlan.guardrails,
+            metadata: sandboxPlan.metadata,
+            steps: sandboxPlan.steps,
+          },
           seed,
         },
         owner_id: user.id,

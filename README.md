@@ -103,6 +103,12 @@ The live host coordinates co-op snapshots, applies typed player commands where p
 
 Vercel Sandbox is an experimental internet-host option for logged-in hosts who connect their own Vercel account. The product path would create a sandbox under the host player's Vercel team, run `opendungeon-host` there, expose its public URL, store the lobby in Supabase, and stop the sandbox when the session ends. It is not the default path yet because sandbox runtimes are time-limited and need account-linking, lifecycle, reconnect, and cleanup guardrails.
 
+The website now stores a Sandbox host plan with each logged-in `/create` lobby. That plan is only metadata until the Vercel account-linking and provisioning flow exists. The intended launch command inside a sandbox is:
+
+```bash
+opendungeon-host --host 0.0.0.0 --public-url "$OPENDUNGEON_PUBLIC_URL" --mode coop --seed 2423368 --port 3737
+```
+
 For local source testing:
 
 ```bash
