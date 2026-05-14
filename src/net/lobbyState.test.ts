@@ -103,6 +103,45 @@ describe("multiplayer lobby state", () => {
     expect(snapshot.coopStates[0]).toMatchObject({ hp: 18, saveRevision: 3, turn: 3, x: 6, y: 5 })
   })
 
+  test("exposes the latest host-owned authoritative command result", () => {
+    let now = 70
+    const lobby = new MultiplayerLobbyState({ mode: "coop", seed: 1234, now: () => now++ })
+    lobby.join("p1", "Mira")
+
+    const command = lobby.recordCommand({
+      playerId: "p1",
+      type: "move",
+      label: "Moved east",
+      payload: { floor: 1, hp: 19, turn: 2, x: 5, y: 5 },
+      result: {
+        accepted: true,
+        floor: 1,
+        hp: 18,
+        message: "Mira moved east.",
+        status: "running",
+        turn: 3,
+        x: 6,
+        y: 5,
+      },
+    })
+
+    lobby.updateAuthoritativeState({
+      ...command.result,
+      commandSequence: command.sequence,
+      playerId: "p1",
+    })
+
+    expect(lobby.snapshot().hostState).toMatchObject({
+      accepted: true,
+      commandSequence: 1,
+      hp: 18,
+      name: "Mira",
+      turn: 3,
+      x: 6,
+      y: 5,
+    })
+  })
+
   test("stress-tests larger co-op party state and combat turn order", () => {
     const lobby = new MultiplayerLobbyState({ mode: "coop", seed: 5678, now: () => 30 })
     for (const id of ["warden", "arcanist", "ranger", "cleric"]) lobby.join(id, id)

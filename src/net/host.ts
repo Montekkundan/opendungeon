@@ -204,7 +204,7 @@ function handleSocketMessage(ws: LobbyWebSocket, message: RawData) {
       playerId: ws.data.id,
       type: commandType === "move" || commandType === "combat" || commandType === "inventory" || commandType === "village" ? commandType : "interact",
     })
-    lobby.recordCommand({
+    const command = lobby.recordCommand({
       playerId: ws.data.id,
       type: commandType,
       label,
@@ -215,6 +215,12 @@ function handleSocketMessage(ws: LobbyWebSocket, message: RawData) {
       y: payload.y,
       payload: commandPayload,
       result,
+    })
+    lobby.updateAuthoritativeState({
+      ...result,
+      commandSequence: command.sequence,
+      message: result.message,
+      playerId: ws.data.id,
     })
     broadcastState()
   }
@@ -312,6 +318,7 @@ function renderLobbyPage(publicUrl: string): string {
       </section>
       <section>
         <h2>Co-op State</h2>
+        <p id="host-state" class="muted">Host authority has not applied a player command yet.</p>
         <ul id="coop"><li class="muted">No sync packets yet.</li></ul>
         <p id="combat" class="muted">Combat turn coordination idle.</p>
       </section>
@@ -348,6 +355,9 @@ function renderLobbyPage(publicUrl: string): string {
         document.querySelector("#coop").innerHTML = state.coopStates.length
           ? state.coopStates.map((sync) => "<li>" + sync.name + " · " + sync.classId + " · floor " + sync.floor + " · turn " + sync.turn + " · hp " + sync.hp + " · (" + sync.x + "," + sync.y + ") · tutorial " + sync.tutorialStage + (sync.tutorialReady ? " ready" : " waiting") + "</li>").join("")
           : '<li class="muted">No sync packets yet.</li>';
+        document.querySelector("#host-state").textContent = state.hostState
+          ? "Host authority #" + state.hostState.commandSequence + " · " + (state.hostState.accepted ? "accepted" : "rejected") + " · " + state.hostState.name + " · floor " + state.hostState.floor + " · turn " + state.hostState.turn + " · hp " + state.hostState.hp + " · (" + state.hostState.x + "," + state.hostState.y + ") · " + state.hostState.message
+          : "Host authority has not applied a player command yet.";
         document.querySelector("#combat").textContent = state.combat.active
           ? "Round " + state.combat.round + " · active player " + state.combat.activePlayerId
           : "Combat turn coordination idle.";

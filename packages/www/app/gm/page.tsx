@@ -354,6 +354,11 @@ export default async function GmPage({ searchParams }: GmPageProps) {
               </section>
 
               <section>
+                <h2>Host authority</h2>
+                <HostAuthorityState snapshot={hostBridge.snapshot} />
+              </section>
+
+              <section>
                 <h2>Action log</h2>
                 <HostActionLog snapshot={hostBridge.snapshot} />
               </section>
@@ -450,6 +455,33 @@ function PatchPreview({
           {approvalButtonLabel(approved, hostUrl)}
         </Button>
       </form>
+    </div>
+  );
+}
+
+function HostAuthorityState({ snapshot }: { snapshot: GmHostSnapshot | null }) {
+  if (!snapshot) {
+    return <p>Enter the `opendungeon-host` URL to see host-owned state.</p>;
+  }
+
+  if (!snapshot.hostState) {
+    return <p>The host has not applied a player command yet.</p>;
+  }
+
+  const state = snapshot.hostState;
+  return (
+    <div data-component="gm-live-list">
+      <div>
+        <strong>
+          Host #{state.commandSequence}{" "}
+          {state.accepted ? "accepted" : "rejected"} {state.name}
+        </strong>
+        <span>
+          Floor {state.floor} · turn {state.turn} · HP {state.hp} · ({state.x},{" "}
+          {state.y}) · {state.status}
+        </span>
+        <span>{state.message}</span>
+      </div>
     </div>
   );
 }

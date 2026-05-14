@@ -110,6 +110,21 @@ export interface GmHostCommandEntry {
   type: "move" | "interact" | "combat" | "inventory" | "village";
 }
 
+export interface GmHostAuthoritativeState {
+  accepted: boolean;
+  commandSequence: number;
+  floor: number;
+  hp: number;
+  message: string;
+  name: string;
+  playerId: string;
+  status: string;
+  turn: number;
+  updatedAt: number;
+  x: number;
+  y: number;
+}
+
 export interface GmHostSnapshot {
   actions: GmHostActionEntry[];
   combat: {
@@ -121,6 +136,7 @@ export interface GmHostSnapshot {
   commands: GmHostCommandEntry[];
   coopStates: GmHostCoopState[];
   gmPatches: GmHostDeliveredPatch[];
+  hostState: GmHostAuthoritativeState | null;
   inviteCode: string;
   mode: "coop" | "race";
   players: GmHostPlayer[];

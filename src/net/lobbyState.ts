@@ -115,6 +115,13 @@ export type LobbyCommandResult = {
   status: string
 }
 
+export type HostAuthoritativeState = LobbyCommandResult & {
+  commandSequence: number
+  name: string
+  playerId: string
+  updatedAt: number
+}
+
 export type LobbySnapshot = {
   mode: LobbyMode
   seed: number
@@ -127,6 +134,7 @@ export type LobbySnapshot = {
   commands: LobbyCommandEntry[]
   leaderboard: RaceResult[]
   gmPatches: GmDeliveredPatch[]
+  hostState: HostAuthoritativeState | null
   syncWarnings: string[]
 }
 
@@ -149,6 +157,7 @@ export class MultiplayerLobbyState {
   private readonly gmPatches = new Map<string, GmDeliveredPatch>()
   private readonly actions: LobbyActionEntry[] = []
   private readonly commands: LobbyCommandEntry[] = []
+  private hostState: HostAuthoritativeState | null = null
   private commandSequence = 0
   private combat: CombatTurnState = { active: false, round: 0, order: [] }
 
@@ -347,6 +356,37 @@ export class MultiplayerLobbyState {
     return entry
   }
 
+  updateAuthoritativeState(input: {
+    accepted?: unknown
+    commandSequence?: unknown
+    floor?: unknown
+    hp?: unknown
+    message?: unknown
+    playerId?: unknown
+    status?: unknown
+    turn?: unknown
+    x?: unknown
+    y?: unknown
+  }) {
+    const player = this.players.get(String(input.playerId || ""))
+    if (!player || player.role === "spectator") throw new Error(`Unknown host state player: ${String(input.playerId || "")}`)
+    this.hostState = {
+      accepted: input.accepted !== false,
+      commandSequence: positiveInt(input.commandSequence),
+      floor: positiveInt(input.floor),
+      hp: positiveInt(input.hp),
+      message: cleanActionLabel(input.message),
+      name: player.name,
+      playerId: player.id,
+      status: String(input.status || "running").replace(/[^\w -]/g, "").slice(0, 24) || "running",
+      turn: positiveInt(input.turn),
+      updatedAt: this.now(),
+      x: integer(input.x),
+      y: integer(input.y),
+    }
+    return this.hostState
+  }
+
   leaderboard() {
     return sortLeaderboard(this.results)
   }
@@ -365,6 +405,7 @@ export class MultiplayerLobbyState {
       commands: this.commands.slice(0, 50),
       leaderboard: this.leaderboard(),
       gmPatches: [...this.gmPatches.values()].sort((left, right) => right.approvedAt - left.approvedAt),
+      hostState: this.hostState ? { ...this.hostState } : null,
       syncWarnings: coopSyncWarnings([...this.coopStates.values()]),
     }
   }
