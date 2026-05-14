@@ -43,7 +43,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Auto-merge Changesets release PR
         if: steps.changesets.outputs.pullRequestNumber != ''
-        run: gh pr merge "$PR_NUMBER" --squash --auto --delete-branch
+        run: gh pr merge "$PR_NUMBER" --merge --auto --delete-branch
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ steps.changesets.outputs.pullRequestNumber }}
