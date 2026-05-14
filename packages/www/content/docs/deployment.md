@@ -20,6 +20,12 @@ Add the public Supabase URL and anonymous key in Vercel project settings. The pr
 - Lobby creation and invite instruction pages.
 - Static metadata and robots file.
 
+## Create and invite pages
+
+`/create` and `/create/[id]` are website helpers, not the game server. They can create a stable invite page, show the selected Multiplayer lobby variant, print the host command, and print the join command for friends.
+
+Players still need one running `opendungeon-host` process for live WebSocket play. The invite page should make that boundary obvious: Vercel can host the instructions for free, but it does not keep the current CLI lobby process alive.
+
 ## What still needs infrastructure
 
 The current multiplayer game host is a CLI WebSocket process. Vercel can describe and link lobbies, but it cannot keep a long-running game process alive as a normal static website page. Internet multiplayer needs a reachable host, a container/service, or a future browser realtime adapter.
