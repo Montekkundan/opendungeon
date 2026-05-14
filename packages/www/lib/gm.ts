@@ -96,6 +96,16 @@ export interface GmHostCommandEntry {
   name: string;
   payload: Record<string, string | number | boolean>;
   playerId: string;
+  result: {
+    accepted: boolean;
+    floor: number;
+    hp: number;
+    message: string;
+    status: string;
+    turn: number;
+    x: number;
+    y: number;
+  };
   sequence: number;
   type: "move" | "interact" | "combat" | "inventory" | "village";
 }

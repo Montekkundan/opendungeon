@@ -84,6 +84,7 @@ describe("multiplayer lobby state", () => {
       sequence: 1,
       type: "move",
     })
+    expect(command.result).toMatchObject({ accepted: true, message: "Command accepted." })
     expect(command.payload).toMatchObject({ direction: "east", floor: 1, hp: 19, turn: 2, x: 5, y: 5 })
     expect(command.payload.unsafe).toBe("script")
     expect(snapshot.commands[0]).toMatchObject({ id: command.id, playerId: "p1" })

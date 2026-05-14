@@ -562,7 +562,7 @@ function HostCommandLog({ snapshot }: { snapshot: GmHostSnapshot | null }) {
             </strong>
             <span>
               {command.type} - {command.accepted ? "accepted" : "rejected"} -{" "}
-              {command.label}
+              {command.label} - {command.result.message}
             </span>
           </div>
         ))

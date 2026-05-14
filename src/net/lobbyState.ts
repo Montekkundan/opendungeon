@@ -101,6 +101,18 @@ export type LobbyCommandEntry = {
   payload: Record<string, string | number | boolean>
   accepted: boolean
   acceptedAt: number
+  result: LobbyCommandResult
+}
+
+export type LobbyCommandResult = {
+  accepted: boolean
+  message: string
+  floor: number
+  turn: number
+  hp: number
+  x: number
+  y: number
+  status: string
 }
 
 export type LobbySnapshot = {
@@ -292,6 +304,7 @@ export class MultiplayerLobbyState {
     x?: unknown
     y?: unknown
     payload?: unknown
+    result?: unknown
   }) {
     const player = this.players.get(input.playerId)
     if (!player || player.role === "spectator") throw new Error(`Unknown command player: ${input.playerId}`)
@@ -305,6 +318,7 @@ export class MultiplayerLobbyState {
       x: integer(input.x),
       y: integer(input.y),
     })
+    const result = normalizeCommandResult(input.result, payload)
     const entry: LobbyCommandEntry = {
       id: createHash("sha256").update(`${player.id}:${acceptedAt}:${type}:${label}:${this.commandSequence}`).digest("hex").slice(0, 16),
       sequence: ++this.commandSequence,
@@ -313,15 +327,16 @@ export class MultiplayerLobbyState {
       type,
       label,
       payload,
-      accepted: true,
+      accepted: result.accepted,
       acceptedAt,
+      result,
     }
     this.commands.unshift(entry)
     this.trimCommands()
     this.recordAction({
       playerId: player.id,
       type,
-      label,
+      label: result.accepted ? label : `Rejected ${label}: ${result.message}`,
       floor: payload.floor,
       turn: payload.turn,
       hp: payload.hp,
@@ -436,6 +451,20 @@ function normalizeCommandPayload(value: unknown, fallback: Record<string, number
     else if (typeof raw === "string") payload[cleanKey] = raw.replace(/[^\w .,:;!?'"()/-]/g, "").replace(/\s+/g, " ").trim().slice(0, 120)
   }
   return payload
+}
+
+function normalizeCommandResult(value: unknown, fallback: Record<string, string | number | boolean>): LobbyCommandResult {
+  const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+  return {
+    accepted: record.accepted !== false,
+    floor: positiveInt(record.floor ?? fallback.floor),
+    hp: positiveInt(record.hp ?? fallback.hp),
+    message: cleanActionLabel(record.message || "Command accepted."),
+    status: String(record.status || "running").replace(/[^\w -]/g, "").slice(0, 24) || "running",
+    turn: positiveInt(record.turn ?? fallback.turn),
+    x: integer(record.x ?? fallback.x),
+    y: integer(record.y ?? fallback.y),
+  }
 }
 
 function cleanActionLabel(value: unknown) {

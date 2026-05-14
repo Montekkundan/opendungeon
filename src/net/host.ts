@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { WebSocketServer, type RawData, type WebSocket } from "ws"
 import { advertisedLobbyUrls, hostListenErrorMessage, lobbyEnvCommand, lobbyJoinCommand, parseLobbyHostArgs, preferredAdvertisedLobbyUrl, requestLobbyUrl } from "./hostConfig.js"
+import { HostCommandRelay } from "./hostCommandRelay.js"
 import { MultiplayerLobbyState, loadRaceResults, saveRaceResults, type LobbyRole } from "./lobbyState.js"
 
 type LobbySocketData = {
@@ -37,6 +38,7 @@ const lobby = new MultiplayerLobbyState({
   inviteCode: options.inviteCode,
   initialResults: options.leaderboardPath ? loadRaceResults(options.leaderboardPath) : [],
 })
+const commandRelay = new HostCommandRelay({ mode: options.mode, seed: options.seed })
 const sockets = new Set<LobbyWebSocket>()
 
 const server = createServer((request, response) => {
@@ -192,16 +194,27 @@ function handleSocketMessage(ws: LobbyWebSocket, message: RawData) {
     broadcastState()
   }
   if (payload.type === "command") {
+    const commandType = payload.commandType
+    const label = payload.label
+    const commandPayload = normalizeSocketCommandPayload(payload.payload, payload)
+    const result = commandRelay.apply({
+      label: typeof label === "string" ? label : "",
+      name: ws.data.name,
+      payload: commandPayload,
+      playerId: ws.data.id,
+      type: commandType === "move" || commandType === "combat" || commandType === "inventory" || commandType === "village" ? commandType : "interact",
+    })
     lobby.recordCommand({
       playerId: ws.data.id,
-      type: payload.commandType,
-      label: payload.label,
+      type: commandType,
+      label,
       floor: payload.floor,
       turn: payload.turn,
       hp: payload.hp,
       x: payload.x,
       y: payload.y,
-      payload: payload.payload,
+      payload: commandPayload,
+      result,
     })
     broadcastState()
   }
@@ -342,7 +355,7 @@ function renderLobbyPage(publicUrl: string): string {
           ? state.actions.slice(0, 12).map((action) => "<li>" + action.name + " · " + action.type + " · F" + action.floor + " T" + action.turn + " · " + action.label + "</li>").join("")
           : '<li class="muted">No player actions yet.</li>';
         document.querySelector("#commands").innerHTML = state.commands && state.commands.length
-          ? state.commands.slice(0, 12).map((command) => "<li>#" + command.sequence + " · " + command.name + " · " + command.type + " · " + command.label + "</li>").join("")
+          ? state.commands.slice(0, 12).map((command) => "<li>#" + command.sequence + " · " + command.name + " · " + command.type + " · " + command.label + " · " + command.result.message + "</li>").join("")
           : '<li class="muted">No accepted commands yet.</li>';
         document.querySelector("#gm-patches").innerHTML = state.gmPatches.length
           ? state.gmPatches.map((patch) => "<li>" + patch.title + " · " + patch.difficulty + " · " + patch.operationCount + " ops</li>").join("")
@@ -363,6 +376,20 @@ function cleanClientId(value: string | null) {
 
 function htmlEscape(value: string) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+}
+
+function normalizeSocketCommandPayload(value: unknown, fallback: Record<string, unknown>) {
+  const payload: Record<string, string | number | boolean> = {}
+  if (value && typeof value === "object") {
+    for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+      if (typeof raw === "string" || typeof raw === "number" || typeof raw === "boolean") payload[key] = raw
+    }
+  }
+  for (const key of ["floor", "hp", "turn", "x", "y"]) {
+    const raw = fallback[key]
+    if (typeof raw === "string" || typeof raw === "number" || typeof raw === "boolean") payload[key] = raw
+  }
+  return payload
 }
 
 function printStartup() {
