@@ -86,7 +86,7 @@ import { handleSetupCommand } from "./system/firstRunSetup.js"
 import { acquireLocalRunLock, releaseLocalRunLock, type LocalRunLock } from "./system/localRunLock.js"
 import { debugOverlaysEnabled } from "./system/debugFlags.js"
 import { checkInternetConnectivity } from "./net/connectivity.js"
-import { normalizeLobbyBaseUrl } from "./net/hostConfig.js"
+import { lobbyInviteErrorMessage, lobbyInviteMismatchNotice, lobbyJoinUsageMessage, normalizeLobbyBaseUrl } from "./net/hostConfig.js"
 import type { CoopSyncState, LobbySnapshot } from "./net/lobbyState.js"
 import { checkForUpdate, checkingUpdateStatus, handleUpdateCommand } from "./system/updateCheck.js"
 import { easeInOutQuart, lerp } from "./shared/numeric.js"
@@ -2193,7 +2193,7 @@ async function resolveJoinCommand(args: string[]): Promise<CliJoin | null> {
   if (args[0] !== "join") return null
   const lobbyUrl = normalizeLobbyBaseUrl(args[1] || "")
   if (!lobbyUrl) {
-    console.error("Usage: opendungeon join <lobby-url>")
+    console.error(lobbyJoinUsageMessage(args[1] || ""))
     process.exit(1)
   }
 
@@ -2206,17 +2206,18 @@ async function resolveJoinCommand(args: string[]): Promise<CliJoin | null> {
     const mode = invite.mode === "coop" || invite.mode === "race" ? invite.mode : undefined
     const seed = Number.isFinite(Number(invite.seed)) ? Math.floor(Number(invite.seed)) : undefined
     const url = normalizeLobbyBaseUrl(invite.url || lobbyUrl) || lobbyUrl
+    const mismatchNotice = lobbyInviteMismatchNotice(mode, seed)
     return {
       lobbyUrl: url,
       seed,
       mode,
-      status: `Joining lobby ${url}.`,
+      status: `Joining lobby ${url}.${mismatchNotice}`,
       autoStart: Boolean(seed && mode),
     }
-  } catch {
+  } catch (error) {
     return {
       lobbyUrl,
-      status: `Could not read lobby invite at ${lobbyUrl}. Check the server URL and port.`,
+      status: lobbyInviteErrorMessage(lobbyUrl, error),
       autoStart: false,
     }
   }

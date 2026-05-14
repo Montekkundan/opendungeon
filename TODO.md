@@ -118,7 +118,7 @@
 - [x] Multiplayer with GM mode: a logged-in website-only GM/Dungeon Master flow where the GM sees connected players, live player state, action logs, world status, generated assets, and pending story/level patches.
 - [ ] Decide the authoritative gameplay model for co-op and GM play: host-owned action relay, shared deterministic command log, Supabase Realtime presence/broadcast, or a dedicated realtime backend. Current lobby state sync is not enough for internet-grade co-op.
 - [ ] Build a deployment story for internet multiplayer. Vercel can host the website/invites, but the WebSocket game host needs Docker, VPS, Fly/Render/Railway, Supabase Realtime, or another long-running backend.
-- [ ] Add clear error messages for bad lobby URLs, unreachable LAN hosts, port conflicts, stale locks, and mismatched lobby seed/mode.
+- [x] Add clear error messages for bad lobby URLs, unreachable LAN hosts, port conflicts, stale locks, and mismatched lobby seed/mode.
 
 ### Cloud, Supabase, And AI Admin
 

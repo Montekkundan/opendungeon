@@ -1,5 +1,17 @@
 import { describe, expect, test } from "bun:test"
-import { advertisedLobbyUrls, lobbyEnvCommand, lobbyJoinCommand, normalizeLobbyBaseUrl, parseLobbyHostArgs, preferredAdvertisedLobbyUrl, requestLobbyUrl } from "./hostConfig.js"
+import {
+  advertisedLobbyUrls,
+  hostListenErrorMessage,
+  lobbyEnvCommand,
+  lobbyInviteErrorMessage,
+  lobbyInviteMismatchNotice,
+  lobbyJoinCommand,
+  lobbyJoinUsageMessage,
+  normalizeLobbyBaseUrl,
+  parseLobbyHostArgs,
+  preferredAdvertisedLobbyUrl,
+  requestLobbyUrl,
+} from "./hostConfig.js"
 
 describe("lobby host config", () => {
   test("defaults to a server-ready bind host and port", () => {
@@ -69,5 +81,25 @@ describe("lobby host config", () => {
     expect(normalizeLobbyBaseUrl("play.example.com:3737/invite?x=1")).toBe("http://play.example.com:3737")
     expect(lobbyJoinCommand("http://play.example.com:3737")).toBe("opendungeon join http://play.example.com:3737")
     expect(lobbyEnvCommand("http://play.example.com:3737", { mode: "coop", seed: 123 })).toContain("OPENDUNGEON_LOBBY_URL=http://play.example.com:3737")
+  })
+
+  test("explains bad lobby URLs and unreachable hosts", () => {
+    expect(lobbyJoinUsageMessage("not a url")).toContain("Could not parse lobby URL")
+    expect(lobbyInviteErrorMessage("http://127.0.0.1:3737", { code: "ECONNREFUSED" })).toContain("No host is listening")
+    expect(lobbyInviteErrorMessage("http://127.0.0.1:3737", { name: "AbortError" })).toContain("timed out")
+    expect(lobbyInviteErrorMessage("http://127.0.0.1:3737", new Error("HTTP 404"))).toContain("opendungeon-host URL")
+  })
+
+  test("explains lobby seed and mode overrides", () => {
+    expect(lobbyInviteMismatchNotice("coop", 123, { OPENDUNGEON_MODE: "race", OPENDUNGEON_SEED: "999" })).toBe(" Lobby mode coop overrides race and seed 123 overrides 999.")
+    expect(lobbyInviteMismatchNotice("coop", 123, { OPENDUNGEON_MODE: "coop", OPENDUNGEON_SEED: "123" })).toBe("")
+  })
+
+  test("prints friendly host listen errors", () => {
+    const options = parseLobbyHostArgs(["--host", "127.0.0.1", "--port", "3737"], {})
+
+    expect(hostListenErrorMessage({ code: "EADDRINUSE" }, options)).toContain("already in use")
+    expect(hostListenErrorMessage({ code: "EADDRNOTAVAIL" }, options)).toContain("not available")
+    expect(hostListenErrorMessage({ code: "EACCES" }, options)).toContain("above 1024")
   })
 })

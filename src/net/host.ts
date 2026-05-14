@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { WebSocketServer, type RawData, type WebSocket } from "ws"
-import { advertisedLobbyUrls, lobbyEnvCommand, lobbyJoinCommand, parseLobbyHostArgs, preferredAdvertisedLobbyUrl, requestLobbyUrl } from "./hostConfig.js"
+import { advertisedLobbyUrls, hostListenErrorMessage, lobbyEnvCommand, lobbyJoinCommand, parseLobbyHostArgs, preferredAdvertisedLobbyUrl, requestLobbyUrl } from "./hostConfig.js"
 import { MultiplayerLobbyState, loadRaceResults, saveRaceResults, type LobbyRole } from "./lobbyState.js"
 
 type LobbySocketData = {
@@ -81,6 +81,10 @@ websocketServer.on("connection", (ws: LobbyWebSocket) => {
   ws.on("message", (message) => handleSocketMessage(ws, message))
 })
 
+server.on("error", (error) => {
+  console.error(hostListenErrorMessage(error, options))
+  process.exit(1)
+})
 server.listen(options.port, options.bindHost, printStartup)
 
 function submitResult(request: IncomingMessage, response: ServerResponse) {
