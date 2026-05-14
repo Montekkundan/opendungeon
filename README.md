@@ -90,6 +90,8 @@ opendungeon-host --host 0.0.0.0 --public-url http://YOUR_SERVER_IP:3737 --mode c
 opendungeon join http://YOUR_SERVER_IP:3737
 ```
 
+The live game is host-authoritative: the `opendungeon-host` process validates actions, keeps the deterministic command log, and broadcasts state. Vercel can host invite pages and `/gm`, while internet multiplayer needs a long-running host on a VPS, Docker platform, Fly/Render/Railway, or another WebSocket-capable service.
+
 For local source testing:
 
 ```bash

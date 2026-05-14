@@ -116,8 +116,8 @@
 - [x] Single Player mode: the authored opendungeon story loop, lore, deterministic dungeon rules, village meta-progression, and curated/local assets; no external GM content should alter this canonical offline story.
 - [x] Multiplayer mode: the same authored story loop, lore, rules, and assets as Single Player, but with multiple users sharing the world like Stardew Valley co-op. Shared farm/houses/village permissions should sit on top of the canonical story rather than replacing it.
 - [x] Multiplayer with GM mode: a logged-in website-only GM/Dungeon Master flow where the GM sees connected players, live player state, action logs, world status, generated assets, and pending story/level patches.
-- [ ] Decide the authoritative gameplay model for co-op and GM play: host-owned action relay, shared deterministic command log, Supabase Realtime presence/broadcast, or a dedicated realtime backend. Current lobby state sync is not enough for internet-grade co-op.
-- [ ] Build a deployment story for internet multiplayer. Vercel can host the website/invites, but the WebSocket game host needs Docker, VPS, Fly/Render/Railway, Supabase Realtime, or another long-running backend.
+- [x] Decide the authoritative gameplay model for co-op and GM play: host-owned action relay with a shared deterministic command log. Supabase handles auth, persistence, GM patch rows, and presence/approved-patch notifications, but the current lobby host remains the gameplay authority.
+- [x] Build a deployment story for internet multiplayer. Vercel hosts the website/invites, while live play needs `opendungeon-host` on Docker, VPS, Fly/Render/Railway, or another long-running WebSocket-capable backend.
 - [x] Add clear error messages for bad lobby URLs, unreachable LAN hosts, port conflicts, stale locks, and mismatched lobby seed/mode.
 
 ### Cloud, Supabase, And AI Admin

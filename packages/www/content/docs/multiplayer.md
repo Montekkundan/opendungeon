@@ -18,6 +18,16 @@ This makes one-laptop multiplayer testing a first-class feature. Contributors ca
 
 The automated host smoke test covers this shape without opening terminal windows. It starts a real lobby host, connects two guest players and one spectator, sends sync packets, disconnects one player, and submits a result.
 
+## Authoritative model
+
+The chosen model is host-authoritative. One `opendungeon-host` process owns the run, validates player actions, appends them to a deterministic command log, and broadcasts snapshots plus events to connected clients. Clients render and predict local UI, but they do not decide combat results, tutorial gate progress, loot grants, village state, or GM patch application.
+
+The command log is the shared truth for co-op. Movement, tutorial checklist rows, NPC choices, d20 rolls, combat actions, inventory changes, village preparation, and final-gate progress should become typed commands. That keeps local co-op, LAN play, replay/debug tooling, and later cloud persistence on the same rule path.
+
+Supabase Realtime is not the movement authority for the current game. It is the account, presence, persistence, and GM coordination layer: profiles, cloud saves, world ownership, action-log uploads, GM patch rows, and approved-patch notifications. If browser-native play replaces the CLI host later, it should still keep an authoritative command log instead of peer-to-peer state.
+
+Multiplayer with GM uses the same host-authoritative runtime. The website GM console can propose lore, room, monster, quest, and sprite changes, but every change must be schema-validated, approved, written to the GM-owned world in Supabase, and then applied by the host as a command-log event. GM-created assets and lore stay scoped to that world and never replace the canonical Single Player story.
+
 ## Host and join
 
 ```txt
@@ -53,4 +63,4 @@ OPENDUNGEON_TERMINAL_APP=Ghostty bun run dev -- join http://127.0.0.1:3737
 
 ## Future browser play
 
-A Vercel-only page can create invites, explain setup, and store profile state. Browser-native multiplayer needs a realtime transport such as Supabase Realtime or another state server before the website can replace the CLI host.
+A Vercel-only page can create invites, explain setup, and store profile state. Browser-native multiplayer needs an authoritative realtime service before the website can replace the CLI host. Supabase Realtime can help with presence and approved GM updates, but high-frequency gameplay should stay behind a host process, a dedicated realtime backend, or a future browser adapter that preserves the command-log model.
