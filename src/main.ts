@@ -223,6 +223,7 @@ const model: AppModel = {
   bookTabIndex: 0,
   questIndex: 0,
   tutorialIndex: 0,
+  levelUpIndex: null,
   internetStatus: "checking",
   currentVersion: version,
   updateStatus: checkingUpdateStatus(version),
@@ -1084,11 +1085,25 @@ function blockVillageShortcut() {
 }
 
 function handleLevelUpKey(key: KeyEvent) {
-  if (/^[1-3]$/.test(key.name)) {
-    chooseLevelUpTalent(model.session, Number(key.name) - 1)
+  const choiceCount = model.session.levelUp?.choices.length ?? 0
+  if (/^[1-9]$/.test(key.name)) {
+    const index = Number(key.name) - 1
+    if (index >= 0 && index < choiceCount) {
+      model.levelUpIndex = index
+      model.message = `${model.session.levelUp?.choices[index]?.name ?? "Talent"} selected. Press Enter to learn it.`
+      return
+    }
+    model.message = `Choose a talent from 1-${choiceCount}.`
     return
   }
-  if (isConfirmKey(key)) chooseLevelUpTalent(model.session, 0)
+  if (isConfirmKey(key)) {
+    if (model.levelUpIndex === null || model.levelUpIndex < 0 || model.levelUpIndex >= choiceCount) {
+      model.message = `Press 1-${choiceCount} to select a talent first.`
+      return
+    }
+    chooseLevelUpTalent(model.session, model.levelUpIndex)
+    model.levelUpIndex = null
+  }
 }
 
 function handleCombatKey(key: KeyEvent) {

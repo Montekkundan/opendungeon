@@ -133,6 +133,7 @@ export type AppModel = {
   bookTabIndex: number
   questIndex: number
   tutorialIndex: number
+  levelUpIndex: number | null
   internetStatus: InternetStatus
   currentVersion: string
   updateStatus: UpdateStatus
@@ -869,7 +870,7 @@ function drawGame(canvas: Canvas, model: AppModel) {
   if (!model.uiHidden) drawToasts(canvas, session)
   if (session.status !== "running") drawRunEnd(canvas, session)
   if (session.skillCheck) drawSkillCheckModal(canvas, session, model.diceRollAnimation, model.settings)
-  if (session.levelUp) drawLevelUpModal(canvas, session)
+  if (session.levelUp) drawLevelUpModal(canvas, session, model.levelUpIndex)
   drawUiToggleHint(canvas, model.uiHidden)
 }
 
@@ -1975,7 +1976,7 @@ function drawSkillCheckModal(canvas: Canvas, session: GameSession, animation: Di
   }
 }
 
-function drawLevelUpModal(canvas: Canvas, session: GameSession) {
+function drawLevelUpModal(canvas: Canvas, session: GameSession, selectedIndex: number | null = null) {
   const levelUp = session.levelUp
   if (!levelUp) return
   const width = Math.min(86, canvas.width - 8)
@@ -1992,13 +1993,18 @@ function drawLevelUpModal(canvas: Canvas, session: GameSession) {
     const rowY = y + 7 + index * 3
     const rowW = width - 24
     const rowX = x + 19
-    canvas.fill(rowX, rowY, rowW, 2, " ", cleanPanel2, cleanPanel2)
-    canvas.write(rowX + 2, rowY, `${index + 1}`, UI.gold, cleanPanel2)
-    canvas.write(rowX + 5, rowY, trim(choice.name, rowW - 7), UI.focus, cleanPanel2)
-    canvas.write(rowX + 5, rowY + 1, trim(choice.text, rowW - 7), UI.soft, cleanPanel2)
+    const selected = index === selectedIndex
+    const bg = selected ? UI.panel3 : cleanPanel2
+    canvas.fill(rowX, rowY, rowW, 2, " ", bg, bg)
+    if (selected) canvas.write(rowX, rowY, ">", UI.gold, bg)
+    canvas.write(rowX + 2, rowY, `${index + 1}`, UI.gold, bg)
+    canvas.write(rowX + 5, rowY, trim(choice.name, rowW - 7), UI.focus, bg)
+    canvas.write(rowX + 5, rowY + 1, trim(choice.text, rowW - 7), UI.soft, bg)
   })
 
-  canvas.center(y + height - 2, "Press 1-3 to choose. Enter chooses the first talent.", UI.muted, UI.panel)
+  const maxChoice = Math.min(9, levelUp.choices.length)
+  const footer = selectedIndex === null ? `Press 1-${maxChoice} to select a talent. Enter waits.` : `Talent ${selectedIndex + 1} selected. Press Enter to learn it.`
+  canvas.center(y + height - 2, footer, selectedIndex === null ? UI.muted : UI.focus, UI.panel)
 }
 
 function drawCheckBar(canvas: Canvas, x: number, y: number, width: number, labelText: string, valueText: string, value: number, max: number, color: string) {

@@ -15,7 +15,7 @@
 ## Latest Playtest Bugs And Requested Fixes
 
 - [ ] GM difficulty steering: in `/gm`, let a logged-in GM steer the AI/agent from the multiplayer web view to make the current world harder or easier in a D&D-style way. The GM should see live players/state, request encounter/rule/story changes, review the generated patch, then apply it to connected players after validation.
-- [ ] Level-up talent selection bug: pressing Enter currently selects the top talent too easily. Require an explicit `1`, `2`, `3`, etc. choice first, then Enter confirms the highlighted/numbered talent.
+- [x] Level-up talent selection bug: pressing Enter currently selects the top talent too easily. Require an explicit `1`, `2`, `3`, etc. choice first, then Enter confirms the highlighted/numbered talent.
 - [ ] Talent unlock bug: unlocked talents such as Pathfinder must visibly affect available combat moves, combat strategy text, or the relevant stats. If a talent is passive-only, label it as passive in the state/character screen instead of implying it should appear as a fight move.
 - [ ] Inventory hover/detail bug: the inventory detail pane should describe the hovered/highlighted item, not a stale or previously selected item.
 - [ ] Item action design bug: items that currently say "No apply action yet" need real handling. Decide and implement inspect/equip/use/sell/drop/stash paths, and make unavailable actions explain what the item is for.

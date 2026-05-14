@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { applyOpeningStoryBranch, createSession, playLocalCutscene, selectSkill, tryMove, unlockHub } from "../game/session.js"
+import { applyOpeningStoryBranch, createSession, grantXp, playLocalCutscene, selectSkill, tryMove, unlockHub } from "../game/session.js"
 import { setTile } from "../game/dungeon.js"
 import { defaultSettings } from "../game/settingsStore.js"
 import { hashText } from "../shared/hash.js"
@@ -406,6 +406,19 @@ test("talent check modal shows the full D20 rule and result copy", () => {
   expect(text).not.toContain("1 fa…")
 })
 
+test("level-up modal requires an explicit talent selection before enter", () => {
+  const session = createSession(1234, "solo", "arcanist")
+  grantXp(session, 10)
+  const waiting = screenText(draw(modelFor("game", session), 100, 32).chunks)
+  expect(waiting).toContain("Press 1-3 to select a talent")
+  expect(waiting).toContain("Enter waits")
+  expect(waiting).not.toContain("Enter chooses")
+
+  const selected = screenText(draw(modelFor("game", session, { levelUpIndex: 1 }), 100, 32).chunks)
+  expect(selected).toContain("Talent 2 selected")
+  expect(selected).toContain("Press Enter to learn it")
+})
+
 test("book dialog separates monster entries into the monster tab", () => {
   const session = createSession(1234)
   const target = { x: session.player.x + 1, y: session.player.y }
@@ -531,6 +544,7 @@ function modelFor(screen: ScreenId, session = createSession(1234), overrides: Pa
     bookTabIndex: 0,
     questIndex: 0,
     tutorialIndex: 0,
+    levelUpIndex: null,
     internetStatus: "online",
     currentVersion: "0.1.0",
     updateStatus: checkingUpdateStatus("0.1.0"),
