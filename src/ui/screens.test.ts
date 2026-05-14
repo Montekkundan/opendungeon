@@ -308,6 +308,7 @@ test("inventory presents gold and full action labels", () => {
   const text = screenText(output.chunks)
 
   expect(text).toContain("Gold 0")
+  expect(text).toContain("WEAPON")
   expect(text).toContain("Enter use")
   expect(text).toContain("E equip")
   expect(text).toContain("X drop")
@@ -322,6 +323,7 @@ test("inventory details follow the highlighted slot exactly", () => {
   const empty = screenText(draw(modelFor("game", session, { dialog: "inventory", inventoryIndex: 12 }), 120, 40).chunks)
 
   expect(vial).toContain("Dew vial")
+  expect(vial).toContain("CONSUMABLE")
   expect(vial).toContain("Consumable")
   expect(vial).toContain("Compare: utility or loot item")
   expect(vial).not.toContain("Equipped weapon: affects")

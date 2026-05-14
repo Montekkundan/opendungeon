@@ -2444,9 +2444,9 @@ function dialogMetrics(dialog: NonNullable<DialogId>, canvasWidth: number, canva
 function inventoryLayout(model: AppModel, width: number, height: number): InventoryLayout {
   const frame = dialogMetrics("inventory", width, height)
   const innerX = frame.x + 3
-  const innerY = frame.y + 4
+  const innerY = frame.y + 3
   const innerW = frame.width - 6
-  const innerH = frame.height - 8
+  const innerH = frame.height - 7
   const characterW = Math.min(36, Math.max(24, Math.floor(innerW * 0.32)))
   const character: Rect = { x: innerX, y: innerY, width: characterW, height: innerH - 9 }
   const pack: Rect = {
@@ -2455,11 +2455,11 @@ function inventoryLayout(model: AppModel, width: number, height: number): Invent
     width: Math.max(28, innerW - characterW - 2),
     height: innerH - 9,
   }
-  const details: Rect = { x: innerX, y: frame.y + frame.height - 12, width: innerW, height: 8 }
+  const details: Rect = { x: innerX, y: frame.y + frame.height - 11, width: innerW, height: 7 }
   const apply: Rect = { x: frame.x + frame.width - 34, y: frame.y + frame.height - 3, width: 14, height: 1 }
   const close: Rect = { x: frame.x + frame.width - 18, y: frame.y + frame.height - 3, width: 12, height: 1 }
   const columns = clamp(Math.floor((pack.width - 4) / 12), 3, 6)
-  const slotW = Math.max(9, Math.floor((pack.width - 4 - (columns - 1)) / columns))
+  const slotW = Math.max(10, Math.floor((pack.width - 4 - (columns - 1)) / columns))
   const slotH = 5
   const rows = Math.max(2, Math.floor((pack.height - 5) / slotH))
   const slots: Rect[] = []
@@ -2469,7 +2469,7 @@ function inventoryLayout(model: AppModel, width: number, height: number): Invent
         x: pack.x + 2 + col * (slotW + 1),
         y: pack.y + 3 + row * slotH,
         width: slotW,
-        height: 4,
+        height: 5,
       })
     }
   }
@@ -2543,6 +2543,28 @@ function inventorySprite(name: string): PixelSpriteId {
   return "chest"
 }
 
+type InventoryVisualKind = "weapon" | "relic" | "consumable" | "record" | "village" | "loot"
+
+function inventoryVisual(name: string): { accent: string; bg: string; chip: string; kind: InventoryVisualKind; sprite: PixelSpriteId } {
+  const lower = name.toLowerCase()
+  if (/blade|sword|axe|mace|rapier|bow|arrow|spanner|knife|dagger/.test(lower)) {
+    return { accent: "#d8dee9", bg: "#17202a", chip: "W", kind: "weapon", sprite: inventorySprite(name) }
+  }
+  if (/relic|shard|charm|token|spark|idol|env/.test(lower)) {
+    return { accent: UI.gold, bg: "#211f18", chip: "R", kind: "relic", sprite: inventorySprite(name) }
+  }
+  if (/potion|vial|food|ration|salve/.test(lower)) {
+    return { accent: UI.focus, bg: "#14241d", chip: "C", kind: "consumable", sprite: inventorySprite(name) }
+  }
+  if (/scroll|map|ledger|note|book/.test(lower)) {
+    return { accent: UI.cyan, bg: "#13252b", chip: "B", kind: "record", sprite: inventorySprite(name) }
+  }
+  if (/deed|recipe|tool|keepsake/.test(lower)) {
+    return { accent: UI.brass, bg: "#241f15", chip: "V", kind: "village", sprite: inventorySprite(name) }
+  }
+  return { accent: UI.soft, bg: "#161d24", chip: "$", kind: "loot", sprite: inventorySprite(name) }
+}
+
 function countInventory(session: GameSession, name: string) {
   return session.inventory.filter((item) => item === name).length
 }
@@ -2582,11 +2604,13 @@ function drawInventoryDialog(canvas: Canvas, model: AppModel) {
   if (selectedItem) {
     const actions = inventoryActionsForItem(model.session, selectedIndex)
     const enabledActions = actions.map((action) => `${action.key} ${action.label}${action.enabled ? "" : " off"}`)
-    drawMiniIcon(canvas, layout.details.x + 2, layout.details.y + 1, inventorySprite(selectedItem), 6, 1)
-    writeWrapped(canvas, layout.details.x + 10, layout.details.y + 1, Math.floor(layout.details.width * 0.28), [selectedItem], 2, UI.gold, UI.panel)
-    writeWrapped(canvas, layout.details.x + Math.floor(layout.details.width * 0.36), layout.details.y + 1, Math.floor(layout.details.width * 0.58), [inventoryItemDescription(selectedItem)], 3, UI.soft, UI.panel)
+    const visual = inventoryVisual(selectedItem)
+    drawItemCard(canvas, { x: layout.details.x + 2, y: layout.details.y + 1, width: 10, height: 5 }, selectedItem, true, false, true)
+    canvas.write(layout.details.x + 14, layout.details.y + 1, visual.kind.toUpperCase(), visual.accent, UI.panel)
+    writeWrapped(canvas, layout.details.x + 14, layout.details.y + 2, Math.floor(layout.details.width * 0.24), [selectedItem], 2, UI.gold, UI.panel)
+    writeWrapped(canvas, layout.details.x + Math.floor(layout.details.width * 0.42), layout.details.y + 1, Math.floor(layout.details.width * 0.54), [inventoryItemDescription(selectedItem)], 3, UI.soft, UI.panel)
     const compare = inventoryCompareText(model.session, selectedItem)
-    writeWrapped(canvas, layout.details.x + 2, layout.details.y + 4, layout.details.width - 4, [compare], 1, UI.muted, UI.panel)
+    writeWrapped(canvas, layout.details.x + 14, layout.details.y + 4, layout.details.width - 16, [compare], 1, UI.muted, UI.panel)
     writeWrapped(canvas, layout.details.x + 2, layout.details.y + 5, layout.details.width - 4, [enabledActions.join("  ")], 2, UI.ink, UI.panel)
   } else {
     canvas.write(layout.details.x + 2, layout.details.y + 1, model.session.inventory.length ? "Empty slot." : "Pack is empty.", UI.soft, UI.panel)
@@ -2603,16 +2627,40 @@ function drawEquipmentLine(canvas: Canvas, x: number, y: number, width: number, 
 }
 
 function drawInventorySlot(canvas: Canvas, rect: Rect, item: string | undefined, selected: boolean, dragging: boolean) {
-  const bg = selected ? cleanPanel3 : cleanPanel2
+  drawItemCard(canvas, rect, item, selected, dragging)
+}
+
+function drawItemCard(canvas: Canvas, rect: Rect, item: string | undefined, selected: boolean, dragging: boolean, detail = false) {
+  const emptyBg = selected ? cleanPanel3 : cleanPanel2
+  if (!item) {
+    canvas.fill(rect.x, rect.y, rect.width, rect.height, " ", emptyBg, emptyBg)
+    drawCleanBox(canvas, rect.x, rect.y, rect.width, rect.height, selected ? UI.edge : cleanLine, emptyBg)
+    const midY = rect.y + Math.max(1, Math.floor(rect.height / 2))
+    if (rect.width >= 8) canvas.write(rect.x + 2, midY, "empty", UI.muted, emptyBg)
+    return
+  }
+
+  const visual = inventoryVisual(item)
+  const bg = selected ? "#22303c" : visual.bg
   canvas.fill(rect.x, rect.y, rect.width, rect.height, " ", bg, bg)
-  drawCleanBox(canvas, rect.x, rect.y, rect.width, rect.height, selected ? UI.gold : cleanLine, bg)
+  drawCleanBox(canvas, rect.x, rect.y, rect.width, rect.height, selected ? UI.gold : visual.accent, bg)
   if (selected || dragging) canvas.fill(rect.x, rect.y, 1, rect.height, " ", dragging ? UI.cyan : UI.gold, dragging ? UI.cyan : UI.gold)
-  if (!item) return
-  drawMiniIcon(canvas, rect.x + 2, rect.y + 1, inventorySprite(item), Math.min(5, Math.max(4, rect.width - 4)), 1, dragging ? 0.65 : 1)
+
+  const iconW = detail ? Math.min(8, rect.width - 2) : Math.min(8, Math.max(5, rect.width - 4))
+  const iconH = detail ? Math.min(3, rect.height - 2) : Math.min(3, Math.max(2, rect.height - 3))
+  const iconX = rect.x + Math.max(1, Math.floor((rect.width - iconW) / 2))
+  drawMiniIcon(canvas, iconX, rect.y + 1, visual.sprite, iconW, iconH, dragging ? 0.65 : 1)
+
+  if (rect.width >= 6) {
+    const chipBg = selected ? UI.gold : cleanPanel3
+    canvas.fill(rect.x + rect.width - 4, rect.y + 1, 3, 1, " ", chipBg, chipBg)
+    canvas.write(rect.x + rect.width - 3, rect.y + 1, visual.chip, selected ? "#101820" : visual.accent, chipBg)
+  }
+
   const labelWidth = Math.max(0, rect.width - 2)
-  if (labelWidth >= 5) {
+  if (labelWidth >= 5 && rect.height >= 4) {
     const labelY = rect.y + rect.height - 2
-    const labelBg = selected ? "#22303c" : "#111c25"
+    const labelBg = selected ? "#18242e" : "#101821"
     canvas.fill(rect.x + 1, labelY, rect.width - 2, 1, " ", labelBg, labelBg)
     canvas.write(rect.x + 1, labelY, trimInventoryLabel(item, labelWidth), selected ? UI.gold : UI.ink, labelBg)
   }
