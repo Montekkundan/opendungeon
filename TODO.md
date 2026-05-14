@@ -27,7 +27,7 @@
 - [x] Add a state/character sheet screen that shows full stats, skill tree, unlocked talents, passive/active effects, level-up rewards, equipment bonuses, current run modifiers, and what each reward changed.
 - [x] Redesign the inventory screen visuals: improve item sprites/icons, slot layout, selected/hover detail, action hints, comparison text, and terminal readability so pack items no longer look like placeholder glyphs.
 - [x] Rebalance post-tutorial combat for a 3-floor first arc: Floor 3 should remain approachable, but later descents need strategic battles with enemy roles, resistances/weaknesses, focus pressure, positioning, and multi-turn decisions instead of one-hit clears.
-- [ ] Replace the current mostly-text village with a real walkable sprite village: player sprite, NPC sprites, trees, walls, paths, homes, shop, farm, broken hut/ruins, restoration states, and visible upgrades as buildings improve.
+- [x] Replace the current mostly-text village with a real walkable sprite village: player sprite, NPC sprites, trees, walls, paths, homes, shop, farm, broken hut/ruins, restoration states, and visible upgrades as buildings improve.
 
 ## Next Gameplay Improvements To Approve
 

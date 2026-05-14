@@ -40,6 +40,8 @@ import {
   type GameSession,
   type HeroClass,
   type MultiplayerMode,
+  type VillageLocationId,
+  type VillageNpcId,
 } from "../game/session.js"
 import { appearanceLabel, heroSpriteForAppearance, normalizeHeroAppearance, weaponSpriteForAppearance, type HeroAppearance } from "../game/appearance.js"
 import { villageSeedModeLabel, type VillageSeedMode } from "../game/descentSeed.js"
@@ -945,10 +947,19 @@ function drawVillage(canvas: Canvas, model: AppModel) {
 
 function drawVillageMap(canvas: Canvas, model: AppModel, x: number, y: number, width: number, height: number) {
   const hub = model.session.hub
-  canvas.fill(x, y, width, height, " ", cleanPanel2, cleanPanel2)
-  for (let row = 1; row < height - 1; row += 2) canvas.write(x + 1, y + row, trim(".".repeat(Math.max(0, width - 2)), width - 2), UI.muted, cleanPanel2)
+  canvas.fill(x, y, width, height, " ", "#17241d", "#17241d")
+  for (let row = 0; row < height; row++) {
+    for (let col = 0; col < width; col++) {
+      const variant = (col * 7 + row * 5 + model.session.seed) % 11
+      const bg = variant < 4 ? "#213629" : variant < 8 ? "#1a2c22" : "#233b2d"
+      canvas.write(x + col, y + row, variant === 0 ? "·" : " ", variant === 0 ? "#6d8774" : bg, bg)
+    }
+  }
+
   const cellW = Math.max(2, Math.floor(width / 19))
   const cellH = Math.max(1, Math.floor(height / 10))
+  drawVillageBoundary(canvas, x, y, width, height)
+
   const roads = [
     ["portal", "blacksmith"],
     ["portal", "market"],
@@ -957,18 +968,23 @@ function drawVillageMap(canvas: Canvas, model: AppModel, x: number, y: number, w
     ["portal", "guildhall"],
   ] as const
   roads.forEach(([from, to]) => drawVillageRoad(canvas, x, y, cellW, cellH, villageLocations[from].position, villageLocations[to].position))
+
   villageLocationIds.forEach((id) => {
     const location = villageLocations[id]
-    const px = x + clamp(location.position.x * cellW, 1, width - 3)
-    const py = y + clamp(location.position.y * cellH, 1, height - 2)
+    const { px, py } = villagePointToScreen(x, y, width, height, cellW, cellH, location.position)
     const selected = hub.village.selectedLocation === id
-    const bg = selected ? cleanPanel3 : cleanPanel2
-    canvas.fill(px - 1, py, 3, 1, " ", bg, bg)
-    canvas.write(px, py, location.glyph, selected ? UI.gold : UI.focus, bg)
+    drawVillageBuilding(canvas, px, py, id, selected, villageLocationBuilt(hub, id))
   })
-  const playerX = x + clamp(hub.village.player.x * cellW, 1, width - 3)
-  const playerY = y + clamp(hub.village.player.y * cellH, 1, height - 2)
-  canvas.write(playerX, playerY, "@", UI.hp, cleanPanel3)
+
+  hub.village.schedules.forEach((schedule, index) => {
+    if (!schedule.available) return
+    const location = villageLocations[schedule.location]
+    const { px, py } = villagePointToScreen(x, y, width, height, cellW, cellH, location.position)
+    drawVillageNpc(canvas, px - 1 + (index % 2) * 3, py + 2 + Math.floor(index / 2), schedule.npc)
+  })
+
+  const player = villagePointToScreen(x, y, width, height, cellW, cellH, hub.village.player)
+  drawPixelBlock(canvas, player.px - 2, player.py - 1, animatedPixelSprite(classSprite(model.session.hero.classId, model.session.hero.appearance), "idle", model.session.turn, 6, 3), 0.85)
 }
 
 function drawVillageRoad(canvas: Canvas, x: number, y: number, cellW: number, cellH: number, from: { x: number; y: number }, to: { x: number; y: number }) {
@@ -978,8 +994,86 @@ function drawVillageRoad(canvas: Canvas, x: number, y: number, cellW: number, ce
   const endY = y + to.y * cellH
   const stepX = Math.sign(endX - startX)
   const stepY = Math.sign(endY - startY)
-  for (let px = startX; px !== endX; px += stepX || 1) canvas.write(px, startY, "·", UI.soft, cleanPanel2)
-  for (let py = startY; py !== endY; py += stepY || 1) canvas.write(endX, py, "·", UI.soft, cleanPanel2)
+  for (let px = startX; px !== endX; px += stepX || 1) paintVillagePath(canvas, px, startY)
+  for (let py = startY; py !== endY; py += stepY || 1) paintVillagePath(canvas, endX, py)
+  paintVillagePath(canvas, endX, endY)
+}
+
+function villagePointToScreen(x: number, y: number, width: number, height: number, cellW: number, cellH: number, point: { x: number; y: number }) {
+  return {
+    px: x + clamp(point.x * cellW, 2, width - 4),
+    py: y + clamp(point.y * cellH, 2, height - 3),
+  }
+}
+
+function paintVillagePath(canvas: Canvas, x: number, y: number) {
+  canvas.fill(x - 1, y, 3, 1, " ", "#3a352b", "#3a352b")
+  canvas.write(x, y, "·", "#c2b280", "#3a352b")
+}
+
+function drawVillageBoundary(canvas: Canvas, x: number, y: number, width: number, height: number) {
+  for (let col = 1; col < width - 1; col += 4) {
+    drawVillageTree(canvas, x + col, y + 1)
+    drawVillageTree(canvas, x + col + 1, y + height - 3)
+  }
+  for (let row = 3; row < height - 3; row += 4) {
+    drawVillageTree(canvas, x + 1, y + row)
+    drawVillageTree(canvas, x + width - 4, y + row + 1)
+  }
+  canvas.write(x + 2, y + height - 2, "portal road", UI.muted, "#17241d")
+}
+
+function drawVillageTree(canvas: Canvas, x: number, y: number) {
+  canvas.fill(x, y, 3, 1, " ", "#254f35", "#254f35")
+  canvas.write(x + 1, y, "♣", "#8fd19e", "#254f35")
+  canvas.write(x + 1, y + 1, "│", "#8f5f3b", "#17241d")
+}
+
+function drawVillageBuilding(canvas: Canvas, x: number, y: number, id: VillageLocationId, selected: boolean, built: boolean) {
+  const style = villageBuildingStyle(id, built)
+  const w = id === "portal" ? 7 : 8
+  const h = id === "farm" ? 4 : 5
+  const left = x - Math.floor(w / 2)
+  const top = y - Math.floor(h / 2)
+  if (!built) {
+    canvas.fill(left, top + 2, w, 2, " ", "#2d2f31", "#2d2f31")
+    canvas.write(left + 1, top + 1, "broken", UI.muted, "#17241d")
+    canvas.write(left + Math.max(1, Math.floor(w / 2)), top + 3, villageLocations[id].glyph, UI.brass, "#2d2f31")
+  } else if (id === "portal") {
+    drawMiniIcon(canvas, left + 1, top + 1, "stairs", 5, 2)
+    canvas.border(left, top, w, h, selected ? UI.gold : UI.cyan)
+  } else if (id === "farm") {
+    for (let row = 0; row < h; row++) canvas.fill(left, top + row, w, 1, row % 2 === 0 ? "·" : " ", "#7aaa7b", "#244532")
+    canvas.write(left + Math.floor(w / 2), top + 1, villageLocations[id].glyph, selected ? UI.gold : UI.focus, "#244532")
+  } else {
+    canvas.fill(left, top + 1, w, 1, " ", style.roof, style.roof)
+    canvas.fill(left + 1, top + 2, w - 2, 2, " ", style.body, style.body)
+    canvas.write(left + Math.floor(w / 2), top + 3, villageLocations[id].glyph, selected ? "#101820" : style.accent, selected ? UI.gold : style.body)
+    canvas.border(left, top, w, h, selected ? UI.gold : style.accent)
+  }
+}
+
+function villageBuildingStyle(id: VillageLocationId, built: boolean) {
+  if (!built) return { accent: UI.muted, body: "#2d2f31", roof: "#343138" }
+  if (id === "blacksmith") return { accent: "#ff8f4a", body: "#3d332d", roof: "#6d4a37" }
+  if (id === "market") return { accent: UI.gold, body: "#3d3522", roof: "#80643a" }
+  if (id === "houses") return { accent: "#d7c39a", body: "#3a2b23", roof: "#8f5f3b" }
+  if (id === "guildhall") return { accent: UI.cyan, body: "#243748", roof: "#506b7d" }
+  return { accent: UI.focus, body: "#244532", roof: "#3f6b4d" }
+}
+
+function villageLocationBuilt(hub: GameSession["hub"], id: VillageLocationId) {
+  if (id === "portal" || id === "market" || id === "guildhall") return true
+  if (id === "blacksmith") return hub.stations.blacksmith.built
+  if (id === "farm") return hub.stations.farm.built
+  if (id === "houses") return hub.houses.some((house) => house.built)
+  return true
+}
+
+function drawVillageNpc(canvas: Canvas, x: number, y: number, npc: VillageNpcId) {
+  const sprite: PixelSpriteId =
+    npc === "blacksmith" || npc === "farmer" || npc === "cook" ? "npc-smith" : npc === "cartographer" || npc === "guildmaster" ? "npc-oracle" : "hero-ranger"
+  drawMiniIcon(canvas, x, y, sprite, 5, 2)
 }
 
 function activePlayerMoveAnimation(model: AppModel) {
