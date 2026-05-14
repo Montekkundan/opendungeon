@@ -33,11 +33,7 @@ export default function CreatePage() {
               <span>Seed</span>
               <input defaultValue="2423368" inputMode="numeric" name="seed" />
             </label>
-            <Button
-              data-slot="create-invite-button"
-              font="normal"
-              type="submit"
-            >
+            <Button data-slot="create-invite-button" type="submit">
               Create invite
             </Button>
           </form>

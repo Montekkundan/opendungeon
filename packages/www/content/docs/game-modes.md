@@ -18,7 +18,7 @@ Use Single Player when you want the authored roguelike RPG: tutorial rooms, d20 
 
 ## Multiplayer
 
-Multiplayer uses the same authored story loop, mechanics, lore, and assets, but adds multiple players to the shared dungeon and village. The target feel is Stardew-style co-op: shared farm and village state, separate player houses, shared dungeon objectives, and permissions for storage, upgrades, and shop/farm work.
+Multiplayer uses the same authored story loop, mechanics, lore, and assets, but adds multiple players to the shared dungeon and village. The target feel is shared co-op progression: shared farm and village state, separate player houses, shared dungeon objectives, and permissions for storage, upgrades, and shop/farm work.
 
 The current CLI host is the first implementation. It can run same-laptop or LAN sessions, but internet-grade co-op still needs a stronger authoritative sync model.
 
@@ -30,7 +30,7 @@ Multiplayer with GM is for a logged-in Dungeon Master or Game Master. The GM use
 
 GM content belongs to a GM-created world in Supabase. New lore, room layouts, quests, monster variants, and generated assets must stay separate from the canonical Single Player story and from other users' worlds.
 
-Use Multiplayer with GM when the table wants D&D-style authorship: the GM can ask AI for lore, rooms, monster variants, quests, or sprite prompts, then approve safe patches into that GM world. This mode requires login, Supabase ownership, AI Gateway model calls, validated tool calls, and realtime delivery before it can be live.
+Use Multiplayer with GM when the table wants GM-led authorship: the GM can ask AI for lore, rooms, monster variants, quests, or sprite prompts, then approve safe patches into that GM world. This mode requires login, Supabase ownership, AI Gateway model calls, validated tool calls, and realtime delivery before it can be live.
 
 ## Current status
 

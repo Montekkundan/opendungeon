@@ -118,6 +118,7 @@
 
 @layer base {
   * {
+    box-sizing: border-box;
     @apply border-border outline-ring/50;
   }
   body {
@@ -138,8 +139,8 @@ body {
 }
 
 .retro {
-  font-family: "Press Start 2P", system-ui, -apple-system, sans-serif;
-  line-height: 1.5;
+  font-family: var(--font-retro), system-ui, -apple-system, sans-serif;
+  line-height: 1.6;
   letter-spacing: 0;
 }
 
@@ -167,6 +168,7 @@ body {
   gap: var(--vertical-padding);
   min-height: 100vh;
   padding-bottom: 5rem;
+  overflow-x: hidden;
   font-family: var(--font-mono);
   color: var(--color-text);
   background: var(--color-background);
@@ -186,6 +188,7 @@ body {
 [data-component="container"] {
   width: min(67.5rem, 100%);
   margin: 0 auto;
+  overflow: hidden;
   border: 1px solid var(--color-border-weak);
   border-top: 0;
 }
@@ -210,6 +213,7 @@ body {
 [data-component="footer"] nav {
   display: flex;
   align-items: center;
+  max-width: 100%;
 }
 
 [data-component="brand"] {
@@ -233,17 +237,47 @@ body {
   gap: 24px;
 }
 
+[data-page="opendungeon"] [data-slot="wordmark"],
+[data-page="opendungeon"] [data-component="nav-desktop"] a,
+[data-page="opendungeon"] [data-component="footer"] a,
+[data-page="opendungeon"] [data-slot="hero-copy"] h1,
+[data-page="opendungeon"] [data-slot="section-title"] h3,
+[data-page="opendungeon"] [data-component="preview-copy"] h3,
+[data-page="opendungeon"] [data-component="docs"] h1,
+[data-page="opendungeon"] [data-component="docs"] h2,
+[data-page="opendungeon"] [data-component="mode-card"] h2,
+[data-page="opendungeon"] [data-slot="eyebrow"],
+[data-page="opendungeon"] [data-slot="button"] {
+  font-family: var(--font-retro), system-ui, -apple-system, sans-serif;
+  letter-spacing: 0;
+}
+
+[data-page="opendungeon"] [data-component="nav-desktop"] a,
+[data-page="opendungeon"] [data-component="footer"] a,
+[data-page="opendungeon"] [data-slot="wordmark"],
+[data-page="opendungeon"] [data-slot="button"] {
+  font-size: 0.6875rem;
+  line-height: 1.6;
+}
+
 [data-component="content"] {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 [data-component="hero"] {
   display: grid;
   gap: 32px;
   justify-items: center;
+  min-width: 0;
   padding: 72px var(--padding) 56px;
   text-align: center;
+}
+
+[data-component="hero"] > *,
+[data-component="content"] > * {
+  min-width: 0;
 }
 
 [data-component="desktop-app-banner"] {
@@ -267,14 +301,17 @@ body {
 }
 
 [data-slot="hero-copy"] {
+  width: 100%;
+  min-width: 0;
   max-width: 58rem;
   margin: 0 auto;
 }
 
 [data-slot="hero-copy"] h1 {
-  font-size: 3.75rem;
-  line-height: 1;
+  font-size: 2.75rem;
+  line-height: 1.35;
   letter-spacing: 0;
+  overflow-wrap: break-word;
 }
 
 [data-slot="hero-copy"] p {
@@ -282,6 +319,7 @@ body {
   margin-top: 24px;
   margin-right: auto;
   margin-left: auto;
+  overflow-wrap: break-word;
 }
 
 [data-slot="br"] {
@@ -298,10 +336,13 @@ body {
 
 [data-component="install-tabs"] {
   width: min(48rem, 100%);
+  min-width: 0;
   margin-top: 10px;
 }
 
 [data-component="install-tabs"] [data-slot="install-tab-list"] {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   width: 100%;
   min-height: 3.25rem;
   padding: 8px;
@@ -310,6 +351,8 @@ body {
 }
 
 [data-component="install-tabs"] [data-slot="tabs-trigger"] {
+  flex: none;
+  min-width: 0;
   min-height: 2rem;
   padding: 0 18px;
   color: var(--color-text);
@@ -331,12 +374,20 @@ body {
   align-items: center;
   justify-content: space-between;
   width: 100%;
+  min-width: 0;
   min-height: 52px;
   padding: 0 16px;
   color: var(--color-text-strong);
   text-align: left;
   background: var(--color-background-weak);
   border: 0;
+}
+
+[data-slot="command"] span {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 [data-slot="command"]:hover {
@@ -464,7 +515,8 @@ body {
 
 [data-slot="section-title"] h3,
 [data-component="preview-copy"] h3 {
-  font-size: 1.375rem;
+  font-size: 1rem;
+  line-height: 1.8;
 }
 
 [data-component="what"] ul,
@@ -489,16 +541,17 @@ body {
 }
 
 [data-component="docs"] h1 {
-  font-size: 5rem;
-  line-height: 1;
+  font-size: 3.25rem;
+  line-height: 1.35;
 }
 
 [data-component="docs"] h2 {
-  font-size: 1.375rem;
+  font-size: 1rem;
+  line-height: 1.8;
 }
 
-[data-slot="eyebrow"],
-[data-slot="notice"] {
+[data-page="opendungeon"] [data-slot="eyebrow"],
+[data-page="opendungeon"] [data-slot="notice"] {
   color: var(--color-accent);
 }
 
@@ -605,6 +658,11 @@ body {
 [data-component="gm-side"] h2,
 [data-slot="gm-message"] strong {
   color: var(--color-text-strong);
+}
+
+[data-component="mode-card"] h2 {
+  font-size: 0.75rem;
+  line-height: 1.7;
 }
 
 [data-component="gm-layout"] {
@@ -824,9 +882,60 @@ body {
     flex-wrap: wrap;
   }
 
-  [data-slot="hero-copy"] h1,
+  [data-component="nav-desktop"],
+  [data-component="footer"] nav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, max-content));
+    gap: 14px 18px;
+    width: 100%;
+  }
+
+  [data-slot="hero-copy"] h1 {
+    max-width: 10ch;
+    margin-right: auto;
+    margin-left: auto;
+    font-size: 1.45rem;
+  }
+
+  [data-slot="hero-copy"],
+  [data-slot="hero-copy"] p,
+  [data-component="install"],
+  [data-component="install-tabs"] {
+    width: calc(100vw - var(--padding) - var(--padding) - 4px);
+    max-width: 100%;
+  }
+
   [data-component="docs"] h1 {
-    font-size: 2.75rem;
+    font-size: 2rem;
+  }
+
+  [data-component="install-tabs"] [data-slot="install-tab-list"] {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    height: auto;
+    min-height: 6rem;
+  }
+
+  [data-component="install-tabs"] [data-slot="tabs-trigger"] {
+    height: 2.25rem;
+    padding: 0 10px;
+  }
+
+  @media (max-width: 30rem) {
+    [data-component="nav-desktop"],
+    [data-component="footer"] nav {
+      grid-template-columns: repeat(2, minmax(0, max-content));
+    }
+
+    [data-slot="hero-copy"] h1 {
+      max-width: 8ch;
+      font-size: 1.25rem;
+    }
+
+    [data-component="install-tabs"] [data-slot="install-tab-list"] {
+      grid-template-columns: 1fr;
+      min-height: 10.25rem;
+    }
   }
 
   [data-component="lobby-summary"],

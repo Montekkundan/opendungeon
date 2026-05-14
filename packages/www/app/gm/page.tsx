@@ -189,9 +189,9 @@ export default async function GmPage({ searchParams }: GmPageProps) {
           <h1>GM console</h1>
           <p>
             A logged-in Dungeon Master workbench for steering a multiplayer
-            world like a D&amp;D table. The GM chooses how hard the next beat
-            should feel, drafts a validated patch, reviews the tool calls, then
-            approves it for host delivery.
+            world. The GM chooses how hard the next beat should feel, drafts a
+            validated patch, reviews the tool calls, then approves it for host
+            delivery.
           </p>
 
           <section data-component="lobby-summary">

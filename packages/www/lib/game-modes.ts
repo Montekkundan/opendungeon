@@ -13,7 +13,7 @@ export const gameModes = [
     name: "Multiplayer",
     status: "co-op story",
     summary:
-      "The same authored story, rules, lore, and assets, with multiple users sharing the run and village like Stardew Valley co-op.",
+      "The same authored story, rules, lore, and assets, with multiple users sharing the run, village, homes, and permissions.",
     details:
       "The current CLI host is the first version of this path. A stronger authoritative sync model is still required for internet-scale play.",
   },

@@ -39,7 +39,6 @@ export function InstallTabs() {
       aria-label="Install command options"
       data-component="install-tabs"
       defaultValue="curl"
-      font="normal"
     >
       <TabsList data-slot="install-tab-list">
         {installOptions.map((option) => (
