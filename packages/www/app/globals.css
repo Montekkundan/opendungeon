@@ -137,6 +137,16 @@ body {
   margin: 0;
 }
 
+.retro {
+  font-family: "Press Start 2P", system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+
+.pixelated {
+  image-rendering: pixelated;
+}
+
 [data-page="opendungeon"] {
   --color-background: hsl(0, 9%, 7%);
   --color-background-weak: hsl(0, 6%, 10%);
@@ -231,7 +241,9 @@ body {
 [data-component="hero"] {
   display: grid;
   gap: 32px;
+  justify-items: center;
   padding: 72px var(--padding) 56px;
+  text-align: center;
 }
 
 [data-component="desktop-app-banner"] {
@@ -256,10 +268,11 @@ body {
 
 [data-slot="hero-copy"] {
   max-width: 58rem;
+  margin: 0 auto;
 }
 
 [data-slot="hero-copy"] h1 {
-  font-size: 4rem;
+  font-size: 3.75rem;
   line-height: 1;
   letter-spacing: 0;
 }
@@ -267,6 +280,8 @@ body {
 [data-slot="hero-copy"] p {
   max-width: 48rem;
   margin-top: 24px;
+  margin-right: auto;
+  margin-left: auto;
 }
 
 [data-slot="br"] {
@@ -279,6 +294,35 @@ body {
   width: min(48rem, 100%);
   background: var(--color-border-weak);
   border: 1px solid var(--color-border-weak);
+}
+
+[data-component="install-tabs"] {
+  width: min(48rem, 100%);
+  margin-top: 10px;
+}
+
+[data-component="install-tabs"] [data-slot="install-tab-list"] {
+  width: 100%;
+  min-height: 3.25rem;
+  padding: 8px;
+  margin-bottom: 12px;
+  background: var(--color-background-weak);
+}
+
+[data-component="install-tabs"] [data-slot="tabs-trigger"] {
+  min-height: 2rem;
+  padding: 0 18px;
+  color: var(--color-text);
+}
+
+[data-component="install-tabs"]
+  [data-slot="tabs-trigger"][data-state="active"] {
+  color: var(--color-text-inverted);
+  background: var(--color-background-interactive);
+}
+
+[data-component="install-tabs"] [data-slot="install-tab-panel"] {
+  margin-top: 0;
 }
 
 [data-slot="command"] {
@@ -403,6 +447,14 @@ body {
   max-width: 48rem;
 }
 
+[data-component="what"],
+[data-component="preview-copy"] {
+  width: 100%;
+  max-width: 58rem;
+  margin-right: auto;
+  margin-left: auto;
+}
+
 [data-slot="section-title"] h3,
 [data-component="preview-copy"] h3 {
   font-size: 1.375rem;
@@ -483,6 +535,12 @@ body {
 [data-slot="auth-actions"] button,
 [data-component="docs"] form > button {
   min-height: 44px;
+}
+
+[data-slot="create-invite-button"] {
+  width: 100%;
+  color: var(--color-text-inverted);
+  background: var(--color-background-interactive);
 }
 
 [data-component="lobby-summary"],

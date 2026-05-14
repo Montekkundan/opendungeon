@@ -1,5 +1,6 @@
 import { Command } from "@/components/command";
 import { Footer, Header } from "@/components/site-chrome";
+import { Button } from "@/components/ui/8bit/button";
 import { createLobby } from "@/lib/lobby";
 import { buildSandboxHostPlan } from "@/lib/sandbox-host";
 
@@ -42,7 +43,13 @@ export default function CreatePage() {
               <span>Seed</span>
               <input defaultValue="2423368" inputMode="numeric" name="seed" />
             </label>
-            <button type="submit">Create invite</button>
+            <Button
+              data-slot="create-invite-button"
+              font="normal"
+              type="submit"
+            >
+              Create invite
+            </Button>
           </form>
 
           <section>

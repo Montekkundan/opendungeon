@@ -1,7 +1,7 @@
 import { Command } from "@/components/command";
+import { InstallTabs } from "@/components/install-tabs";
 import { Footer, Header } from "@/components/site-chrome";
 import { gameModes } from "@/lib/game-modes";
-import { installCommand } from "@/lib/install-script";
 
 export default function Page() {
   return (
@@ -22,12 +22,7 @@ export default function Page() {
               </p>
             </div>
 
-            <section aria-label="Install options" data-component="install">
-              <Command value={installCommand} />
-              <Command value="opendungeon" />
-              <Command value="opendungeon login test" />
-              <Command value="opendungeon --login github" />
-            </section>
+            <InstallTabs />
           </section>
 
           <section
