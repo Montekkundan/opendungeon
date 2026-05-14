@@ -255,6 +255,7 @@ let lastManualSaveSignature = ""
 let lobbySocket: WebSocket | null = null
 let lobbySocketUrl = ""
 let lobbyConnectedPlayers = 0
+const deliveredGmPatchIds = new Set<string>()
 let activeRunLock: LocalRunLock | null = null
 const localGuestSessionId = crypto.randomUUID().slice(0, 8)
 const localLobbyClientId = crypto.randomUUID()
@@ -1970,6 +1971,7 @@ function updateLobbyStatus(text: string) {
       model.session.log.unshift(`Lobby players online: ${players}.`)
     }
     model.remotePlayers = remotePlayersFromSnapshot(snapshot)
+    applyGmPatchesFromSnapshot(snapshot)
     applyCoopTutorialGateHolds()
     const warning = Array.isArray(snapshot.syncWarnings) ? snapshot.syncWarnings[0] : ""
     if (warning && model.session.log[0] !== warning) {
@@ -1978,6 +1980,21 @@ function updateLobbyStatus(text: string) {
     refresh()
   } catch {
     return
+  }
+}
+
+function applyGmPatchesFromSnapshot(snapshot: Partial<LobbySnapshot>) {
+  if (!Array.isArray(snapshot.gmPatches)) return
+  for (const patch of [...snapshot.gmPatches].reverse()) {
+    const id = String(patch.id || "")
+    if (!id || deliveredGmPatchIds.has(id)) continue
+    deliveredGmPatchIds.add(id)
+    const title = String(patch.title || "GM patch").trim() || "GM patch"
+    const briefing = String(patch.briefing || "The GM changed the table pressure.").trim()
+    const difficulty = String(patch.difficulty || "steady")
+    model.session.log.unshift(`GM patch: ${title}. ${briefing}`)
+    while (model.session.log.length > 8) model.session.log.pop()
+    addToast(model.session, "GM patch", `${title}: ${briefing}`, difficulty === "easier" ? "success" : "warning")
   }
 }
 
@@ -2063,6 +2080,7 @@ function closeLobbySocket() {
   lobbySocket = null
   lobbySocketUrl = ""
   lobbyConnectedPlayers = 0
+  deliveredGmPatchIds.clear()
   model.remotePlayers = []
   model.coopGateStatus = ""
   clearCoopTutorialHold()

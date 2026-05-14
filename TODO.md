@@ -14,7 +14,7 @@
 
 ## Latest Playtest Bugs And Requested Fixes
 
-- [ ] GM difficulty steering: in `/gm`, let a logged-in GM steer the AI/agent from the multiplayer web view to make the current world harder or easier in a D&D-style way. The logged-in world selector, difficulty prompt, Supabase draft event, patch preview, approval queue, live host/player state readout, and approved-patch host delivery endpoint are landed; remaining work is AI Gateway model calls, richer tool validation, and terminal-client consumption of the host GM patch queue.
+- [ ] GM difficulty steering: in `/gm`, let a logged-in GM steer the AI/agent from the multiplayer web view to make the current world harder or easier in a D&D-style way. The logged-in world selector, difficulty prompt, Supabase draft event, patch preview, approval queue, live host/player state readout, approved-patch host delivery endpoint, and terminal-client GM patch notification are landed; remaining work is AI Gateway model calls, richer tool validation, and applying validated host patch operations to live run rules.
 - [x] Level-up talent selection bug: pressing Enter currently selects the top talent too easily. Require an explicit `1`, `2`, `3`, etc. choice first, then Enter confirms the highlighted/numbered talent.
 - [x] Talent unlock bug: unlocked talents such as Pathfinder must visibly affect available combat moves, combat strategy text, or the relevant stats. If a talent is passive-only, label it as passive in the state/character screen instead of implying it should appear as a fight move.
 - [x] Inventory hover/detail bug: the inventory detail pane should describe the hovered/highlighted item, not a stale or previously selected item.
