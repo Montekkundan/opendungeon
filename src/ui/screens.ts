@@ -31,6 +31,8 @@ import {
   statusEffectsFor,
   startingLoadout,
   talentEffectTextForSkill,
+  talentSummariesForSession,
+  talentSummaryFor,
   villageLocationIds,
   villageLocations,
   villageNpcIds,
@@ -44,7 +46,7 @@ import { isEnemyActorId, isNpcActorId, type TileId } from "../game/domainTypes.j
 import { actorLabel } from "../game/glyphs.js"
 import { saveDirectory, type SaveSummary } from "../game/saveStore.js"
 import { profilePath, type UserSettings } from "../game/settingsStore.js"
-import { formatModifier, statAbbreviations, statLabels, statLine, statsForClass } from "../game/stats.js"
+import { formatModifier, statAbbreviations, statLabels, statLine, statModifier, statsForClass } from "../game/stats.js"
 import { openingStoryBranches } from "../game/story.js"
 import { clamp, wrap } from "../shared/numeric.js"
 import { titleUpdateNotice, type UpdateStatus } from "../system/updateCheck.js"
@@ -65,7 +67,7 @@ type PanelBounds = {
 }
 
 export type ScreenId = "start" | "character" | "mode" | "saves" | "cloud" | "settings" | "controls" | "tutorial" | "game" | "village"
-export type DialogId = "settings" | "inventory" | "book" | "quests" | "hub" | "saveManager" | "cutscene" | "help" | "log" | "map" | "pause" | "quit" | null
+export type DialogId = "settings" | "inventory" | "state" | "book" | "quests" | "hub" | "saveManager" | "cutscene" | "help" | "log" | "map" | "pause" | "quit" | null
 export type InputMode = { field: "username" | "githubUsername" | "saveName" | "characterName"; draft: string } | null
 export type InternetStatus = "checking" | "online" | "offline"
 
@@ -790,7 +792,7 @@ function drawControls(canvas: Canvas, model: AppModel) {
     ["Move", controlMoveText(model.settings.controlScheme)],
     ["Menus", "Arrows always work. WASD follows the selected control scheme."],
     ["Combat", "Tab selects an enemy. 1-6 selects a skill. Enter rolls d20. F flees."],
-    ["Inventory", "I opens pack. Arrows select. Enter applies. Mouse can drag slots."],
+    ["Inventory", "I opens pack. C opens the state sheet. Arrows select. Enter applies."],
     ["Book", "B opens story, people, monster, tutorial, and hub discoveries."],
     ["Quests", "J opens the quest journal. Use O instead when Vim movement is active."],
     ["Map", "M opens the full dungeon map and current run stats."],
@@ -1739,6 +1741,7 @@ function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollA
           active: session.hp < session.maxHp,
         },
         { key: "R", label: "Rest", sprite: "food" },
+        { key: "C", label: "State", sprite: "sword", count: String(session.talents.length) },
         { key: "J", label: "Quest", sprite: "quest-marker", count: String(session.world.quests.filter((quest) => quest.status !== "locked").length) },
         { key: "B", label: "Book", sprite: "scroll", count: String(session.knowledge.length) },
         { key: "L", label: "Log", sprite: "scroll" },
@@ -2407,10 +2410,10 @@ function dialogMetrics(dialog: NonNullable<DialogId>, canvasWidth: number, canva
     }
   }
 
-  const wide = dialog === "log" || dialog === "settings" || dialog === "quests" || dialog === "book" || dialog === "hub" || dialog === "saveManager" || dialog === "cutscene"
-  const wideMax = dialog === "quests" || dialog === "book" || dialog === "hub" || dialog === "saveManager" ? 118 : dialog === "settings" || dialog === "cutscene" ? 104 : 96
+  const wide = dialog === "log" || dialog === "settings" || dialog === "state" || dialog === "quests" || dialog === "book" || dialog === "hub" || dialog === "saveManager" || dialog === "cutscene"
+  const wideMax = dialog === "quests" || dialog === "book" || dialog === "state" || dialog === "hub" || dialog === "saveManager" ? 118 : dialog === "settings" || dialog === "cutscene" ? 104 : 96
   const width = Math.min(wide ? wideMax : 74, Math.max(20, canvasWidth - 10))
-  const height = Math.min(Math.max(10, canvasHeight - 2), dialog === "log" ? 18 : dialog === "quests" || dialog === "book" ? 26 : dialog === "hub" || dialog === "saveManager" ? 24 : dialog === "cutscene" ? 18 : dialog === "settings" ? 20 : dialog === "help" ? 21 : dialog === "pause" ? 18 : dialog === "quit" ? 18 : 14)
+  const height = Math.min(Math.max(10, canvasHeight - 2), dialog === "log" ? 18 : dialog === "state" ? 30 : dialog === "quests" || dialog === "book" ? 26 : dialog === "hub" || dialog === "saveManager" ? 24 : dialog === "cutscene" ? 18 : dialog === "settings" ? 20 : dialog === "help" ? 21 : dialog === "pause" ? 18 : dialog === "quit" ? 18 : 14)
   return {
     x: Math.floor((canvasWidth - width) / 2),
     y: Math.floor((canvasHeight - height) / 2),
@@ -2462,6 +2465,7 @@ function insideRect(rect: Rect, x: number, y: number) {
 function dialogTitle(dialog: NonNullable<DialogId>) {
   if (dialog === "settings") return "Settings"
   if (dialog === "inventory") return "Inventory"
+  if (dialog === "state") return "Crawler State"
   if (dialog === "book") return "Book"
   if (dialog === "quests") return "Quests"
   if (dialog === "hub") return "Portal Village"
@@ -2477,6 +2481,7 @@ function dialogTitle(dialog: NonNullable<DialogId>) {
 function dialogIcon(dialog: NonNullable<DialogId>): PixelSpriteId | "d20" {
   if (dialog === "settings") return "focus-gem"
   if (dialog === "inventory") return "scroll"
+  if (dialog === "state") return "sword"
   if (dialog === "book") return "scroll"
   if (dialog === "quests") return "map"
   if (dialog === "hub") return "stairs"
@@ -2598,6 +2603,72 @@ function findInventoryByKind(inventory: string[], kind: "weapon" | "relic" | "co
   if (kind === "weapon") return inventory.find((item) => /blade|sword|lockpick/i.test(item))
   if (kind === "relic") return inventory.find((item) => /relic|shard|scroll/i.test(item))
   return inventory.find((item) => /potion|vial/i.test(item))
+}
+
+function drawStateDialog(canvas: Canvas, model: AppModel, x: number, y: number, width: number, height: number) {
+  const session = model.session
+  const bodyX = x + 4
+  const bodyY = y + 4
+  const bodyW = width - 8
+  const bodyH = height - 8
+  const gap = 2
+  const topH = Math.min(13, Math.max(10, Math.floor(bodyH * 0.52)))
+  const bottomY = bodyY + topH + 1
+  const bottomH = Math.max(7, y + height - 4 - bottomY)
+  const leftW = Math.min(30, Math.max(24, Math.floor(bodyW * 0.28)))
+  const statsW = Math.min(30, Math.max(22, Math.floor(bodyW * 0.26)))
+  const talentW = Math.max(22, bodyW - leftW - statsW - gap * 2)
+  const statsX = bodyX + leftW + gap
+  const talentX = statsX + statsW + gap
+
+  drawPanel(canvas, bodyX, bodyY, leftW, topH, "Crawler", UI.edge)
+  drawPixelBlock(canvas, bodyX + 2, bodyY + 2, animatedPixelSprite(classSprite(session.hero.classId, session.hero.appearance), "idle", session.turn, 10, 5), 1)
+  canvas.write(bodyX + 14, bodyY + 2, trim(session.hero.name, leftW - 17), UI.ink, UI.panel)
+  canvas.write(bodyX + 14, bodyY + 3, trim(session.hero.title, leftW - 17), UI.soft, UI.panel)
+  canvas.write(bodyX + 3, bodyY + 7, trim(`Level ${session.level}  XP ${session.xp}/${session.level * 10}  Deaths ${session.deaths}`, leftW - 6), UI.gold, UI.panel)
+  canvas.write(bodyX + 3, bodyY + 8, trim(`HP ${session.hp}/${session.maxHp}  Focus ${session.focus}/${session.maxFocus}`, leftW - 6), UI.focus, UI.panel)
+  canvas.write(bodyX + 3, bodyY + 9, trim(`Gold ${session.gold}  Floor ${session.floor}/${session.finalFloor}`, leftW - 6), UI.brass, UI.panel)
+  canvas.write(bodyX + 3, bodyY + 10, trim(`Mode ${session.mode}  Biome ${currentBiome(session)}`, leftW - 6), UI.muted, UI.panel)
+
+  drawPanel(canvas, statsX, bodyY, statsW, topH, "Stats", UI.edge)
+  const statOrder = Object.keys(statLabels) as Array<keyof typeof statLabels>
+  statOrder.slice(0, Math.max(0, topH - 3)).forEach((stat, index) => {
+    const value = session.stats[stat]
+    const rowY = bodyY + 2 + index
+    canvas.write(statsX + 3, rowY, statAbbreviations[stat], UI.gold, UI.panel)
+    canvas.write(statsX + 8, rowY, String(value).padStart(2, " "), UI.ink, UI.panel)
+    canvas.write(statsX + 12, rowY, formatModifier(statModifier(value)), UI.soft, UI.panel)
+    canvas.write(statsX + 18, rowY, trim(statLabels[stat], statsW - 21), UI.muted, UI.panel)
+  })
+
+  drawPanel(canvas, talentX, bodyY, talentW, topH, "Talents", UI.edge)
+  const learned = talentSummariesForSession(session)
+  const pending = session.levelUp?.choices.map((choice) => talentSummaryFor(choice.id)) ?? []
+  if (!learned.length) {
+    canvas.write(talentX + 3, bodyY + 2, "No talents learned yet.", UI.muted, UI.panel)
+    canvas.write(talentX + 3, bodyY + 4, "Level up to choose the first branch.", UI.soft, UI.panel)
+  }
+  learned.slice(0, 3).forEach((talent, index) => {
+    const rowY = bodyY + 2 + index * 3
+    canvas.write(talentX + 3, rowY, trim(talent.name, talentW - 6), UI.gold, UI.panel)
+    writeWrapped(canvas, talentX + 3, rowY + 1, talentW - 6, [talent.effect, talent.text], 2, UI.ink, UI.panel)
+  })
+  if (learned.length > 3) canvas.write(talentX + 3, bodyY + topH - 2, `+${learned.length - 3} more learned talents`, UI.muted, UI.panel)
+  if (pending.length && topH >= 13) canvas.write(talentX + 3, bodyY + topH - 2, `Pending choice: ${pending.map((talent) => talent.name).join(" / ")}`, UI.focus, UI.panel)
+
+  drawPanel(canvas, bodyX, bottomY, bodyW, bottomH, "Combat And Rewards", UI.edge)
+  const equipment = Object.entries(session.equipment ?? {})
+    .flatMap(([slot, item]) => (item ? [`${slot}: ${item.name}${item.bonusDamage ? ` +${item.bonusDamage} damage` : ""}`] : []))
+    .join("  ")
+  canvas.write(bodyX + 3, bottomY + 2, trim(equipment || "Equipment bonuses: starter gear only.", bodyW - 6), equipment ? UI.gold : UI.muted, UI.panel)
+  canvas.write(bodyX + 3, bottomY + 3, trim(`Run modifier: ${session.floorModifier.name}. ${session.floorModifier.text}`, bodyW - 6), UI.soft, UI.panel)
+  combatSkills.slice(0, Math.max(0, bottomH - 5)).forEach((skill, index) => {
+    const rowY = bottomY + 5 + index
+    const talent = compactTalentEffectTextForSkill(session, skill)
+    const line = `${index + 1} ${skill.name}  ${statAbbreviations[skill.stat]} d20 ${formatModifier(combatModifier(session, skill.stat))}  DC ${skill.dc}  ${skill.damage} dmg  focus ${focusCostForSkill(session, skill)}`
+    canvas.write(bodyX + 3, rowY, trim(line, Math.floor(bodyW * 0.52)), UI.ink, UI.panel)
+    canvas.write(bodyX + Math.floor(bodyW * 0.57), rowY, trim(talent || combatAffinityLabel(skill.affinity), Math.floor(bodyW * 0.38)), talent ? UI.focus : UI.muted, UI.panel)
+  })
 }
 
 function questProgress(session: GameSession, eventIds: string[]) {
@@ -2945,6 +3016,10 @@ function drawDialog(canvas: Canvas, model: AppModel) {
     return
   }
 
+  if (model.dialog === "state") {
+    drawStateDialog(canvas, model, x, y, width, height)
+  }
+
   if (model.dialog === "book") {
     drawBookDialog(canvas, model, x, y, width, height)
   }
@@ -2983,7 +3058,7 @@ function drawDialog(canvas: Canvas, model: AppModel) {
       ["Move", "Arrows / WASD"],
       ["Confirm", "Enter / Space"],
       ["Save", "Ctrl+S saves locally; Esc then M opens run saves"],
-      ["Pack", "I inventory, B book, M map, V village, J quests, O quests in Vim mode, H potion, L log"],
+      ["Pack", "I inventory, C state, B book, M map, V village, J quests, O quests in Vim mode, H potion, L log"],
       ["Combat", "Tab target, 1-6 skill, F flee, Enter rolls d20"],
       ["Camera", "- wider FOV, = closer view"],
       ["Overlay", "U hides or shows the UI for this run"],

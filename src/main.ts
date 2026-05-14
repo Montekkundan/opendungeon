@@ -987,6 +987,10 @@ function handleGameKey(key: KeyEvent) {
     recordTutorialAction(model.session, "inventory")
     return
   }
+  if (key.name === "c") {
+    model.dialog = "state"
+    return
+  }
   if (key.name === "l") {
     model.dialog = "log"
     return

@@ -39,7 +39,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: skillCheckModel(),
-      expectedHash: "285cc6a1",
+      expectedHash: "51fa88be",
       requiredText: ["Talent Check", "Whispering Relic", "Total >= difficulty", "Enter roll d20", "Esc step away"],
     },
     {
@@ -71,7 +71,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("game", createSession(1234), { dialog: "book" }),
-      expectedHash: "caac3e41",
+      expectedHash: "5f68b90f",
       requiredText: ["BOOK", "All entries", "Story", "Monsters", "Waking Cell", "Portal Room"],
     },
     {
@@ -321,6 +321,21 @@ test("inventory details follow the highlighted slot exactly", () => {
   expect(vial).toContain("Consumable")
   expect(vial).not.toContain("Equipped weapon: affects")
   expect(empty).toContain("Empty slot.")
+})
+
+test("state sheet shows stats talents and combat rewards", () => {
+  const session = createSession(1234, "solo", "ranger", "Mira")
+  session.talents.push("pathfinder")
+  const output = draw(modelFor("game", session, { dialog: "state" }), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("CRAWLER STATE")
+  expect(text).toContain("Stats")
+  expect(text).toContain("Talents")
+  expect(text).toContain("Pathfinder")
+  expect(text).toContain("Aimed Shot +1 damage")
+  expect(text).toContain("Combat And Rewards")
+  expect(text).toContain("DEX")
 })
 
 test("quickbar does not expose gold as a dead G action", () => {

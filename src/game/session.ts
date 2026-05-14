@@ -523,6 +523,13 @@ type TalentDefinition = {
   restFocusBonus?: number
 }
 
+export type TalentSummary = {
+  id: TalentId
+  name: string
+  text: string
+  effect: string
+}
+
 const talentDefinitions: Record<TalentId, TalentDefinition> = {
   "iron-vow": {
     id: "iron-vow",
@@ -1379,6 +1386,34 @@ export const combatSkills: CombatSkill[] = [
     },
   },
 ]
+
+export function talentSummaryFor(id: TalentId): TalentSummary {
+  const talent = talentDefinitions[id]
+  return {
+    id,
+    name: talent.name,
+    text: talent.text,
+    effect: talentEffectSummary(talent),
+  }
+}
+
+export function talentSummariesForSession(session: GameSession): TalentSummary[] {
+  return session.talents.map((id) => talentSummaryFor(id))
+}
+
+function talentEffectSummary(talent: TalentDefinition) {
+  const parts: string[] = []
+  for (const [stat, value] of Object.entries(talent.statBonuses ?? {}) as Array<[StatId, number]>) {
+    if (value) parts.push(`${formatSigned(value)} ${statLabels[stat]}`)
+  }
+  if (talent.skillId) {
+    const skillName = combatSkills.find((skill) => skill.id === talent.skillId)?.name ?? talent.skillId
+    if (talent.damageBonus) parts.push(`${skillName} ${formatSigned(talent.damageBonus)} damage`)
+    if (talent.focusDiscount) parts.push(`${skillName} -${talent.focusDiscount} focus cost`)
+  }
+  if (talent.restFocusBonus) parts.push(`Rest ${formatSigned(talent.restFocusBonus)} focus`)
+  return parts.join("; ") || "Passive unlock"
+}
 
 type MonsterProfile = {
   family: string
