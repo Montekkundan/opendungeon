@@ -18,13 +18,13 @@ const fontMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "opendungeon | Terminal RPG with AI-admin worlds",
+  title: "opendungeon | Terminal dungeon crawler",
   description:
-    "A terminal roguelike with deterministic worlds, local saves, multiplayer hosting, and AI-admin generated content.",
+    "A terminal roguelike with seeded dungeon runs, local saves, multiplayer hosting, and GM-created worlds.",
   openGraph: {
     title: "opendungeon",
     description:
-      "A terminal roguelike with deterministic worlds and AI-admin generated content.",
+      "A terminal roguelike with seeded dungeon runs, co-op hosting, and GM-created worlds.",
     type: "website",
   },
 };

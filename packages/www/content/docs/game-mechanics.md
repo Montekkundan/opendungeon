@@ -9,6 +9,23 @@ opendungeon separates deterministic rules from presentation. Movement, combat ro
 - Saves preserve the active run, player stats, inventory, quest state, map discovery, and local metadata.
 - The headless runner can replay scripted actions and assert invariants without depending on terminal rendering.
 
+## Seeds
+
+A seed is the number used to build the dungeon. The same seed on the same game version should create the same starting floor shape, room placement, floor modifier, actor placement, and deterministic event placement. Player choices still matter after that: movement order, combat rolls, talent checks, purchases, inventory use, and quest choices can make two runs with the same seed diverge.
+
+Use seeds when you want to:
+
+- Reproduce a bug on the same dungeon.
+- Share a co-op lobby where every player starts from the same generated world.
+- Replay a challenge and compare decisions.
+- Write headless tests that assert the same map and event setup each run.
+
+In hosted multiplayer, the host command owns the seed:
+
+```txt
+opendungeon-host --host 0.0.0.0 --mode coop --seed 2423368 --port 3737
+```
+
 ## Interaction rules
 
 Players interact with nearby people, notes, doors, loot, stairs, world events, merchants, and combat targets. The engine resolves whether the player is in exploration, dialogue, village, inventory, map, or combat state before accepting an action.
@@ -35,4 +52,4 @@ The game should expose bad states clearly instead of silently losing progress. S
 
 - Better reduced-motion and camera settings.
 - More direct diagnostics for blocked multiplayer joins.
-- Richer checks around save import, cloud save drift, and AI-admin patch validation.
+- Richer checks around save import, cloud save drift, and GM patch validation.

@@ -1,6 +1,6 @@
-# Cloud and AI admin
+# GM and AI worlds
 
-The AI-admin direction is data-first. AI can propose content, but the game should only accept validated patches that match the schema and respect deterministic rules.
+AI is scoped to logged-in GM worlds. Single Player and normal co-op use the authored rules, lore, and assets; GM sessions can add approved AI-assisted patches that match the schema and respect deterministic rules.
 
 ## Content boundary
 

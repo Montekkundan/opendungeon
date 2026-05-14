@@ -16,16 +16,15 @@ opendungeon --login github
 
 The curl installer downloads the matching macOS or Linux release binary when GitHub release assets are available, then falls back to the published npm package. The global package exposes `opendungeon` for the TUI and `opendungeon-host` for hosted lobby work. Login is optional for local play. Use the test login while checking account-gated flows without a real provider.
 
-## Local development
+## Source checkout
 
 ```txt
 bun install
-bun run dev
 bun run headless -- --scenario smoke --assert
 bun run web
 ```
 
-`bun run dev` starts the terminal client from source. `bun run headless` runs gameplay scripts without drawing the terminal UI. `bun run web` starts the Next.js website through Portless at `https://opendungeon.localhost`.
+Use the published `opendungeon` command for normal play. Source checkout commands are for contributors: `bun run headless` runs gameplay scripts without drawing the terminal UI, and `bun run web` starts the Next.js website through Portless at `https://opendungeon.localhost`. See `CONTRIBUTING.md` for terminal-client development commands.
 
 ## Website development
 

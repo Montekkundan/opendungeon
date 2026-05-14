@@ -20,7 +20,7 @@ The profile page uses Supabase auth and creates an `opendungeon_profiles` row fo
 - Profiles store public account-facing player metadata.
 - Cloud saves should belong to the authenticated owner.
 - Logged-in `/create` submissions save lobby metadata as `opendungeon_worlds` rows with `lobby-created` world events, so future GM/cloud flows can link an invite back to the owner.
-- AI-admin world patches should be auditable and validated before they affect a run.
+- GM world patches should be auditable and validated before they affect a run.
 - Invite and lobby metadata should stay separate from authoritative CLI session state until a realtime adapter exists.
 
 ## Local setup notes

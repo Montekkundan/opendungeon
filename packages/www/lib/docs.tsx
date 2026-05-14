@@ -36,7 +36,7 @@ export const docGroups: ReadonlyArray<{
         slug: "village-and-meta-progression",
         title: "Village and meta-progression",
       },
-      { slug: "cloud-and-ai-admin", title: "Cloud and AI admin" },
+      { slug: "cloud-and-ai-admin", title: "GM and AI worlds" },
     ],
     title: "Game systems",
   },

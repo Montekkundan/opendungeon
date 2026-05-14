@@ -35,20 +35,20 @@ The GM console can also archive the current host snapshot into Supabase. After l
 Co-op is the default hosted multiplayer mode. Pass `--mode race` only when you want a same-seed challenge instead of a shared story run.
 
 ```txt
-bun run host -- --host 127.0.0.1 --mode coop --seed 2423368 --port 3737
-OPENDUNGEON_PLAYER_NAME=Mira bun run dev -- join http://127.0.0.1:3737
-OPENDUNGEON_PLAYER_NAME=Sol bun run dev -- join http://127.0.0.1:3737
-OPENDUNGEON_AUTH_DIR="$(mktemp -d)" OPENDUNGEON_PLAYER_NAME=Guest bun run dev -- join http://127.0.0.1:3737
+opendungeon-host --host 127.0.0.1 --mode coop --seed 2423368 --port 3737
+OPENDUNGEON_PLAYER_NAME=Mira opendungeon join http://127.0.0.1:3737
+OPENDUNGEON_PLAYER_NAME=Sol opendungeon join http://127.0.0.1:3737
+OPENDUNGEON_AUTH_DIR="$(mktemp -d)" OPENDUNGEON_PLAYER_NAME=Guest opendungeon join http://127.0.0.1:3737
 ```
 
-The `--` after `bun run dev` passes the `join` command to the terminal client. Use the `OPENDUNGEON_AUTH_DIR="$(mktemp -d)"` form when you want a guaranteed unsigned guest session even if your normal profile is logged in.
+Use the `OPENDUNGEON_AUTH_DIR="$(mktemp -d)"` form when you want a guaranteed unsigned guest session even if your normal profile is logged in.
 
 For another device on the same network, replace `127.0.0.1` with the host machine LAN address printed by the host command.
 
 For LAN or a small private server, bind the host to all interfaces:
 
 ```txt
-bun run host -- --host 0.0.0.0 --mode coop --seed 2423368 --port 3737
+opendungeon-host --host 0.0.0.0 --mode coop --seed 2423368 --port 3737
 ```
 
 Then verify from another device:
@@ -81,13 +81,13 @@ opendungeon join http://YOUR_LAN_IP:3737
 Signed-in runs are guarded by a local active-run lock. If the same GitHub or password account is already in a game, another client with the same auth session should stop before opening the run and name the terminal app that owns the session. To test that message:
 
 ```txt
-OPENDUNGEON_TERMINAL_APP=Ghostty bun run dev -- join http://127.0.0.1:3737
+OPENDUNGEON_TERMINAL_APP=Ghostty opendungeon join http://127.0.0.1:3737
 ```
 
 The lobby host also rejects a second connected player with the same signed-in account identity, so the protection still applies on LAN. Guest sessions do not send an account identity and can still run side by side:
 
 ```txt
-OPENDUNGEON_AUTH_DIR="$(mktemp -d)" OPENDUNGEON_PLAYER_NAME=Guest bun run dev -- join http://127.0.0.1:3737
+OPENDUNGEON_AUTH_DIR="$(mktemp -d)" OPENDUNGEON_PLAYER_NAME=Guest opendungeon join http://127.0.0.1:3737
 ```
 
 ## Website invite pages

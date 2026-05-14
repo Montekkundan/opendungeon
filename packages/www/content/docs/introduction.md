@@ -1,6 +1,6 @@
 # opendungeon docs
 
-opendungeon is a terminal roguelike RPG built around deterministic dungeon runs, local-first saves, and a controlled AI-admin layer. The engine owns the rules and state transitions. Generated content enters the game as validated data patches, not as free-form runtime behavior.
+opendungeon is a terminal roguelike RPG built around seeded dungeon runs, local-first saves, and optional GM-created worlds. The engine owns the rules and state transitions. AI-assisted content belongs to logged-in GM worlds and enters the game as validated data patches, not as free-form runtime behavior.
 
 ## What the game is
 
@@ -16,6 +16,6 @@ The terminal client is still the primary game surface. The website gives players
 
 ## How to read these docs
 
-Use the section pages for product-facing flows like install, controls, multiplayer, Supabase, and deployment. Use the game system pages for the RPG rules: core loop, combat, NPCs, monsters, village progression, and AI-admin content.
+Use the section pages for product-facing flows like install, controls, multiplayer, Supabase, and deployment. Use the game system pages for the RPG rules: core loop, combat, NPCs, monsters, village progression, and GM-created content.
 
 Contributors should also read `CONTRIBUTING.md` in the repo root for the file map, one-laptop multiplayer commands, website commands, and release checks.

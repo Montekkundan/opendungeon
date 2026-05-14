@@ -4,7 +4,6 @@ import {
   lobbyCommands,
   lobbyModeLabel,
   lobbyModeSummary,
-  lobbySandboxPlan,
   normalizeLobbyMode,
   normalizeSeed,
 } from "@/lib/lobby";
@@ -27,7 +26,6 @@ export default async function LobbyPage({ params, searchParams }: PageProps) {
   const mode = normalizeLobbyMode(query.mode ?? id.split("-")[0] ?? "coop");
   const seed = normalizeSeed(query.seed ?? id.split("-")[1] ?? "2423368");
   const commands = lobbyCommands(mode, seed);
-  const sandbox = lobbySandboxPlan(id, mode, seed);
   const modeLabel = lobbyModeLabel(mode);
   const modeSummary = lobbyModeSummary(mode);
   const cloudStatus = cloudStatusMessage(query.cloud);
@@ -42,8 +40,7 @@ export default async function LobbyPage({ params, searchParams }: PageProps) {
           <p>
             This page is the shareable invite card. Run the host command on one
             machine, then send friends the join command after replacing
-            YOUR_LAN_IP with the host IP printed by opendungeon-host. GM worlds
-            stay separate on the logged-in /gm console.
+            YOUR_LAN_IP with the host IP printed by opendungeon-host.
           </p>
 
           <section data-component="lobby-summary">
@@ -81,33 +78,11 @@ export default async function LobbyPage({ params, searchParams }: PageProps) {
           <section>
             <h2>Internet hosting</h2>
             <Command value={commands.public} />
+            <Command value="opendungeon join https://YOUR_DOMAIN_OR_TUNNEL" />
             <p>
               For public internet play, the host still needs a reachable
-              WebSocket endpoint. A Vercel-only route cannot keep the current
-              CLI lobby socket alive.
-            </p>
-            <p>
-              Vercel Sandbox hosting is planned as an opt-in path for logged-in
-              hosts who connect their own Vercel account; until then, use a
-              reachable host process or private LAN.
-            </p>
-          </section>
-
-          <section>
-            <h2>Vercel Sandbox plan</h2>
-            <p>{sandbox.summary}</p>
-            <Command value={sandbox.commands.install} />
-            <Command value={sandbox.commands.launch} />
-            <Command value={sandbox.commands.join} />
-            <ul>
-              {sandbox.steps.map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ul>
-            <p>
-              Status: planned. Do not use Sandbox as the default multiplayer
-              host until account-linking, billing ownership, reconnect, and
-              cleanup guardrails are implemented.
+              WebSocket endpoint. Use a machine, tunnel, or server that can keep
+              the host process running.
             </p>
           </section>
         </article>
@@ -120,18 +95,18 @@ export default async function LobbyPage({ params, searchParams }: PageProps) {
 function cloudStatusMessage(value: string | undefined) {
   if (value === "saved") {
     return {
-      copy: "This invite was saved to your Supabase-owned world rows for later GM/cloud linking.",
+      copy: "This invite is saved to your account.",
       label: "saved",
     };
   }
   if (value === "error") {
     return {
-      copy: "The invite page still works, but Supabase metadata could not be saved. Check login and RLS/env settings before relying on cloud lobby history.",
+      copy: "The invite page still works, but account saving failed.",
       label: "not saved",
     };
   }
   return {
-    copy: "Log in before creating an invite if you want this lobby recorded in your Supabase account.",
+    copy: "Log in before creating an invite if you want it saved to your account.",
     label: "local only",
   };
 }
