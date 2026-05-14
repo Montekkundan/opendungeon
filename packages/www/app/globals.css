@@ -221,6 +221,13 @@ body {
   text-decoration: none;
 }
 
+[data-component="top-actions"] {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  min-width: 0;
+}
+
 [data-slot="wordmark"],
 [data-slot="hero-copy"] h1,
 [data-slot="section-title"] h3,
@@ -235,6 +242,48 @@ body {
 [data-component="nav-desktop"],
 [data-component="footer"] nav {
   gap: 20px;
+}
+
+[data-component="theme-switcher"] {
+  display: grid;
+  grid-template-columns: repeat(3, max-content);
+  gap: 1px;
+  min-inline-size: 0;
+  padding: 2px;
+  margin: 0;
+  background: var(--color-border-weak);
+  border: 1px solid var(--color-border-weak);
+}
+
+[data-component="theme-switcher"] legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  clip: rect(0, 0, 0, 0);
+}
+
+[data-component="theme-switcher"] button {
+  min-height: 28px;
+  padding: 0 10px;
+  font-family: var(--font-retro), system-ui, -apple-system, sans-serif;
+  font-size: 0.5rem;
+  line-height: 1.5;
+  color: var(--color-text);
+  cursor: pointer;
+  background: var(--color-background-weak);
+  border: 0;
+}
+
+[data-component="theme-switcher"] button:hover {
+  color: var(--color-text-strong);
+  background: var(--color-background-weak-hover);
+}
+
+[data-component="theme-switcher"] button[data-active="true"] {
+  color: var(--color-text-inverted);
+  background: var(--color-background-interactive);
 }
 
 [data-page="opendungeon"] [data-slot="wordmark"],
@@ -883,6 +932,7 @@ body {
 
   [data-component="top"],
   [data-component="footer"],
+  [data-component="top-actions"],
   [data-component="desktop-app-banner"] {
     flex-direction: column;
     align-items: flex-start;
@@ -893,6 +943,10 @@ body {
   [data-slot="content"],
   [data-slot="auth-actions"] {
     flex-wrap: wrap;
+  }
+
+  [data-component="top-actions"] {
+    width: 100%;
   }
 
   [data-component="nav-desktop"],
@@ -946,6 +1000,11 @@ body {
       grid-template-columns: repeat(2, minmax(0, max-content));
     }
 
+    [data-component="theme-switcher"] {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      width: 100%;
+    }
+
     [data-slot="hero-copy"] h1 {
       max-width: 15ch;
       font-size: 1rem;
@@ -991,6 +1050,20 @@ body {
   font-family: var(--font-mono);
   color: var(--color-text);
   background: var(--color-background);
+}
+
+.light [data-page="opendungeon"],
+.light [data-page="docs-shell"] {
+  --color-background: hsl(44, 32%, 96%);
+  --color-background-weak: hsl(42, 22%, 91%);
+  --color-background-weak-hover: hsl(42, 18%, 85%);
+  --color-background-strong: hsl(0, 9%, 7%);
+  --color-text: hsl(0, 4%, 27%);
+  --color-text-weak: hsl(0, 2%, 45%);
+  --color-text-strong: hsl(0, 9%, 7%);
+  --color-text-inverted: hsl(0, 9%, 7%);
+  --color-border: hsl(0, 4%, 55%);
+  --color-border-weak: hsl(0, 4%, 76%);
 }
 
 [data-page="docs-shell"] a {
