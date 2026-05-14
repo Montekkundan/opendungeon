@@ -20,9 +20,9 @@ The automated host smoke test covers this shape without opening terminal windows
 
 ## Authoritative model
 
-The chosen model is host-authoritative. One `opendungeon-host` process owns the run, validates player actions, appends them to a deterministic command log, and broadcasts snapshots plus events to connected clients. Clients render and predict local UI, but they do not decide combat results, tutorial gate progress, loot grants, village state, or GM patch application.
+The chosen model is host-authoritative. One `opendungeon-host` process coordinates the lobby, records live player actions, exposes `/state` and `/actions`, and broadcasts snapshots plus events to connected clients. Clients render local UI while the host gives the GM console a shared party/action view.
 
-The command log is the shared truth for co-op. Movement, tutorial checklist rows, NPC choices, d20 rolls, combat actions, inventory changes, village preparation, and final-gate progress should become typed commands. That keeps local co-op, LAN play, replay/debug tooling, and later cloud persistence on the same rule path.
+The current action log includes movement, NPC/story interaction, d20 checks, combat decisions, inventory actions, and village preparation. The next hardening step is converting those action-log entries into typed host-validated commands for combat results, loot grants, village state, and replay/debug tooling.
 
 Supabase Realtime is not the movement authority for the current game. It is the account, presence, persistence, and GM coordination layer: profiles, cloud saves, world ownership, action-log uploads, GM patch rows, and approved-patch notifications. If browser-native play replaces the CLI host later, it should still keep an authoritative command log instead of peer-to-peer state.
 
@@ -57,6 +57,14 @@ opendungeon join http://YOUR_LAN_IP:3737
 ```
 
 The browser page at the printed lobby URL is a status and invite page. It is not the game renderer. Players still join from terminal clients.
+
+For debugging or GM tooling, the host also exposes JSON endpoints:
+
+```txt
+curl http://YOUR_LAN_IP:3737/state
+curl http://YOUR_LAN_IP:3737/actions
+curl http://YOUR_LAN_IP:3737/gm/patches
+```
 
 The global package uses the same shape:
 

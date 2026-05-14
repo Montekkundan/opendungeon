@@ -354,6 +354,11 @@ export default async function GmPage({ searchParams }: GmPageProps) {
               </section>
 
               <section>
+                <h2>Action log</h2>
+                <HostActionLog snapshot={hostBridge.snapshot} />
+              </section>
+
+              <section>
                 <h2>Delivered patches</h2>
                 <HostPatchList snapshot={hostBridge.snapshot} />
               </section>
@@ -509,6 +514,29 @@ function HostPatchList({ snapshot }: { snapshot: GmHostSnapshot | null }) {
         ))
       ) : (
         <p>No approved patches have reached this host yet.</p>
+      )}
+    </div>
+  );
+}
+
+function HostActionLog({ snapshot }: { snapshot: GmHostSnapshot | null }) {
+  if (!snapshot) {
+    return <p>Player actions appear here once a host is linked.</p>;
+  }
+
+  return (
+    <div data-component="gm-live-list">
+      {snapshot.actions?.length ? (
+        snapshot.actions.slice(0, 12).map((action) => (
+          <div key={action.id}>
+            <strong>{action.name}</strong>
+            <span>
+              {action.type} - F{action.floor} T{action.turn} - {action.label}
+            </span>
+          </div>
+        ))
+      ) : (
+        <p>No player actions have reached this host yet.</p>
       )}
     </div>
   );

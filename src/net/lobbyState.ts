@@ -74,6 +74,22 @@ export type GmDeliveredPatch = {
   approvedAt: number
 }
 
+export type LobbyActionType = "move" | "interact" | "combat" | "inventory" | "village" | "system"
+
+export type LobbyActionEntry = {
+  id: string
+  playerId: string
+  name: string
+  type: LobbyActionType
+  label: string
+  floor: number
+  turn: number
+  hp: number
+  x: number
+  y: number
+  createdAt: number
+}
+
 export type LobbySnapshot = {
   mode: LobbyMode
   seed: number
@@ -82,6 +98,7 @@ export type LobbySnapshot = {
   spectators: Array<Omit<LobbyPlayer, "role">>
   coopStates: CoopSyncState[]
   combat: CombatTurnState
+  actions: LobbyActionEntry[]
   leaderboard: RaceResult[]
   gmPatches: GmDeliveredPatch[]
   syncWarnings: string[]
@@ -104,6 +121,7 @@ export class MultiplayerLobbyState {
   private readonly coopStates = new Map<string, CoopSyncState>()
   private readonly results: RaceResult[]
   private readonly gmPatches = new Map<string, GmDeliveredPatch>()
+  private readonly actions: LobbyActionEntry[] = []
   private combat: CombatTurnState = { active: false, round: 0, order: [] }
 
   constructor(options: LobbyStateOptions) {
@@ -200,7 +218,52 @@ export class MultiplayerLobbyState {
   deliverGmPatch(input: Omit<Partial<GmDeliveredPatch>, "operations"> & { operations?: unknown[] }) {
     const patch = normalizeGmPatch(input, this.now())
     this.gmPatches.set(patch.id, patch)
+    this.actions.unshift({
+      id: `gm-${patch.id}-${patch.approvedAt}`,
+      playerId: "gm",
+      name: "GM",
+      type: "system",
+      label: `Delivered ${patch.title}`,
+      floor: 0,
+      turn: 0,
+      hp: 0,
+      x: 0,
+      y: 0,
+      createdAt: patch.approvedAt,
+    })
+    this.trimActions()
     return patch
+  }
+
+  recordAction(input: {
+    playerId: string
+    type?: unknown
+    label?: unknown
+    floor?: unknown
+    turn?: unknown
+    hp?: unknown
+    x?: unknown
+    y?: unknown
+  }) {
+    const player = this.players.get(input.playerId)
+    if (!player || player.role === "spectator") throw new Error(`Unknown action player: ${input.playerId}`)
+    const createdAt = this.now()
+    const entry: LobbyActionEntry = {
+      id: createHash("sha256").update(`${input.playerId}:${createdAt}:${String(input.label || "")}:${this.actions.length}`).digest("hex").slice(0, 16),
+      playerId: input.playerId,
+      name: player.name,
+      type: normalizeActionType(input.type),
+      label: cleanActionLabel(input.label),
+      floor: positiveInt(input.floor),
+      turn: positiveInt(input.turn),
+      hp: positiveInt(input.hp),
+      x: integer(input.x),
+      y: integer(input.y),
+      createdAt,
+    }
+    this.actions.unshift(entry)
+    this.trimActions()
+    return entry
   }
 
   leaderboard() {
@@ -217,10 +280,15 @@ export class MultiplayerLobbyState {
       spectators: players.filter((player) => player.role === "spectator").map(publicPlayer),
       coopStates: [...this.coopStates.values()].sort((left, right) => left.name.localeCompare(right.name)),
       combat: { ...this.combat, order: [...this.combat.order] },
+      actions: this.actions.slice(0, 50),
       leaderboard: this.leaderboard(),
       gmPatches: [...this.gmPatches.values()].sort((left, right) => right.approvedAt - left.approvedAt),
       syncWarnings: coopSyncWarnings([...this.coopStates.values()]),
     }
+  }
+
+  private trimActions(limit = 120) {
+    if (this.actions.length > limit) this.actions.length = limit
   }
 }
 
@@ -275,6 +343,15 @@ function normalizeGmPatchValue(value: unknown) {
   if (typeof value === "boolean") return value
   if (typeof value === "string") return value.replace(/[^\w .,:;!?'"()/-]/g, "").trim().slice(0, 280)
   return null
+}
+
+function normalizeActionType(value: unknown): LobbyActionType {
+  if (value === "move" || value === "interact" || value === "combat" || value === "inventory" || value === "village" || value === "system") return value
+  return "system"
+}
+
+function cleanActionLabel(value: unknown) {
+  return String(value || "Updated state").replace(/[^\w .,:;!?'"()/-]/g, "").replace(/\s+/g, " ").trim().slice(0, 140) || "Updated state"
 }
 
 function sortLeaderboard(results: RaceResult[]) {

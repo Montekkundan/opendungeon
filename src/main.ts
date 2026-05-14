@@ -91,7 +91,7 @@ import { acquireLocalRunLock, releaseLocalRunLock, type LocalRunLock } from "./s
 import { debugOverlaysEnabled } from "./system/debugFlags.js"
 import { checkInternetConnectivity } from "./net/connectivity.js"
 import { lobbyInviteErrorMessage, lobbyInviteMismatchNotice, lobbyJoinUsageMessage, normalizeLobbyBaseUrl } from "./net/hostConfig.js"
-import type { CoopSyncState, LobbySnapshot } from "./net/lobbyState.js"
+import type { CoopSyncState, LobbyActionType, LobbySnapshot } from "./net/lobbyState.js"
 import { checkForUpdate, checkingUpdateStatus, handleUpdateCommand } from "./system/updateCheck.js"
 import { easeInOutQuart, lerp } from "./shared/numeric.js"
 import { transitionDurationForKind } from "./ui/teleportAnimation.js"
@@ -604,6 +604,7 @@ function handleHubKey(key: KeyEvent) {
 function handleVillageKey(key: KeyEvent) {
   if (key.name === "g") {
     model.seed = seedForVillageDescent(model.villageSeedMode, model.seed, randomSeed)
+    sendLobbyAction("village", `Started next descent with ${villageSeedPlanText(model.villageSeedMode, model.seed)}`)
     startVillageDescent()
     return
   }
@@ -616,24 +617,28 @@ function handleVillageKey(key: KeyEvent) {
     buildHubStation(model.session, "blacksmith")
     playAudioEvent("village-build")
     model.saveStatus = model.session.log[0] ?? "Blacksmith checked."
+    sendLobbyAction("village", "Checked or built the blacksmith")
     return
   }
   if (key.name === "3") {
     const coins = sellLootToVillage(model.session)
     playAudioEvent(coins > 0 ? "item-pickup" : "menu-cancel")
     model.saveStatus = coins > 0 ? `Sold loot for ${coins} coins.` : model.session.log[0] ?? "No loot to sell."
+    sendLobbyAction("village", coins > 0 ? `Sold loot for ${coins} coins` : "Checked market with no loot to sell")
     return
   }
   if (key.name === "4") {
     prepareFood(model.session)
     playAudioEvent("village-build")
     model.saveStatus = model.session.log[0] ?? "Food prepared."
+    sendLobbyAction("village", "Prepared food")
     return
   }
   if (key.name === "r") {
     const craft = craftVillageRecipe(model.session)
     playAudioEvent(craft ? "village-build" : "menu-cancel")
     model.saveStatus = craft?.message ?? model.session.log[0] ?? "No recipe ready."
+    sendLobbyAction("village", craft ? `Crafted ${craft.item}` : "Checked crafting recipes")
     return
   }
   if (key.name === "escape") {
@@ -649,16 +654,19 @@ function handleVillageKey(key: KeyEvent) {
     const sale = runVillageShopSale(model.session)
     playAudioEvent(sale ? "item-pickup" : "menu-cancel")
     model.saveStatus = sale?.reaction ?? model.session.log[0] ?? "No market sale."
+    sendLobbyAction("village", sale ? `Ran market sale: ${sale.reaction}` : "Checked market sale")
     return
   }
   if (key.name === "h") {
     const house = customizeVillageHouse(model.session)
     model.saveStatus = `${house.name} customized.`
+    sendLobbyAction("village", `Customized ${house.name}`)
     return
   }
   if (key.name === "p") {
     const result = cycleCoopVillagePermission(model.session)
     model.saveStatus = result.message
+    sendLobbyAction("village", result.message)
     return
   }
   if (key.name === "c") {
@@ -681,12 +689,14 @@ function handleVillageKey(key: KeyEvent) {
     const result = visitVillageLocation(model.session)
     model.saveStatus = String(result)
     if (model.session.hub.lastCutsceneId && model.session.hub.lastCutsceneId !== previousCutsceneId) model.dialog = "cutscene"
+    sendLobbyAction("village", `Visited village location: ${result}`)
     return
   }
   const move = movementForKey(key, model.settings)
   if (move) {
     const selected = moveVillagePlayer(model.session, move.dx, move.dy)
     model.saveStatus = `${selected.replace(/-/g, " ")} selected.`
+    sendLobbyAction("move", `Moved in village to ${selected.replace(/-/g, " ")}`)
   }
 }
 
@@ -780,6 +790,7 @@ function applySelectedInventoryAction(action: Parameters<typeof performInventory
   model.message = result.message
   setInventoryIndex(index)
   if (result.used) playAudioEvent(action === "drop" ? "menu-cancel" : "item-pickup")
+  if (result.used) sendLobbyAction("inventory", `${action} inventory slot ${index + 1}: ${result.message}`)
 }
 
 function moveInventoryItem(source: number, target: number) {
@@ -797,17 +808,22 @@ function handleSkillCheckKey(key: KeyEvent) {
   if (check.status === "pending") {
     if (key.name === "escape") {
       cancelSkillCheck(model.session)
+      sendLobbyAction("interact", "Stepped away from a talent check")
       return
     }
     if (isConfirmKey(key)) {
       playAudioEvent("d20-roll")
       const roll = resolveSkillCheck(model.session)
       if (roll) startDiceRollAnimation(roll.d20)
+      sendLobbyAction("interact", `Rolled a talent check${roll ? ` d20=${roll.d20}` : ""}`)
     }
     return
   }
 
-  if (isConfirmKey(key) || key.name === "escape") dismissSkillCheck(model.session)
+  if (isConfirmKey(key) || key.name === "escape") {
+    dismissSkillCheck(model.session)
+    sendLobbyAction("interact", "Closed talent check result")
+  }
 }
 
 function handleMenuKey(key: KeyEvent) {
@@ -968,19 +984,23 @@ function handleGameKey(key: KeyEvent) {
     if (key.name === "escape") {
       model.session.conversation = null
       model.saveStatus = "Conversation closed."
+      sendLobbyAction("interact", "Left NPC conversation")
       return
     }
     if (isConfirmKey(key)) {
       if (model.session.conversation.status === "completed") {
         model.session.conversation = null
         model.saveStatus = "Conversation closed."
+        sendLobbyAction("interact", "Closed NPC conversation")
       } else {
         interactWithWorld(model.session)
+        sendLobbyAction("interact", "Advanced NPC conversation")
       }
       return
     }
     if (/^[1-3]$/.test(key.name)) {
       chooseConversationOption(model.session, Number(key.name) - 1)
+      sendLobbyAction("interact", `Selected NPC conversation option ${key.name}`)
       return
     }
     if (isLeftKey(key) || isUpKey(key)) {
@@ -1002,6 +1022,7 @@ function handleGameKey(key: KeyEvent) {
     model.message = ""
     setInventoryIndex(model.inventoryIndex)
     recordTutorialAction(model.session, "inventory")
+    sendLobbyAction("inventory", "Opened inventory")
     return
   }
   if (key.name === "c") {
@@ -1020,6 +1041,7 @@ function handleGameKey(key: KeyEvent) {
     model.dialog = "book"
     clampBookSelection()
     recordTutorialAction(model.session, "book")
+    sendLobbyAction("interact", "Opened Book")
     return
   }
   if (key.name === "v") {
@@ -1034,14 +1056,17 @@ function handleGameKey(key: KeyEvent) {
     model.dialog = "quests"
     model.questIndex = clamp(model.questIndex, 0, Math.max(0, visibleQuestCount(model.session) - 1))
     recordTutorialAction(model.session, "quests")
+    sendLobbyAction("interact", "Opened quest journal")
     return
   }
   if (key.name === "r") {
     rest(model.session)
+    sendLobbyAction("inventory", "Rested")
     return
   }
   if (key.name === "h") {
     usePotion(model.session)
+    sendLobbyAction("inventory", "Used potion")
     return
   }
   if (key.name === "?" || (key.shift && key.name === "/")) {
@@ -1050,6 +1075,7 @@ function handleGameKey(key: KeyEvent) {
   }
   if (key.name === "e" || isConfirmKey(key)) {
     interactWithWorld(model.session)
+    sendLobbyAction("interact", "Interacted with nearby world object")
     return
   }
   if (key.name === "u") {
@@ -1075,7 +1101,11 @@ function handleGameKey(key: KeyEvent) {
     const before = { ...model.session.player }
     const wasHubUnlocked = model.session.hub.unlocked
     tryMove(model.session, move.dx, move.dy)
-    if (before.x !== model.session.player.x || before.y !== model.session.player.y) startPlayerMoveAnimation(moveDirection(move.dx, move.dy))
+    if (before.x !== model.session.player.x || before.y !== model.session.player.y) {
+      const direction = moveDirection(move.dx, move.dy)
+      startPlayerMoveAnimation(direction)
+      sendLobbyAction("move", `Moved ${direction}`)
+    }
     if ((model.session.status as GameSession["status"]) === "victory" && model.session.hub.unlocked && !wasHubUnlocked) openVillageRoad("The final gate opens to the village.", Boolean(model.session.hub.lastCutsceneId))
   }
 }
@@ -1133,12 +1163,14 @@ function handleCombatKey(key: KeyEvent) {
   }
   if (/^[1-6]$/.test(key.name)) {
     selectSkill(model.session, Number(key.name) - 1)
+    sendLobbyAction("combat", `Selected combat skill ${key.name}`)
     return
   }
   if (key.name === "f") {
     playAudioEvent("d20-roll")
     const roll = attemptFlee(model.session)
     if (roll) startDiceRollAnimation(roll.d20)
+    sendLobbyAction("combat", `Tried to flee${roll ? ` d20=${roll.d20}` : ""}`)
     return
   }
   if (isConfirmKey(key)) {
@@ -1147,6 +1179,7 @@ function handleCombatKey(key: KeyEvent) {
     performCombatAction(model.session)
     const nextRoll = model.session.combat.lastRoll
     if (nextRoll && nextRoll !== previousRoll) startDiceRollAnimation(nextRoll.d20)
+    sendLobbyAction("combat", nextRoll && nextRoll !== previousRoll ? `Rolled combat d20=${nextRoll.d20}` : "Resolved combat action")
   }
 }
 
@@ -1970,6 +2003,22 @@ function syncLobbyState() {
         tutorialReady: checkpoint.ready,
         tutorialCompleted: checkpoint.completed,
       },
+    }),
+  )
+}
+
+function sendLobbyAction(actionType: LobbyActionType, label: string) {
+  if (!lobbySocket || lobbySocket.readyState !== WebSocket.OPEN) return
+  lobbySocket.send(
+    JSON.stringify({
+      type: "action",
+      actionType,
+      label,
+      floor: model.session.floor,
+      turn: model.session.turn,
+      hp: model.session.hp,
+      x: model.session.player.x,
+      y: model.session.player.y,
     }),
   )
 }

@@ -31,7 +31,8 @@ Current implementation status:
 
 - `/gm` is logged-in and Supabase-backed.
 - GM worlds and patch draft events are stored under the signed-in owner.
-- The page can read a live `opendungeon-host` `/state` URL and display connected players.
+- The page can read a live `opendungeon-host` `/state` URL and display connected players plus the latest host action log.
+- The host records movement, interaction, combat, inventory, village, and GM delivery actions, and also exposes them at `/actions` for debugging and GM tooling.
 - Approved patches can be delivered to the host `/gm/patches` endpoint.
 - Terminal clients receive approved patch notifications and apply validated enemy HP, enemy damage, encounter-pressure, and briefing operations.
 - If `AI_GATEWAY_API_KEY` or `VERCEL_OIDC_TOKEN` is configured, GM patch drafts call Vercel AI Gateway through the AI SDK; otherwise they use the deterministic rules fallback and label the draft as fallback-generated.

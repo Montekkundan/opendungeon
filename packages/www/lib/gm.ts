@@ -74,7 +74,22 @@ export interface GmHostDeliveredPatch {
   title: string;
 }
 
+export interface GmHostActionEntry {
+  createdAt: number;
+  floor: number;
+  hp: number;
+  id: string;
+  label: string;
+  name: string;
+  playerId: string;
+  turn: number;
+  type: "move" | "interact" | "combat" | "inventory" | "village" | "system";
+  x: number;
+  y: number;
+}
+
 export interface GmHostSnapshot {
+  actions: GmHostActionEntry[];
   combat: {
     active: boolean;
     activePlayerId?: string;

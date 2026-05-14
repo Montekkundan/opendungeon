@@ -37,6 +37,14 @@ test("host starts, accepts two players plus a spectator, syncs state, disconnect
     expect(synced.coopStates.map((state) => state.name).sort()).toEqual(["Mira", "Sol"])
     expect(synced.coopStates.find((state) => state.name === "Mira")).toMatchObject({ x: 4, y: 5, tutorialReady: true })
 
+    mira.send(JSON.stringify({ type: "action", actionType: "move", label: "Moved east", floor: 1, turn: 2, hp: 19, x: 5, y: 5 }))
+    sol.send(JSON.stringify({ type: "action", actionType: "interact", label: "Opened Book", floor: 1, turn: 3, hp: 19, x: 5, y: 5 }))
+    const actionState = await waitForSnapshot(spectator, (snapshot) => snapshot.actions.length === 2)
+    expect(actionState.actions.map((action) => action.name).sort()).toEqual(["Mira", "Sol"])
+    expect(actionState.actions[0]).toMatchObject({ label: "Opened Book", type: "interact" })
+    const actions = (await fetchJson(`${baseUrl}/actions`)) as Array<{ label: string }>
+    expect(actions.map((action) => action.label)).toContain("Moved east")
+
     const state = (await fetchJson(`${baseUrl}/state`)) as LobbySnapshot
     expect(state.coopStates.map((sync) => sync.name).sort()).toEqual(["Mira", "Sol"])
 
