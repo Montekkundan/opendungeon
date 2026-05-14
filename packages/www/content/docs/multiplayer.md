@@ -28,6 +28,8 @@ Supabase Realtime is not the movement authority for the current game. It is the 
 
 Multiplayer with GM uses the same host-authoritative runtime. The website GM console can propose lore, room, monster, quest, and sprite changes, but every change must be schema-validated, approved, written to the GM-owned world in Supabase, and then applied by the host as a command-log event. GM-created assets and lore stay scoped to that world and never replace the canonical Single Player story.
 
+The GM console can also archive the current host snapshot into Supabase. After linking a running host URL, press `Archive host state` to save connected players, accepted/rejected host command results, action log entries, combat state, delivered patches, and sync warnings as an owner-scoped `gm-host-snapshot-archived` world event. This is the audit trail the GM mode will use before richer realtime playback and rollback land.
+
 ## Host and join
 
 Co-op is the default hosted multiplayer mode. Pass `--mode race` only when you want a same-seed challenge instead of a shared story run.

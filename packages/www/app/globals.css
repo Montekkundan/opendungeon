@@ -696,6 +696,15 @@ body {
   overflow-wrap: anywhere;
 }
 
+[data-component="gm-archive-form"] {
+  display: grid;
+  gap: 8px;
+}
+
+[data-component="gm-archive-form"] p {
+  color: var(--color-text-weak);
+}
+
 [data-slot="auth-actions"] {
   display: flex;
   gap: 12px;

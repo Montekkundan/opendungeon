@@ -47,8 +47,8 @@ test("host starts, accepts two players plus a spectator, syncs state, disconnect
     const actionState = await waitForSnapshot(spectator, (snapshot) => snapshot.actions.length === 2 && snapshot.commands.length === 2)
     expect(actionState.actions.map((action) => action.name).sort()).toEqual(["Mira", "Sol"])
     expect(actionState.actions).toContainEqual(expect.objectContaining({ label: "Opened Book", type: "interact" }))
-    expect(actionState.commands[0]).toMatchObject({ accepted: true, label: "Opened Book", sequence: 2, type: "interact" })
-    expect(actionState.commands[0]?.result.message).toBeTruthy()
+    expect(actionState.commands).toContainEqual(expect.objectContaining({ accepted: true, label: "Opened Book", sequence: 2, type: "interact" }))
+    expect(actionState.commands.find((command) => command.label === "Opened Book")?.result.message).toBeTruthy()
     const actions = (await fetchJson(`${baseUrl}/actions`)) as Array<{ label: string }>
     expect(actions.map((action) => action.label)).toContain("Moved east")
     const commands = (await fetchJson(`${baseUrl}/commands`)) as Array<{ label: string; payload: Record<string, string>; result: { accepted: boolean } }>

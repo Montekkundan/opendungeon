@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import {
   buildGmPatchDraftWithAi,
   deliverGmPatchToHost,
+  fetchGmHostSnapshot,
   type GmPatchDraft,
   normalizeDifficulty,
   normalizeGmHostUrl,
@@ -30,6 +31,30 @@ function redirectToGm(params: Record<string, string | undefined>): never {
 
 function formHostUrl(formData: FormData) {
   return normalizeGmHostUrl(String(formData.get("hostUrl") ?? ""));
+}
+
+async function assertOwnedWorld(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ownerId: string,
+  worldId: string
+) {
+  if (!worldId) {
+    gmError("Create or select a GM world first.");
+  }
+
+  const selected = await supabase
+    .from("opendungeon_worlds")
+    .select("id")
+    .eq("id", worldId)
+    .eq("owner_id", ownerId)
+    .maybeSingle<{ id: string }>();
+
+  if (selected.error) {
+    gmError(`Could not load GM world: ${selected.error.message}`, worldId);
+  }
+  if (!selected.data) {
+    gmError("Selected GM world was not found for this account.", worldId);
+  }
 }
 
 export async function createGmWorld(formData: FormData) {
@@ -69,23 +94,7 @@ export async function draftGmPatch(formData: FormData) {
   }
 
   const worldId = String(formData.get("worldId") ?? "");
-  if (!worldId) {
-    gmError("Create or select a GM world first.");
-  }
-
-  const selected = await supabase
-    .from("opendungeon_worlds")
-    .select("id")
-    .eq("id", worldId)
-    .eq("owner_id", user.id)
-    .maybeSingle<{ id: string }>();
-
-  if (selected.error) {
-    gmError(`Could not load GM world: ${selected.error.message}`, worldId);
-  }
-  if (!selected.data) {
-    gmError("Selected GM world was not found for this account.", worldId);
-  }
+  await assertOwnedWorld(supabase, user.id, worldId);
 
   const draft = await buildGmPatchDraftWithAi({
     difficulty: normalizeDifficulty(formData.get("difficulty")),
@@ -117,6 +126,79 @@ export async function draftGmPatch(formData: FormData) {
   redirectToGm({
     host: formHostUrl(formData),
     patch: draft.id,
+    world: worldId,
+  });
+}
+
+export async function archiveHostSnapshot(formData: FormData) {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getUser();
+  const user = data.user;
+  if (!user) {
+    redirect("/login?next=/gm&error=Log%20in%20to%20archive%20host%20state");
+  }
+
+  const worldId = String(formData.get("worldId") ?? "");
+  const hostUrl = formHostUrl(formData);
+  await assertOwnedWorld(supabase, user.id, worldId);
+
+  if (!hostUrl) {
+    gmError("Link a reachable host URL before archiving host state.", worldId);
+  }
+
+  const hostBridge = await fetchGmHostSnapshot(hostUrl);
+  if (hostBridge.error || !hostBridge.snapshot) {
+    gmError(
+      hostBridge.error
+        ? `Could not archive host state: ${hostBridge.error}`
+        : "Could not archive host state: no host snapshot was returned.",
+      worldId
+    );
+  }
+
+  const snapshot = hostBridge.snapshot;
+  const eventId = `gm-host-${Date.now().toString(36)}-${Math.random()
+    .toString(16)
+    .slice(2, 8)}`;
+  const actionCount = snapshot.actions.length;
+  const commandCount = snapshot.commands.length;
+  const playerCount = snapshot.players.length;
+  const { error } = await supabase.from("opendungeon_world_events").insert({
+    event_id: eventId,
+    event_type: "gm-host-snapshot-archived",
+    message: `Archived ${actionCount} actions and ${commandCount} commands from ${playerCount} connected players.`,
+    metadata: {
+      actions: snapshot.actions.slice(0, 40),
+      archivedAt: new Date().toISOString(),
+      combat: snapshot.combat,
+      commands: snapshot.commands.slice(0, 40),
+      coopStates: snapshot.coopStates,
+      counts: {
+        actions: actionCount,
+        commands: commandCount,
+        gmPatches: snapshot.gmPatches.length,
+        players: playerCount,
+        spectators: snapshot.spectators.length,
+      },
+      gmPatches: snapshot.gmPatches.slice(0, 20),
+      hostState: snapshot.hostState,
+      hostUrl: hostBridge.url,
+      players: snapshot.players,
+      source: "gm-console-host-bridge",
+      spectators: snapshot.spectators,
+      syncWarnings: snapshot.syncWarnings.slice(0, 20),
+    },
+    owner_id: user.id,
+    world_id: worldId,
+  });
+
+  if (error) {
+    gmError(`Could not save host archive: ${error.message}`, worldId);
+  }
+
+  redirectToGm({
+    archived: eventId,
+    host: hostUrl,
     world: worldId,
   });
 }

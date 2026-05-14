@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { gameModes } from "@/lib/game-modes";
 import {
   fetchGmHostSnapshot,
+  type GmHostAuthoritativeState,
   type GmHostBridgeResult,
   type GmHostSnapshot,
   type GmPatchDraft,
@@ -13,7 +14,12 @@ import {
 } from "@/lib/gm";
 import { supabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
-import { approveGmPatch, createGmWorld, draftGmPatch } from "./actions";
+import {
+  approveGmPatch,
+  archiveHostSnapshot,
+  createGmWorld,
+  draftGmPatch,
+} from "./actions";
 
 export const metadata = {
   title: "GM Console | opendungeon",
@@ -35,7 +41,16 @@ interface WorldEventRow {
   id: number;
   message: string;
   metadata: {
+    counts?: {
+      actions?: number;
+      commands?: number;
+      gmPatches?: number;
+      players?: number;
+      spectators?: number;
+    };
     draft?: GmPatchDraft;
+    hostState?: GmHostAuthoritativeState | null;
+    hostUrl?: string;
     patchId?: string;
     status?: string;
   } | null;
@@ -68,9 +83,13 @@ async function getWorldEvents(ownerId: string, worldId: string | null) {
     .select("id, event_type, event_id, message, metadata, created_at")
     .eq("owner_id", ownerId)
     .eq("world_id", worldId)
-    .in("event_type", ["gm-patch-draft", "gm-patch-approved"])
+    .in("event_type", [
+      "gm-patch-draft",
+      "gm-patch-approved",
+      "gm-host-snapshot-archived",
+    ])
     .order("created_at", { ascending: false })
-    .limit(8)
+    .limit(12)
     .returns<WorldEventRow[]>();
 
   return { error: error?.message ?? null, events: data ?? [] };
@@ -102,6 +121,16 @@ function approvedPatchIds(events: WorldEventRow[]) {
       .filter((event) => event.event_type === "gm-patch-approved")
       .map((event) => event.event_id)
       .filter(Boolean)
+  );
+}
+
+function patchEvents(events: WorldEventRow[]) {
+  return events.filter((event) => event.event_type.startsWith("gm-patch-"));
+}
+
+function hostArchiveEvents(events: WorldEventRow[]) {
+  return events.filter(
+    (event) => event.event_type === "gm-host-snapshot-archived"
   );
 }
 
@@ -186,6 +215,9 @@ export default async function GmPage({ searchParams }: GmPageProps) {
 
           {singleParam(params, "error") ? (
             <p data-slot="notice">{singleParam(params, "error")}</p>
+          ) : null}
+          {singleParam(params, "archived") ? (
+            <p data-slot="notice">Host snapshot archived to Supabase.</p>
           ) : null}
           {error ? <p data-slot="notice">World sync failed: {error}</p> : null}
           {eventsError ? (
@@ -328,9 +360,9 @@ export default async function GmPage({ searchParams }: GmPageProps) {
 
               <section>
                 <h2>Patch queue</h2>
-                {events.length ? (
+                {patchEvents(events).length ? (
                   <ul>
-                    {events.map((event) => (
+                    {patchEvents(events).map((event) => (
                       <li key={event.id}>
                         <Link
                           href={`/gm?world=${selectedWorldId ?? ""}&patch=${
@@ -356,6 +388,19 @@ export default async function GmPage({ searchParams }: GmPageProps) {
               <section>
                 <h2>Host authority</h2>
                 <HostAuthorityState snapshot={hostBridge.snapshot} />
+              </section>
+
+              <section>
+                <h2>Archive to Supabase</h2>
+                <HostArchiveControl
+                  hostBridge={hostBridge}
+                  selectedWorldId={selectedWorldId}
+                />
+              </section>
+
+              <section>
+                <h2>Host archive</h2>
+                <HostArchiveList events={hostArchiveEvents(events)} />
               </section>
 
               <section>
@@ -455,6 +500,69 @@ function PatchPreview({
           {approvalButtonLabel(approved, hostUrl)}
         </Button>
       </form>
+    </div>
+  );
+}
+
+function HostArchiveControl({
+  hostBridge,
+  selectedWorldId,
+}: {
+  hostBridge: GmHostBridgeResult;
+  selectedWorldId: string | null;
+}) {
+  if (!selectedWorldId) {
+    return <p>Create or select a GM world before archiving host state.</p>;
+  }
+  if (!hostBridge.url) {
+    return <p>Link a running `opendungeon-host` URL first.</p>;
+  }
+  if (!hostBridge.snapshot) {
+    return <p>Read a reachable host before archiving it.</p>;
+  }
+
+  return (
+    <form action={archiveHostSnapshot} data-component="gm-archive-form">
+      <input name="hostUrl" type="hidden" value={hostBridge.url} />
+      <input name="worldId" type="hidden" value={selectedWorldId} />
+      <p>
+        Save players, host-owned command results, action log entries, combat
+        state, patches, and sync warnings as an owner-scoped Supabase event.
+      </p>
+      <Button type="submit">Archive host state</Button>
+    </form>
+  );
+}
+
+function HostArchiveList({ events }: { events: WorldEventRow[] }) {
+  if (!events.length) {
+    return <p>No host snapshots have been archived for this world yet.</p>;
+  }
+
+  return (
+    <div data-component="gm-live-list">
+      {events.map((event) => (
+        <div key={event.id}>
+          <strong>{event.event_id ?? "host archive"}</strong>
+          <span>{event.created_at.replace("T", " ").slice(0, 16)}</span>
+          <span>{event.message}</span>
+          {event.metadata?.counts ? (
+            <span>
+              {event.metadata.counts.players ?? 0} players -{" "}
+              {event.metadata.counts.commands ?? 0} commands -{" "}
+              {event.metadata.counts.actions ?? 0} actions
+            </span>
+          ) : null}
+          {event.metadata?.hostState ? (
+            <span>
+              Host #{event.metadata.hostState.commandSequence} -{" "}
+              {event.metadata.hostState.accepted ? "accepted" : "rejected"} -{" "}
+              {event.metadata.hostState.name} -{" "}
+              {event.metadata.hostState.message}
+            </span>
+          ) : null}
+        </div>
+      ))}
     </div>
   );
 }
