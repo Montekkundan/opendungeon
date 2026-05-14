@@ -16,6 +16,7 @@ import {
   compactTalentEffectTextForSkill,
   currentBiome,
   currentTutorialPrompt,
+  equipmentComparisonText,
   enemyBehaviorText,
   enemyStrategyText,
   fleeDc,
@@ -2703,7 +2704,7 @@ function drawInventoryDialog(canvas: Canvas, model: AppModel) {
     canvas.write(layout.details.x + 14, layout.details.y + 1, visual.kind.toUpperCase(), visual.accent, UI.panel)
     writeWrapped(canvas, layout.details.x + 14, layout.details.y + 2, Math.floor(layout.details.width * 0.24), [selectedItem], 2, UI.gold, UI.panel)
     writeWrapped(canvas, layout.details.x + Math.floor(layout.details.width * 0.42), layout.details.y + 1, Math.floor(layout.details.width * 0.54), [inventoryItemDescription(selectedItem)], 3, UI.soft, UI.panel)
-    const compare = inventoryCompareText(model.session, selectedItem)
+    const compare = equipmentComparisonText(model.session, selectedItem)
     writeWrapped(canvas, layout.details.x + 14, layout.details.y + 4, layout.details.width - 16, [compare], 1, UI.muted, UI.panel)
     writeWrapped(canvas, layout.details.x + 2, layout.details.y + 5, layout.details.width - 4, [enabledActions.join("  ")], 2, UI.ink, UI.panel)
   } else {
@@ -2769,14 +2770,6 @@ function findInventoryByKind(inventory: string[], kind: "weapon" | "relic" | "co
   if (kind === "weapon") return inventory.find((item) => /blade|sword|lockpick/i.test(item))
   if (kind === "relic") return inventory.find((item) => /relic|shard|scroll/i.test(item))
   return inventory.find((item) => /potion|vial/i.test(item))
-}
-
-function inventoryCompareText(session: GameSession, item: string) {
-  const lower = item.toLowerCase()
-  const slot = /blade|sword|axe|mace|rapier|focus|spanner|knife/i.test(lower) ? "weapon" : /shield|buckler|cloak/i.test(lower) ? "armor" : /relic|charm|token|spark|shard/i.test(lower) ? "relic" : null
-  if (!slot) return "Compare: utility or loot item; no equipment slot."
-  const equipped = session.equipment[slot]?.name ?? "nothing"
-  return `Compare: ${slot} now ${equipped}. E equips this item.`
 }
 
 function drawStateDialog(canvas: Canvas, model: AppModel, x: number, y: number, width: number, height: number) {

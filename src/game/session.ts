@@ -1887,12 +1887,16 @@ export function useInventoryItemAt(session: GameSession, index: number) {
 
   if (session.status !== "running") return { used: false, message: `${item}: use, sell, or prepare items during an active descent or in the village.` }
   if (session.levelUp) return { used: false, message: "Choose a level-up talent before using items." }
-  if (session.skillCheck) return { used: false, message: "Hands are busy with the talent check. Press Esc to step away first." }
+  if (session.skillCheck && !lower.includes("rollback scroll")) return { used: false, message: "Hands are busy with the talent check. Press Esc to step away first." }
+  if (lower.includes("rollback scroll")) return useRollbackScroll(session, index, item)
+  if (lower.includes("tripwire") || lower.includes("bomb")) return useCombatTool(session, index, item)
+  if (lower.includes("rope arrow") || lower.includes("lockpick")) return useTraversalTool(session, index, item)
+  if (lower.includes("cursed shard")) return useCursedReward(session, index, item)
 
   if (lower.includes("deploy nerve potion")) return consumeInventoryItem(session, index, item, { hp: 5, focus: 0, title: "Potion used", text: "Health returns and the pulse settles." })
   if (lower.includes("vial") || lower.includes("potion")) return consumeInventoryItem(session, index, item, { hp: 5, focus: 0, title: "Item used", text: `${item} restored health.` })
-  if (lower.includes("focus broth")) return consumeInventoryItem(session, index, item, { hp: 1, focus: 5, title: "Food used", text: `${item} restored focus for the next push.` })
-  if (lower.includes("ration") || lower.includes("food")) return consumeInventoryItem(session, index, item, { hp: 3, focus: 1, title: "Food used", text: `${item} restored a little HP and focus.` })
+  if (lower.includes("focus broth")) return consumeInventoryItem(session, index, item, { hp: 1, focus: 5, maxFocus: 1, title: "Food used", text: `${item} restored focus and raised max focus for this descent.` })
+  if (lower.includes("ration") || lower.includes("food")) return consumeInventoryItem(session, index, item, { hp: 3, focus: 1, maxHp: 1, title: "Food used", text: `${item} restored HP and raised max HP for this descent.` })
 
   return { used: false, message: `${item}: ${inventoryItemUseHint(item)}` }
 }
@@ -1983,17 +1987,98 @@ function sellInventoryItem(session: GameSession, index: number, item: string) {
   return { used: true, message }
 }
 
-function consumeInventoryItem(session: GameSession, index: number, item: string, effect: { hp: number; focus: number; title: string; text: string }) {
+function useRollbackScroll(session: GameSession, index: number, item: string) {
+  if (!session.combat.active && !session.skillCheck) return { used: false, message: `${item} waits for combat or a talent check gone wrong.` }
+  session.inventory.splice(index, 1)
+  if (session.skillCheck) {
+    session.skillCheck = null
+    const message = `${item} rewound the talent check before the roll landed.`
+    pushSessionMessage(session, message)
+    addToast(session, "Check rewound", "The check was cancelled without a consequence.", "success")
+    return { used: true, message }
+  }
+  endCombat(session, `${item} pulled the crawler out of initiative.`)
+  return { used: true, message: `${item} ended the fight before another exchange.` }
+}
+
+function useTraversalTool(session: GameSession, index: number, item: string) {
+  session.inventory.splice(index, 1)
+  session.focus = Math.min(session.maxFocus, session.focus + 1)
+  session.turn += 1
+  revealAroundPlayer(session)
+  const message = `${item} marked a safer route. +1 focus and nearby paths revealed.`
+  pushSessionMessage(session, message)
+  addToast(session, "Tool used", message, "success")
+  return { used: true, message }
+}
+
+function useCombatTool(session: GameSession, index: number, item: string) {
+  if (!session.combat.active) return { used: false, message: `${item} needs an active fight.` }
+  const target = combatTargets(session)[session.combat.selectedTarget]
+  if (!target) return { used: false, message: `${item} has no target.` }
+  session.inventory.splice(index, 1)
+  const damage = item.toLowerCase().includes("bomb") ? 6 : 4
+  target.hp -= damage
+  session.statusEffects.push({
+    id: "weakened",
+    targetId: target.id,
+    label: "Pinned",
+    remainingTurns: 2,
+    magnitude: 1,
+    source: item,
+  })
+  const message = `${item} pins ${label(target.kind)} for ${damage} damage and weakens the next exchange.`
+  session.combat.message = message
+  session.log.unshift(message)
+  addToast(session, "Tactical tool", message, "success")
+  if (target.hp <= 0) defeatActor(session, target)
+  if (combatTargets(session).length > 0) finishCombatRound(session, true)
+  else {
+    endCombat(session, "The room falls silent.")
+    finishCombatRound(session, false)
+  }
+  return { used: true, message }
+}
+
+function useCursedReward(session: GameSession, index: number, item: string) {
+  session.inventory.splice(index, 1)
+  const hpCost = Math.min(4, Math.max(0, session.hp - 1))
+  session.hp = Math.max(1, session.hp - hpCost)
+  session.focus = Math.max(0, session.focus - 1)
+  session.gold += 14
+  session.xp += 2
+  maybeLevelUp(session)
+  const message = `${item} paid out 14g and 2 XP, but took ${hpCost} HP and 1 focus.`
+  pushSessionMessage(session, message)
+  addToast(session, "Cursed reward", message, "warning")
+  if (session.combat.active) finishCombatRound(session, true)
+  return { used: true, message }
+}
+
+function consumeInventoryItem(session: GameSession, index: number, item: string, effect: { hp: number; focus: number; maxHp?: number; maxFocus?: number; title: string; text: string }) {
   const beforeHp = session.hp
   const beforeFocus = session.focus
-  const nextHp = Math.min(session.maxHp, session.hp + effect.hp)
-  const nextFocus = Math.min(session.maxFocus, session.focus + effect.focus)
-  if (nextHp === beforeHp && nextFocus === beforeFocus) return { used: false, message: `${item} kept. HP and focus are already full.` }
+  const maxHpGain = Math.max(0, effect.maxHp ?? 0)
+  const maxFocusGain = Math.max(0, effect.maxFocus ?? 0)
+  const nextMaxHp = session.maxHp + maxHpGain
+  const nextMaxFocus = session.maxFocus + maxFocusGain
+  const nextHp = Math.min(nextMaxHp, session.hp + effect.hp)
+  const nextFocus = Math.min(nextMaxFocus, session.focus + effect.focus)
+  if (nextHp === beforeHp && nextFocus === beforeFocus && !maxHpGain && !maxFocusGain) return { used: false, message: `${item} kept. HP and focus are already full.` }
 
   session.inventory.splice(index, 1)
+  session.maxHp = nextMaxHp
+  session.maxFocus = nextMaxFocus
   session.hp = nextHp
   session.focus = nextFocus
-  const restored = [`${nextHp - beforeHp ? `+${nextHp - beforeHp} HP` : ""}`, `${nextFocus - beforeFocus ? `+${nextFocus - beforeFocus} focus` : ""}`].filter(Boolean).join(", ")
+  const restored = [
+    `${nextHp - beforeHp ? `+${nextHp - beforeHp} HP` : ""}`,
+    `${nextFocus - beforeFocus ? `+${nextFocus - beforeFocus} focus` : ""}`,
+    `${maxHpGain ? `+${maxHpGain} max HP` : ""}`,
+    `${maxFocusGain ? `+${maxFocusGain} max focus` : ""}`,
+  ]
+    .filter(Boolean)
+    .join(", ")
   const message = `${item} used. ${restored}.`
   session.log.unshift(message)
   addToast(session, effect.title, effect.text, "success")
@@ -2003,7 +2088,7 @@ function consumeInventoryItem(session: GameSession, index: number, item: string,
 }
 
 function isConsumableInventoryItem(item: string) {
-  return /potion|vial|broth|food|ration/i.test(item)
+  return /potion|vial|broth|food|ration|tripwire|bomb|rope arrow|lockpick|rollback scroll|cursed shard/i.test(item)
 }
 
 function inventoryEquipmentSlot(item: string): EquipmentSlot | null {
@@ -2019,8 +2104,21 @@ function equipmentFromInventoryItem(item: string, slot: EquipmentSlot): Equipmen
   const explicitBonus = Number(item.match(/\+(\d+)/)?.[1] ?? 0)
   const rarity: EquipmentRarity = /boss|grave|bound|shrine/i.test(item) ? "rare" : /cursed|ash|parry|oath/i.test(item) ? "uncommon" : "common"
   const statBonuses: Partial<HeroStats> = {}
-  if (slot === "armor") statBonuses.endurance = rarity === "rare" ? 2 : 1
-  if (slot === "relic") statBonuses.luck = rarity === "rare" ? 2 : 1
+  if (slot === "weapon") {
+    if (/focus|spark|scroll/i.test(lower)) statBonuses.intelligence = rarity === "rare" ? 2 : 1
+    else if (/rapier|knife|blade|arrow/i.test(lower)) statBonuses.dexterity = rarity === "rare" ? 2 : 1
+    else statBonuses.strength = rarity === "rare" ? 2 : 1
+  }
+  if (slot === "armor") {
+    statBonuses.endurance = rarity === "rare" ? 2 : 1
+    if (/cloak/i.test(lower)) statBonuses.dexterity = 1
+    if (/shield|buckler/i.test(lower)) statBonuses.vigor = 1
+  }
+  if (slot === "relic") {
+    statBonuses.luck = rarity === "rare" ? 2 : 1
+    if (/shrine|bell|charm/i.test(lower)) statBonuses.faith = 1
+    if (/cursed|hex|spark/i.test(lower)) statBonuses.intelligence = 1
+  }
   return {
     id: cleanId(`${slot}-${item}`),
     name: cleanBookText(item, 48),
@@ -2028,15 +2126,43 @@ function equipmentFromInventoryItem(item: string, slot: EquipmentSlot): Equipmen
     rarity,
     bonusDamage: slot === "weapon" ? Math.max(explicitBonus, rarity === "rare" ? 2 : rarity === "uncommon" ? 1 : 0) : 0,
     statBonuses,
-    activeText: `${item} equipped from the pack.`,
+    activeText: equipmentActiveText(item, slot, rarity),
   }
+}
+
+function equipmentActiveText(item: string, slot: EquipmentSlot, rarity: EquipmentRarity) {
+  const lower = item.toLowerCase()
+  if (slot === "weapon") return `${item} changes damage math; ${rarity} weapons add more base pressure.`
+  if (slot === "armor") return /cloak/i.test(lower) ? `${item} helps evasive defenses and escape plans.` : `${item} raises survivability against longer fights.`
+  if (/cursed/i.test(lower)) return `${item} is a risky relic: better checks, worse decisions if you spend it.`
+  return `${item} sharpens talent checks and story-event odds.`
+}
+
+export function equipmentComparisonText(session: GameSession, item: string) {
+  const slot = inventoryEquipmentSlot(item)
+  if (!slot) return `Compare: utility or loot item. ${inventoryItemUseHint(item)}`
+  const candidate = equipmentFromInventoryItem(item, slot)
+  const equipped = session.equipment[slot]
+  const equippedText = equipped ? equipmentBonusText(equipped) : "empty slot"
+  return `Compare ${slot}: ${candidate.name} gives ${equipmentBonusText(candidate)}. Current ${equipped?.name ?? "empty"} gives ${equippedText}. ${candidate.activeText}`
+}
+
+function equipmentBonusText(item: EquipmentItem) {
+  const stats = Object.entries(item.statBonuses)
+    .filter(([, value]) => value)
+    .map(([stat, value]) => `${statAbbreviations[stat as StatId]} ${formatSigned(value ?? 0)}`)
+  const damage = item.bonusDamage ? [`damage +${item.bonusDamage}`] : []
+  return [...damage, ...stats, item.rarity].join(", ")
 }
 
 export function inventoryItemDescription(item: string) {
   const lower = item.toLowerCase()
   if (lower.includes("potion") || lower.includes("vial")) return "Consumable: restores HP during a descent."
-  if (lower.includes("focus broth")) return "Prepared food: restores focus during a descent."
-  if (lower.includes("food") || lower.includes("ration")) return "Prepared food: restores a little HP and focus."
+  if (lower.includes("focus broth")) return "Prepared food buff: restores focus and raises max focus for this descent."
+  if (lower.includes("food") || lower.includes("ration")) return "Prepared food buff: restores HP/focus and raises max HP for this descent."
+  if (lower.includes("tripwire") || lower.includes("bomb")) return "Combat tool: use during a fight to damage and weaken the selected enemy."
+  if (lower.includes("rope arrow") || lower.includes("lockpick")) return "Traversal tool: reveals nearby routes and restores a little focus."
+  if (lower.includes("rollback scroll")) return "Emergency tool: cancels a talent check or escapes combat before the next exchange."
   if (lower.includes("bound relic")) return "Passive relic: adds +1 to talent checks."
   if (lower.includes("cursed shard")) return "Risk relic: valuable in the village, dangerous in checks."
   if (lower.includes("relic") || lower.includes("shard")) return "Relic: lore, checks, or village sale value."
@@ -2052,7 +2178,10 @@ export function inventoryItemDescription(item: string) {
 function inventoryItemUseHint(item: string) {
   const lower = item.toLowerCase()
   if (lower.includes("bound relic")) return "passive +1 to talent checks; no manual use needed."
-  if (lower.includes("cursed shard")) return "hold for risky story value or sell it in the village market."
+  if (lower.includes("cursed shard")) return "use for gold and XP at an HP/focus cost, or sell it in the village market."
+  if (lower.includes("tripwire") || lower.includes("bomb")) return "active combat tool; use it while a fight is open."
+  if (lower.includes("rope arrow") || lower.includes("lockpick")) return "active traversal tool; spend it to reveal space and regain focus."
+  if (lower.includes("rollback scroll")) return "emergency tool; use during combat or a talent check."
   if (lower.includes("relic") || lower.includes("shard")) return "passive lore/check item; sell extras from the village market."
   if (lower.includes("blade") || lower.includes("sword") || lower.includes("axe") || lower.includes("mace") || lower.includes("rapier")) return "already equipped as your weapon; upgrade weapons in the village."
   if (lower.includes("shield") || lower.includes("cloak") || lower.includes("charm")) return "passive gear; keep it equipped or sell later in the village."

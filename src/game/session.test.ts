@@ -5,6 +5,7 @@ import {
   createNextDescentSession,
   createSession,
   currentBiome,
+  equipmentComparisonText,
   enemyBehaviorText,
   floorModifierFor,
   focusCostForSkill,
@@ -210,6 +211,34 @@ describe("game session", () => {
     session.inventory.unshift("Bent lockpick")
     expect(performInventoryAction(session, 0, "drop")).toMatchObject({ used: true })
     expect(session.inventory).not.toContain("Bent lockpick")
+  })
+
+  test("inventory tools create tactical item and gear decisions", () => {
+    const session = createSession(1234)
+    session.hp = session.maxHp - 1
+    session.focus = Math.max(0, session.maxFocus - 1)
+    const startingMaxHp = session.maxHp
+    session.inventory.unshift("Travel rations")
+
+    expect(performInventoryAction(session, 0, "use")).toMatchObject({ used: true })
+    expect(session.maxHp).toBe(startingMaxHp + 1)
+    expect(session.hp).toBe(session.maxHp)
+
+    const gold = session.gold
+    session.inventory.unshift("Cursed shard")
+    expect(performInventoryAction(session, 0, "use")).toMatchObject({ used: true })
+    expect(session.gold).toBe(gold + 14)
+    expect(session.hp).toBeLessThan(session.maxHp)
+
+    addEnemyBesidePlayer(session, "tool-slime", "slime", 3, 1)
+    tryMove(session, 1, 0)
+    expect(session.combat.active).toBe(true)
+    session.inventory.unshift("Tripwire kit")
+
+    expect(performInventoryAction(session, 0, "use")).toMatchObject({ used: true })
+    expect(session.dungeon.actors.some((actor) => actor.id === "tool-slime")).toBe(false)
+    expect(equipmentComparisonText(session, "Shrine charm")).toContain("Compare relic")
+    expect(equipmentComparisonText(session, "Shrine charm")).toContain("FTH +1")
   })
 
   test("tracks Book knowledge and event toasts for the amnesia story", () => {
