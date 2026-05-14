@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import {
-  buildGmPatchDraft,
+  buildGmPatchDraftWithAi,
   deliverGmPatchToHost,
   type GmPatchDraft,
   normalizeDifficulty,
@@ -87,7 +87,7 @@ export async function draftGmPatch(formData: FormData) {
     gmError("Selected GM world was not found for this account.", worldId);
   }
 
-  const draft = buildGmPatchDraft({
+  const draft = await buildGmPatchDraftWithAi({
     difficulty: normalizeDifficulty(formData.get("difficulty")),
     floor: Number(formData.get("floor")) || 1,
     partySize: Number(formData.get("partySize")) || 1,
@@ -99,7 +99,14 @@ export async function draftGmPatch(formData: FormData) {
     event_id: draft.id,
     event_type: "gm-patch-draft",
     message: draft.playerBriefing,
-    metadata: { draft },
+    metadata: {
+      ai: {
+        model: draft.model ?? null,
+        note: draft.aiNote ?? null,
+        source: draft.source ?? "rules-fallback",
+      },
+      draft,
+    },
     owner_id: user.id,
     world_id: worldId,
   });

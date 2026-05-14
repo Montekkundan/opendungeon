@@ -400,9 +400,14 @@ function PatchPreview({
   return (
     <div data-component="gm-patch-card">
       <div>
-        <span>{draft.difficulty}</span>
+        <span>
+          {draft.difficulty} -{" "}
+          {draft.source === "ai-gateway" ? "AI Gateway" : "rules fallback"}
+        </span>
         <h3>{draft.title}</h3>
         <p>{draft.playerBriefing}</p>
+        {draft.aiNote ? <p>{draft.aiNote}</p> : null}
+        {draft.model ? <p>Model: {draft.model}</p> : null}
       </div>
       <div data-component="gm-operation-grid">
         {draft.operations.map((operation) => (

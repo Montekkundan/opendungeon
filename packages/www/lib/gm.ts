@@ -5,6 +5,9 @@ export const gmDifficultyLevels = [
   "deadly",
 ] as const;
 
+const AI_JSON_FENCE_START_RE = /^```(?:json)?/u;
+const AI_JSON_FENCE_END_RE = /```$/u;
+const GM_FLOOR_ENCOUNTER_PATH_RE = /^floors\.\d+\.encounterBudget$/u;
 const TRAILING_SLASH_RE = /\/$/;
 
 export type GmDifficultyLevel = (typeof gmDifficultyLevels)[number];
@@ -22,11 +25,14 @@ export interface GmToolCallPreview {
 }
 
 export interface GmPatchDraft {
+  aiNote?: string;
   approvalChecklist: string[];
   difficulty: GmDifficultyLevel;
   id: string;
+  model?: string;
   operations: GmPatchOperation[];
   playerBriefing: string;
+  source?: "ai-gateway" | "rules-fallback";
   title: string;
   toolCalls: GmToolCallPreview[];
 }
@@ -145,6 +151,7 @@ export function buildGmPatchDraft(input: {
       },
     ],
     playerBriefing: briefingFor(input.difficulty, prompt),
+    source: "rules-fallback",
     title: `${labelForDifficulty(input.difficulty)} on Floor ${floor}`,
     toolCalls: [
       {
@@ -164,6 +171,243 @@ export function buildGmPatchDraft(input: {
       },
     ],
   };
+}
+
+export async function buildGmPatchDraftWithAi(input: {
+  difficulty: GmDifficultyLevel;
+  floor: number;
+  partySize: number;
+  prompt: string;
+  worldId: string;
+}): Promise<GmPatchDraft> {
+  const fallback = buildGmPatchDraft(input);
+  if (!gmAiGatewayConfigured()) {
+    return {
+      ...fallback,
+      aiNote:
+        "AI Gateway is not configured, so this draft used the local validated rules fallback.",
+    };
+  }
+
+  const model = process.env.OPENDUNGEON_GM_MODEL || "openai/gpt-5.4";
+  try {
+    const { generateText } = await import("ai");
+    const { text } = await generateText({
+      model,
+      prompt: gmPatchPrompt(input, fallback),
+      providerOptions: {
+        gateway: {
+          tags: ["opendungeon", "gm", "patch-draft"],
+        },
+      },
+      temperature: 0.25,
+    });
+    const parsed = parseJsonObject(text);
+    return normalizeAiDraft(parsed, fallback, model);
+  } catch (error) {
+    return {
+      ...fallback,
+      aiNote:
+        error instanceof Error
+          ? `AI Gateway draft failed, so this used the local fallback: ${error.message}`
+          : "AI Gateway draft failed, so this used the local fallback.",
+    };
+  }
+}
+
+export function gmAiGatewayConfigured(
+  env: Record<string, string | undefined> = process.env
+) {
+  return Boolean(env.AI_GATEWAY_API_KEY || env.VERCEL_OIDC_TOKEN);
+}
+
+function gmPatchPrompt(
+  input: {
+    difficulty: GmDifficultyLevel;
+    floor: number;
+    partySize: number;
+    prompt: string;
+    worldId: string;
+  },
+  fallback: GmPatchDraft
+) {
+  return `You are the opendungeon GM assistant. Return JSON only.
+
+World id: ${input.worldId}
+Requested difficulty: ${input.difficulty}
+Floor: ${input.floor}
+Party size: ${input.partySize}
+GM prompt: ${cleanPrompt(input.prompt)}
+
+Rules:
+- Preserve the canonical single-player story. This patch applies only to the selected GM world.
+- Do not output code, SQL, shell commands, or arbitrary scripts.
+- Use only these operation paths:
+  - rules.enemyHpMultiplier, number 0.5 to 2
+  - rules.enemyDamageBonus, integer -3 to 3
+  - floors.${clampNumber(input.floor, 1, 9)}.encounterBudget, integer 0 to 12
+  - lore.gmBriefing, short in-world text
+- Keep the briefing useful to players and readable in a terminal.
+
+Fallback operations if unsure:
+${JSON.stringify(fallback.operations)}
+
+JSON shape:
+{
+  "title": "short title",
+  "playerBriefing": "one or two sentence player-facing briefing",
+  "operations": [{"path": "rules.enemyHpMultiplier", "value": 1.25, "reason": "short reason"}],
+  "toolCalls": [{"name": "create_lore_patch", "status": "ready", "summary": "short summary"}],
+  "approvalChecklist": ["short checklist item"]
+}`;
+}
+
+function parseJsonObject(text: string) {
+  const raw = text
+    .trim()
+    .replace(AI_JSON_FENCE_START_RE, "")
+    .replace(AI_JSON_FENCE_END_RE, "")
+    .trim();
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start < 0 || end <= start) {
+    throw new Error("AI response did not contain a JSON object.");
+  }
+  return JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>;
+}
+
+function normalizeAiDraft(
+  input: Record<string, unknown>,
+  fallback: GmPatchDraft,
+  model: string
+): GmPatchDraft {
+  const operations = Array.isArray(input.operations)
+    ? input.operations.flatMap((operation) =>
+        normalizeAiOperation(operation, fallback)
+      )
+    : [];
+  const toolCalls = Array.isArray(input.toolCalls)
+    ? input.toolCalls.flatMap(normalizeAiToolCall)
+    : [];
+  const approvalChecklist = Array.isArray(input.approvalChecklist)
+    ? input.approvalChecklist.flatMap((item) => cleanShortLine(item, 120))
+    : [];
+
+  return {
+    ...fallback,
+    approvalChecklist: approvalChecklist.length
+      ? approvalChecklist.slice(0, 6)
+      : fallback.approvalChecklist,
+    model,
+    operations: operations.length
+      ? operations.slice(0, 6)
+      : fallback.operations,
+    playerBriefing:
+      cleanShortLine(input.playerBriefing, 260)[0] ?? fallback.playerBriefing,
+    source: "ai-gateway",
+    title: cleanShortLine(input.title, 80)[0] ?? fallback.title,
+    toolCalls: toolCalls.length ? toolCalls.slice(0, 6) : fallback.toolCalls,
+  };
+}
+
+function normalizeAiOperation(
+  input: unknown,
+  fallback: GmPatchDraft
+): GmPatchOperation[] {
+  if (!input || typeof input !== "object") {
+    return [];
+  }
+  const record = input as Record<string, unknown>;
+  const path = String(record.path || "");
+  const floorPath = fallback.operations.find((operation) =>
+    GM_FLOOR_ENCOUNTER_PATH_RE.test(operation.path)
+  )?.path;
+  if (path === "rules.enemyHpMultiplier") {
+    return [
+      {
+        path,
+        reason:
+          cleanShortLine(record.reason, 140)[0] ?? "Scale enemy staying power.",
+        value: clampNumber(Number(record.value), 0.5, 2),
+      },
+    ];
+  }
+  if (path === "rules.enemyDamageBonus") {
+    return [
+      {
+        path,
+        reason:
+          cleanShortLine(record.reason, 140)[0] ??
+          "Adjust enemy damage pressure.",
+        value: clampNumber(Number(record.value), -3, 3),
+      },
+    ];
+  }
+  if (path === floorPath) {
+    return [
+      {
+        path,
+        reason:
+          cleanShortLine(record.reason, 140)[0] ??
+          "Adjust active-floor encounter budget.",
+        value: clampNumber(Number(record.value), 0, 12),
+      },
+    ];
+  }
+  if (path === "lore.gmBriefing") {
+    return [
+      {
+        path,
+        reason:
+          cleanShortLine(record.reason, 140)[0] ??
+          "Explain the GM change in-world.",
+        value: cleanShortLine(record.value, 180)[0] ?? fallback.playerBriefing,
+      },
+    ];
+  }
+  return [];
+}
+
+function normalizeAiToolCall(input: unknown): GmToolCallPreview[] {
+  if (!input || typeof input !== "object") {
+    return [];
+  }
+  const record = input as Record<string, unknown>;
+  const name = cleanToolName(record.name);
+  if (!name) {
+    return [];
+  }
+  const status = record.status === "needs-review" ? "needs-review" : "ready";
+  return [
+    {
+      name,
+      status,
+      summary:
+        cleanShortLine(record.summary, 140)[0] ?? "Validated GM tool call.",
+    },
+  ];
+}
+
+function cleanToolName(value: unknown) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value
+    .replace(/[^\w-]/g, "")
+    .trim()
+    .slice(0, 48);
+}
+
+function cleanShortLine(value: unknown, maxLength: number) {
+  if (typeof value !== "string") {
+    return [];
+  }
+  const cleaned = value
+    .replace(/[^\w .,:;!?'"()/-]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+  return cleaned ? [cleaned] : [];
 }
 
 function briefingFor(difficulty: GmDifficultyLevel, prompt: string) {
