@@ -75,6 +75,7 @@ export type GmDeliveredPatch = {
 }
 
 export type LobbyActionType = "move" | "interact" | "combat" | "inventory" | "village" | "system"
+export type LobbyCommandType = Exclude<LobbyActionType, "system">
 
 export type LobbyActionEntry = {
   id: string
@@ -90,6 +91,18 @@ export type LobbyActionEntry = {
   createdAt: number
 }
 
+export type LobbyCommandEntry = {
+  id: string
+  sequence: number
+  playerId: string
+  name: string
+  type: LobbyCommandType
+  label: string
+  payload: Record<string, string | number | boolean>
+  accepted: boolean
+  acceptedAt: number
+}
+
 export type LobbySnapshot = {
   mode: LobbyMode
   seed: number
@@ -99,6 +112,7 @@ export type LobbySnapshot = {
   coopStates: CoopSyncState[]
   combat: CombatTurnState
   actions: LobbyActionEntry[]
+  commands: LobbyCommandEntry[]
   leaderboard: RaceResult[]
   gmPatches: GmDeliveredPatch[]
   syncWarnings: string[]
@@ -122,6 +136,8 @@ export class MultiplayerLobbyState {
   private readonly results: RaceResult[]
   private readonly gmPatches = new Map<string, GmDeliveredPatch>()
   private readonly actions: LobbyActionEntry[] = []
+  private readonly commands: LobbyCommandEntry[] = []
+  private commandSequence = 0
   private combat: CombatTurnState = { active: false, round: 0, order: [] }
 
   constructor(options: LobbyStateOptions) {
@@ -266,6 +282,55 @@ export class MultiplayerLobbyState {
     return entry
   }
 
+  recordCommand(input: {
+    playerId: string
+    type?: unknown
+    label?: unknown
+    floor?: unknown
+    turn?: unknown
+    hp?: unknown
+    x?: unknown
+    y?: unknown
+    payload?: unknown
+  }) {
+    const player = this.players.get(input.playerId)
+    if (!player || player.role === "spectator") throw new Error(`Unknown command player: ${input.playerId}`)
+    const acceptedAt = this.now()
+    const type = normalizeCommandType(input.type)
+    const label = cleanActionLabel(input.label)
+    const payload = normalizeCommandPayload(input.payload, {
+      floor: positiveInt(input.floor),
+      hp: positiveInt(input.hp),
+      turn: positiveInt(input.turn),
+      x: integer(input.x),
+      y: integer(input.y),
+    })
+    const entry: LobbyCommandEntry = {
+      id: createHash("sha256").update(`${player.id}:${acceptedAt}:${type}:${label}:${this.commandSequence}`).digest("hex").slice(0, 16),
+      sequence: ++this.commandSequence,
+      playerId: player.id,
+      name: player.name,
+      type,
+      label,
+      payload,
+      accepted: true,
+      acceptedAt,
+    }
+    this.commands.unshift(entry)
+    this.trimCommands()
+    this.recordAction({
+      playerId: player.id,
+      type,
+      label,
+      floor: payload.floor,
+      turn: payload.turn,
+      hp: payload.hp,
+      x: payload.x,
+      y: payload.y,
+    })
+    return entry
+  }
+
   leaderboard() {
     return sortLeaderboard(this.results)
   }
@@ -281,6 +346,7 @@ export class MultiplayerLobbyState {
       coopStates: [...this.coopStates.values()].sort((left, right) => left.name.localeCompare(right.name)),
       combat: { ...this.combat, order: [...this.combat.order] },
       actions: this.actions.slice(0, 50),
+      commands: this.commands.slice(0, 50),
       leaderboard: this.leaderboard(),
       gmPatches: [...this.gmPatches.values()].sort((left, right) => right.approvedAt - left.approvedAt),
       syncWarnings: coopSyncWarnings([...this.coopStates.values()]),
@@ -289,6 +355,10 @@ export class MultiplayerLobbyState {
 
   private trimActions(limit = 120) {
     if (this.actions.length > limit) this.actions.length = limit
+  }
+
+  private trimCommands(limit = 120) {
+    if (this.commands.length > limit) this.commands.length = limit
   }
 }
 
@@ -348,6 +418,24 @@ function normalizeGmPatchValue(value: unknown) {
 function normalizeActionType(value: unknown): LobbyActionType {
   if (value === "move" || value === "interact" || value === "combat" || value === "inventory" || value === "village" || value === "system") return value
   return "system"
+}
+
+function normalizeCommandType(value: unknown): LobbyCommandType {
+  if (value === "move" || value === "interact" || value === "combat" || value === "inventory" || value === "village") return value
+  return "interact"
+}
+
+function normalizeCommandPayload(value: unknown, fallback: Record<string, number>) {
+  const payload: Record<string, string | number | boolean> = { ...fallback }
+  if (!value || typeof value !== "object") return payload
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    const cleanKey = key.replace(/[^\w.-]/g, "").slice(0, 40)
+    if (!cleanKey) continue
+    if (typeof raw === "boolean") payload[cleanKey] = raw
+    else if (typeof raw === "number" && Number.isFinite(raw)) payload[cleanKey] = Math.floor(raw)
+    else if (typeof raw === "string") payload[cleanKey] = raw.replace(/[^\w .,:;!?'"()/-]/g, "").replace(/\s+/g, " ").trim().slice(0, 120)
+  }
+  return payload
 }
 
 function cleanActionLabel(value: unknown) {

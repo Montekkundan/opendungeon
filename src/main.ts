@@ -2011,14 +2011,22 @@ function sendLobbyAction(actionType: LobbyActionType, label: string) {
   if (!lobbySocket || lobbySocket.readyState !== WebSocket.OPEN) return
   lobbySocket.send(
     JSON.stringify({
-      type: "action",
-      actionType,
+      type: "command",
+      commandType: actionType,
       label,
       floor: model.session.floor,
       turn: model.session.turn,
       hp: model.session.hp,
       x: model.session.player.x,
       y: model.session.player.y,
+      payload: {
+        screen: model.screen,
+        floor: model.session.floor,
+        turn: model.session.turn,
+        hp: model.session.hp,
+        x: model.session.player.x,
+        y: model.session.player.y,
+      },
     }),
   )
 }

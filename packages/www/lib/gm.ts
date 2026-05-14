@@ -88,6 +88,18 @@ export interface GmHostActionEntry {
   y: number;
 }
 
+export interface GmHostCommandEntry {
+  accepted: boolean;
+  acceptedAt: number;
+  id: string;
+  label: string;
+  name: string;
+  payload: Record<string, string | number | boolean>;
+  playerId: string;
+  sequence: number;
+  type: "move" | "interact" | "combat" | "inventory" | "village";
+}
+
 export interface GmHostSnapshot {
   actions: GmHostActionEntry[];
   combat: {
@@ -96,6 +108,7 @@ export interface GmHostSnapshot {
     order: string[];
     round: number;
   };
+  commands: GmHostCommandEntry[];
   coopStates: GmHostCoopState[];
   gmPatches: GmHostDeliveredPatch[];
   inviteCode: string;

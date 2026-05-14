@@ -47,6 +47,7 @@ const server = createServer((request, response) => {
   if (url.pathname === "/state") return sendJson(response, lobby.snapshot())
   if (url.pathname === "/leaderboard") return sendJson(response, lobby.leaderboard())
   if (url.pathname === "/actions") return sendJson(response, lobby.snapshot().actions)
+  if (url.pathname === "/commands") return sendJson(response, lobby.snapshot().commands)
   if (url.pathname === "/invite") return sendJson(response, invitePayload(publicUrl))
   if (url.pathname === "/finish" && request.method === "POST") return void submitResult(request, response)
   if (url.pathname === "/gm/patches" && request.method === "GET") return sendJson(response, lobby.snapshot().gmPatches)
@@ -190,6 +191,20 @@ function handleSocketMessage(ws: LobbyWebSocket, message: RawData) {
     })
     broadcastState()
   }
+  if (payload.type === "command") {
+    lobby.recordCommand({
+      playerId: ws.data.id,
+      type: payload.commandType,
+      label: payload.label,
+      floor: payload.floor,
+      turn: payload.turn,
+      hp: payload.hp,
+      x: payload.x,
+      y: payload.y,
+      payload: payload.payload,
+    })
+    broadcastState()
+  }
   if (payload.type === "combat-start" && Array.isArray(payload.order)) {
     lobby.startCombatTurnOrder(payload.order.map(String))
     broadcastState()
@@ -292,6 +307,10 @@ function renderLobbyPage(publicUrl: string): string {
         <ul id="actions"><li class="muted">No player actions yet.</li></ul>
       </section>
       <section>
+        <h2>Accepted Commands</h2>
+        <ul id="commands"><li class="muted">No accepted commands yet.</li></ul>
+      </section>
+      <section>
         <h2>GM Patches</h2>
         <ul id="gm-patches"><li class="muted">No approved GM patches delivered yet.</li></ul>
       </section>
@@ -322,6 +341,9 @@ function renderLobbyPage(publicUrl: string): string {
         document.querySelector("#actions").innerHTML = state.actions && state.actions.length
           ? state.actions.slice(0, 12).map((action) => "<li>" + action.name + " · " + action.type + " · F" + action.floor + " T" + action.turn + " · " + action.label + "</li>").join("")
           : '<li class="muted">No player actions yet.</li>';
+        document.querySelector("#commands").innerHTML = state.commands && state.commands.length
+          ? state.commands.slice(0, 12).map((command) => "<li>#" + command.sequence + " · " + command.name + " · " + command.type + " · " + command.label + "</li>").join("")
+          : '<li class="muted">No accepted commands yet.</li>';
         document.querySelector("#gm-patches").innerHTML = state.gmPatches.length
           ? state.gmPatches.map((patch) => "<li>" + patch.title + " · " + patch.difficulty + " · " + patch.operationCount + " ops</li>").join("")
           : '<li class="muted">No approved GM patches delivered yet.</li>';

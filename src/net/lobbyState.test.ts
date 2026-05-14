@@ -55,6 +55,41 @@ describe("multiplayer lobby state", () => {
     expect(lobby.snapshot().gmPatches[0]?.operations.map((operation) => operation.path)).toEqual(["rules.enemyHpMultiplier", "floors.2.encounterBudget"])
   })
 
+  test("accepts typed player commands and mirrors them to the action log", () => {
+    let now = 50
+    const lobby = new MultiplayerLobbyState({ mode: "coop", seed: 1234, now: () => now++ })
+    lobby.join("p1", "Mira")
+
+    const command = lobby.recordCommand({
+      playerId: "p1",
+      type: "move",
+      label: "Moved east",
+      floor: 1,
+      turn: 2,
+      hp: 19,
+      x: 5,
+      y: 5,
+      payload: {
+        direction: "east",
+        ignored: { nested: true },
+        unsafe: "<script>",
+      },
+    })
+    const snapshot = lobby.snapshot()
+
+    expect(command).toMatchObject({
+      accepted: true,
+      label: "Moved east",
+      name: "Mira",
+      sequence: 1,
+      type: "move",
+    })
+    expect(command.payload).toMatchObject({ direction: "east", floor: 1, hp: 19, turn: 2, x: 5, y: 5 })
+    expect(command.payload.unsafe).toBe("script")
+    expect(snapshot.commands[0]).toMatchObject({ id: command.id, playerId: "p1" })
+    expect(snapshot.actions[0]).toMatchObject({ label: "Moved east", name: "Mira", type: "move" })
+  })
+
   test("stress-tests larger co-op party state and combat turn order", () => {
     const lobby = new MultiplayerLobbyState({ mode: "coop", seed: 5678, now: () => 30 })
     for (const id of ["warden", "arcanist", "ranger", "cleric"]) lobby.join(id, id)

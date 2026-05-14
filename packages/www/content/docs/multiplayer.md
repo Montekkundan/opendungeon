@@ -20,9 +20,9 @@ The automated host smoke test covers this shape without opening terminal windows
 
 ## Authoritative model
 
-The chosen model is host-authoritative. One `opendungeon-host` process coordinates the lobby, records live player actions, exposes `/state` and `/actions`, and broadcasts snapshots plus events to connected clients. Clients render local UI while the host gives the GM console a shared party/action view.
+The chosen model is host-authoritative. One `opendungeon-host` process coordinates the lobby, records accepted player commands, exposes `/state`, `/commands`, and `/actions`, and broadcasts snapshots plus events to connected clients. Clients render local UI while the host gives the GM console a shared party/action view.
 
-The current action log includes movement, NPC/story interaction, d20 checks, combat decisions, inventory actions, and village preparation. The next hardening step is converting those action-log entries into typed host-validated commands for combat results, loot grants, village state, and replay/debug tooling.
+The current command stream includes movement, NPC/story interaction, d20 checks, combat decisions, inventory actions, and village preparation. Commands are sanitized and sequenced by the host, then mirrored into the human-readable action log. The next hardening step is making the host apply those typed commands to a server-owned game session for combat results, loot grants, village state, and replay/debug tooling.
 
 Supabase Realtime is not the movement authority for the current game. It is the account, presence, persistence, and GM coordination layer: profiles, cloud saves, world ownership, action-log uploads, GM patch rows, and approved-patch notifications. If browser-native play replaces the CLI host later, it should still keep an authoritative command log instead of peer-to-peer state.
 
@@ -62,6 +62,7 @@ For debugging or GM tooling, the host also exposes JSON endpoints:
 
 ```txt
 curl http://YOUR_LAN_IP:3737/state
+curl http://YOUR_LAN_IP:3737/commands
 curl http://YOUR_LAN_IP:3737/actions
 curl http://YOUR_LAN_IP:3737/gm/patches
 ```

@@ -359,6 +359,11 @@ export default async function GmPage({ searchParams }: GmPageProps) {
               </section>
 
               <section>
+                <h2>Command relay</h2>
+                <HostCommandLog snapshot={hostBridge.snapshot} />
+              </section>
+
+              <section>
                 <h2>Delivered patches</h2>
                 <HostPatchList snapshot={hostBridge.snapshot} />
               </section>
@@ -537,6 +542,32 @@ function HostActionLog({ snapshot }: { snapshot: GmHostSnapshot | null }) {
         ))
       ) : (
         <p>No player actions have reached this host yet.</p>
+      )}
+    </div>
+  );
+}
+
+function HostCommandLog({ snapshot }: { snapshot: GmHostSnapshot | null }) {
+  if (!snapshot) {
+    return <p>Accepted host commands appear here once a host is linked.</p>;
+  }
+
+  return (
+    <div data-component="gm-live-list">
+      {snapshot.commands?.length ? (
+        snapshot.commands.slice(0, 12).map((command) => (
+          <div key={command.id}>
+            <strong>
+              #{command.sequence} {command.name}
+            </strong>
+            <span>
+              {command.type} - {command.accepted ? "accepted" : "rejected"} -{" "}
+              {command.label}
+            </span>
+          </div>
+        ))
+      ) : (
+        <p>No accepted commands have reached this host yet.</p>
       )}
     </div>
   );
