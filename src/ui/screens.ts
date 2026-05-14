@@ -906,10 +906,10 @@ function drawVillage(canvas: Canvas, model: AppModel) {
   drawPanel(canvas, sideX, mapY, sideW, locationH, selected.label, UI.gold)
   writeWrapped(canvas, sideX + 3, mapY + 2, sideW - 6, [selected.text], 3, UI.ink, UI.panel)
   writeWrapped(canvas, sideX + 3, mapY + 6, sideW - 6, [`Coins ${hub.coins}  Loot sold ${hub.lootSold}`], 1, UI.soft, UI.panel)
-  writeWrapped(canvas, sideX + 3, mapY + 7, sideW - 6, [`Pack ${hub.contentPacks.active}  Farm ${hub.village.sharedFarm.permissions}`], 1, UI.soft, UI.panel)
+  writeWrapped(canvas, sideX + 3, mapY + 7, sideW - 6, [`Pack ${hub.contentPacks.active}  Perm ${hub.village.selectedPermission} ${hub.village.permissions[hub.village.selectedPermission]}`], 1, UI.soft, UI.panel)
   writeWrapped(canvas, sideX + 3, mapY + 8, sideW - 6, [`Day ${hub.calendar.day} ${hub.calendar.season} ${hub.calendar.weather}. ${hub.calendar.festival}`], 1, UI.brass, UI.panel)
   writeWrapped(canvas, sideX + 3, mapY + 9, sideW - 6, [`Seed ${villageSeedModeLabel(model.villageSeedMode)}. S cycles.`], 1, UI.gold, UI.panel)
-  writeWrapped(canvas, sideX + 3, mapY + 10, sideW - 6, ["G starts when loot, build, and food are ready."], 1, UI.focus, UI.panel)
+  writeWrapped(canvas, sideX + 3, mapY + 10, sideW - 6, ["P cycles selected-area co-op permissions."], 1, UI.focus, UI.panel)
 
   const scheduleY = mapY + locationH + 1
   drawPanel(canvas, sideX, scheduleY, sideW, 9, "NPC Schedule", UI.edge)
@@ -931,7 +931,20 @@ function drawVillage(canvas: Canvas, model: AppModel) {
   canvas.write(sideX + 3, marketY + 6, trim(`Gold ${dashboard.averageGold}  Hub coins ${dashboard.averageHubCoins}  Pace ${dashboard.upgradePacing}%`, sideW - 6), UI.soft, UI.panel)
   const challenge = hub.challengeBoard.leaderboard[0]
   if (challenge && marketH > 8) canvas.write(sideX + 3, marketY + 7, trim(`Challenge ${challenge.cadence} ${challenge.medal} ${challenge.score} ${challenge.replayKey}`, sideW - 6), UI.gold, UI.panel)
-  if (dashboard.notes[0] && marketH > 9) writeWrapped(canvas, sideX + 3, marketY + 8, sideW - 6, [dashboard.notes[0]], marketH - 9, UI.muted, UI.panel)
+  if (marketH > 9) {
+    const permissions = hub.village.permissions
+    writeWrapped(
+      canvas,
+      sideX + 3,
+      marketY + 8,
+      sideW - 6,
+      [`Perms homes ${permissions.houses}, farm ${permissions.farm}, storage ${permissions.storage}, shop ${permissions.shop}, upgrades ${permissions.upgrades}.`],
+      2,
+      UI.soft,
+      UI.panel,
+    )
+  }
+  if (dashboard.notes[0] && marketH > 11) writeWrapped(canvas, sideX + 3, marketY + 10, sideW - 6, [dashboard.notes[0]], marketH - 11, UI.muted, UI.panel)
 
   if (model.saveStatus) writeWrapped(canvas, x + 4, y + height - 5, width - 8, [model.saveStatus], 2, UI.focus, UI.panel)
   drawFooter(canvas, [

@@ -16,7 +16,7 @@ import {
   buildHubStation,
   cancelSkillCheck,
   cycleContentPack,
-  cycleSharedFarmPermission,
+  cycleCoopVillagePermission,
   heroClassIds,
   completeVillageQuest,
   customizeVillageHouse,
@@ -657,7 +657,8 @@ function handleVillageKey(key: KeyEvent) {
     return
   }
   if (key.name === "p") {
-    model.saveStatus = `Farm permissions: ${cycleSharedFarmPermission(model.session)}.`
+    const result = cycleCoopVillagePermission(model.session)
+    model.saveStatus = result.message
     return
   }
   if (key.name === "c") {

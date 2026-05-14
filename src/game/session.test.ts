@@ -32,6 +32,7 @@ import {
   applyOpeningStoryBranch,
   buildHubStation,
   cycleContentPack,
+  cycleCoopVillagePermission,
   cycleSharedFarmPermission,
   completeVillageQuest,
   customizeVillageHouse,
@@ -917,6 +918,15 @@ describe("game session", () => {
     const house = customizeVillageHouse(session, "player-2")
     expect(house.built).toBe(true)
     expect(cycleSharedFarmPermission(session)).toBe("everyone")
+    expect(cycleCoopVillagePermission(session, "storage")).toMatchObject({ area: "storage", permission: "everyone" })
+    expect(cycleCoopVillagePermission(session, "shop")).toMatchObject({ area: "shop", permission: "friends" })
+    expect(cycleCoopVillagePermission(session, "upgrades")).toMatchObject({ area: "upgrades", permission: "friends" })
+    expect(session.hub.village.permissions).toMatchObject({
+      farm: "everyone",
+      storage: "everyone",
+      shop: "friends",
+      upgrades: "friends",
+    })
     expect(cycleContentPack(session).active).toBe("high-contrast")
     expect(refreshBalanceDashboard(session).classWinRate.ranger).toBeGreaterThan(0)
 

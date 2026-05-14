@@ -298,6 +298,9 @@ export const villageLocationIds = ["portal", "blacksmith", "market", "farm", "ho
 export type VillageLocationId = (typeof villageLocationIds)[number]
 export type VillageCustomerTaste = "relic" | "tool" | "food" | "material" | "memory"
 export type FarmPermission = "owner-only" | "friends" | "everyone"
+export const villagePermissionAreas = ["houses", "farm", "storage", "shop", "upgrades"] as const
+export type VillagePermissionArea = (typeof villagePermissionAreas)[number]
+export type VillagePermissionState = Record<VillagePermissionArea, FarmPermission>
 export type CutsceneId = "waking-cell" | "first-clear" | "village-unlock" | "ending-rooted" | "ending-remixed"
 export const contentPackIds = ["opendungeon", "high-contrast", "mono-terminal"] as const
 export type ContentPackId = (typeof contentPackIds)[number]
@@ -384,9 +387,11 @@ export type VillageLocation = {
 export type VillageMapState = {
   player: Point
   selectedLocation: VillageLocationId
+  selectedPermission: VillagePermissionArea
   schedules: VillageNpcSchedule[]
   customers: VillageCustomer[]
   shopLog: string[]
+  permissions: VillagePermissionState
   sharedFarm: {
     permissions: FarmPermission
     storage: string[]
@@ -467,6 +472,12 @@ export type VillageCraftResult = {
   kind: VillageCraftKind
   item: string
   consumed: string[]
+  message: string
+}
+
+export type VillagePermissionResult = {
+  area: VillagePermissionArea
+  permission: FarmPermission
   message: string
 }
 
@@ -1459,16 +1470,43 @@ export function customizeVillageHouse(session: GameSession, playerId = "player-1
 }
 
 export function cycleSharedFarmPermission(session: GameSession) {
+  return cycleCoopVillagePermission(session, "farm").permission
+}
+
+export function cycleCoopVillagePermission(session: GameSession, area?: VillagePermissionArea): VillagePermissionResult {
   session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  const selectedArea = area ?? permissionAreaForLocation(session.hub.village.selectedLocation)
   const order: FarmPermission[] = ["owner-only", "friends", "everyone"]
-  const current = order.indexOf(session.hub.village.sharedFarm.permissions)
-  const next = order[wrap(current + 1, order.length)] ?? "friends"
-  session.hub.village.sharedFarm.permissions = next
-  session.hub.relationshipLog.unshift(`Shared farm permissions set to ${next}.`)
+  const current = order.indexOf(session.hub.village.permissions[selectedArea])
+  const permission = order[wrap(current + 1, order.length)] ?? "friends"
+  session.hub.village.permissions[selectedArea] = permission
+  session.hub.village.selectedPermission = selectedArea
+  if (selectedArea === "farm") session.hub.village.sharedFarm.permissions = permission
+  const message = `${villagePermissionLabel(selectedArea)} permissions set to ${permission}.`
+  session.hub.relationshipLog.unshift(message)
   trimHubLog(session.hub)
-  pushSessionMessage(session, `Shared farm permissions set to ${next}.`)
-  addToast(session, "Farm permissions", `Shared farm is now ${next}.`, "info")
-  return next
+  pushSessionMessage(session, message)
+  addToast(session, "Village permissions", message, "info")
+  return { area: selectedArea, permission, message }
+}
+
+function permissionAreaForLocation(location: VillageLocationId): VillagePermissionArea {
+  if (location === "houses") return "houses"
+  if (location === "farm") return "farm"
+  if (location === "market") return "shop"
+  if (location === "blacksmith" || location === "guildhall") return "upgrades"
+  return "storage"
+}
+
+function villagePermissionLabel(area: VillagePermissionArea) {
+  const labels: Record<VillagePermissionArea, string> = {
+    houses: "House",
+    farm: "Farm",
+    storage: "Storage",
+    shop: "Shop shelf",
+    upgrades: "Upgrade spending",
+  }
+  return labels[area]
 }
 
 export function selectContentPack(session: GameSession, id: ContentPackId) {
@@ -4447,22 +4485,37 @@ function normalizeRunMutators(value: unknown): RunMutatorId[] {
 function normalizeVillageMapState(value: unknown, fallback: VillageMapState): VillageMapState {
   const source = value && typeof value === "object" ? (value as Partial<VillageMapState>) : {}
   const selectedLocation = isVillageLocationId(source.selectedLocation) ? source.selectedLocation : fallback.selectedLocation
+  const selectedPermission = isVillagePermissionArea(source.selectedPermission) ? source.selectedPermission : fallback.selectedPermission
   const player = source.player && typeof source.player === "object" ? (source.player as Partial<Point>) : fallback.player
   const sharedFarm = source.sharedFarm && typeof source.sharedFarm === "object" ? source.sharedFarm : fallback.sharedFarm
+  const permissions = normalizeVillagePermissions(source.permissions, fallback.permissions, sharedFarm.permissions)
   return {
     player: {
       x: clamp(Math.floor(Number(player.x) || fallback.player.x), 1, 17),
       y: clamp(Math.floor(Number(player.y) || fallback.player.y), 1, 8),
     },
     selectedLocation,
+    selectedPermission,
     schedules: normalizeVillageSchedules(source.schedules, fallback.schedules),
     customers: normalizeVillageCustomers(source.customers, fallback.customers),
     shopLog: normalizeStringList(source.shopLog, 8, 120),
+    permissions,
     sharedFarm: {
-      permissions: isFarmPermission(sharedFarm.permissions) ? sharedFarm.permissions : fallback.sharedFarm.permissions,
+      permissions: permissions.farm,
       storage: normalizeStringList(sharedFarm.storage, 20, 50),
     },
   }
+}
+
+function normalizeVillagePermissions(value: unknown, fallback: VillagePermissionState, oldFarmPermission: unknown): VillagePermissionState {
+  const source = value && typeof value === "object" ? (value as Partial<Record<VillagePermissionArea, unknown>>) : {}
+  const permissions = Object.fromEntries(
+    villagePermissionAreas.map((area) => {
+      const legacyFarm = area === "farm" && isFarmPermission(oldFarmPermission) ? oldFarmPermission : undefined
+      return [area, isFarmPermission(source[area]) ? source[area] : legacyFarm ?? fallback[area]]
+    }),
+  ) as VillagePermissionState
+  return permissions
 }
 
 function normalizeVillageCalendarState(value: unknown, fallback: VillageCalendarState): VillageCalendarState {
@@ -4643,9 +4696,11 @@ function createVillageHouses(mode: MultiplayerMode, heroName: string): VillageHo
 }
 
 function createVillageMapState(mode: MultiplayerMode): VillageMapState {
+  const permissions = createVillagePermissions(mode)
   return {
     player: { ...villageLocations.portal.position },
     selectedLocation: "portal",
+    selectedPermission: "storage",
     schedules: villageNpcIds.map((npc) => ({
       npc,
       location: npc === "blacksmith" ? "blacksmith" : npc === "farmer" ? "farm" : npc === "guildmaster" ? "guildhall" : npc === "cook" ? "market" : "portal",
@@ -4654,10 +4709,22 @@ function createVillageMapState(mode: MultiplayerMode): VillageMapState {
     })),
     customers: createVillageCustomers(),
     shopLog: [],
+    permissions,
     sharedFarm: {
-      permissions: mode === "coop" ? "friends" : "owner-only",
+      permissions: permissions.farm,
       storage: [],
     },
+  }
+}
+
+function createVillagePermissions(mode: MultiplayerMode): VillagePermissionState {
+  const sharedDefault: FarmPermission = mode === "coop" ? "friends" : "owner-only"
+  return {
+    houses: sharedDefault,
+    farm: sharedDefault,
+    storage: sharedDefault,
+    shop: "owner-only",
+    upgrades: "owner-only",
   }
 }
 
@@ -4835,6 +4902,10 @@ function isVillageWeatherId(value: unknown): value is VillageWeatherId {
 
 function isVillageFestivalId(value: unknown): value is VillageFestivalId {
   return value === "none" || value === "market-day" || value === "forge-fair" || value === "harvest-night" || value === "final-gate-vigil"
+}
+
+function isVillagePermissionArea(value: unknown): value is VillagePermissionArea {
+  return typeof value === "string" && (villagePermissionAreas as readonly string[]).includes(value)
 }
 
 function isFarmPermission(value: unknown): value is FarmPermission {
