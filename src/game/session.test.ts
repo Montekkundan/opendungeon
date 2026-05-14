@@ -3,6 +3,7 @@ import {
   chooseConversationOption,
   chooseLevelUpTalent,
   combatBalanceSnapshot,
+  craftVillageRecipe,
   createNextDescentSession,
   createSession,
   currentBiome,
@@ -772,6 +773,38 @@ describe("game session", () => {
     expect(session.hub.activeMutators).toContain("hard-mode")
     expect(session.equipment.weapon?.name).toContain("+1")
     expect(session.hub.trust.blacksmith.level).toBeGreaterThanOrEqual(0)
+  })
+
+  test("village crafting combines loot crops and trust into run prep", () => {
+    const session = createSession(1234, "solo", "ranger", "Mira")
+    unlockHub(session)
+    session.hub.coins = 200
+    expect(buildHubStation(session, "kitchen")).toBe(true)
+    expect(buildHubStation(session, "upgrade-bench")).toBe(true)
+
+    session.inventory.unshift("Tool part bundle")
+    const tool = craftVillageRecipe(session)
+    expect(tool).toMatchObject({ kind: "tool", item: "Gate bomb" })
+    expect(tool?.consumed).toContain("Tool part bundle")
+    expect(session.inventory).toContain("Gate bomb")
+    expect(session.inventory).not.toContain("Tool part bundle")
+
+    session.hub.trust.cook.level = 1
+    session.inventory.unshift("Friendship keepsake")
+    const charm = craftVillageRecipe(session)
+    expect(charm).toMatchObject({ kind: "charm", item: "Hearth charm" })
+    expect(charm?.consumed).toContain("Friendship keepsake")
+    expect(session.inventory).toContain("Hearth charm")
+    expect(session.hub.unlockedGear).toContain("Hearth charm")
+
+    session.hub.farm.ready = 1
+    const food = craftVillageRecipe(session)
+    expect(food).toBeTruthy()
+    expect(food?.kind).toBe("food")
+    expect(food?.consumed).toContain("village crop")
+    expect(session.hub.farm.ready).toBe(0)
+    expect(session.hub.preparedFood[0]).toBe(food!.item)
+    expect(session.knowledge.some((entry) => entry.id === "craft-gate-bomb")).toBe(true)
   })
 
   test("next descent preserves village meta-progression and preparation", () => {

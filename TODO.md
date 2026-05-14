@@ -119,7 +119,7 @@
 
 - [ ] Turn the village into a real between-run loop: sell loot, set shop prices, build/upgrade stations, cook/craft, farm/harvest, prepare loadout, and choose next descent.
 - [ ] Add a shopkeeper UI for price experiments: choose item, set price, wait for customer reaction, learn demand, and build reputation.
-- [ ] Add cooking/crafting recipes that combine dungeon loot, farm crops, and trust unlocks into next-run food, bombs, tools, and charms.
+- [x] Add cooking/crafting recipes that combine dungeon loot, farm crops, and trust unlocks into next-run food, bombs, tools, and charms.
 - [ ] Add NPC schedule depth: morning/day/night routines, relationship scenes, trust-gated house visits, and post-boss dialogue changes.
 - [x] Add a village calendar with seasons, weather, festivals, and dungeon modifiers tied to village events.
 - [ ] Add co-op village permissions for houses, farm plots, storage, shop shelves, and shared upgrade spending.

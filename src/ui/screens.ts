@@ -944,6 +944,7 @@ function drawVillage(canvas: Canvas, model: AppModel) {
     ["B", "balance"],
     ["S", "seed"],
     ["N", "cutscene"],
+    ["R", "craft"],
     ["1/3/4", "prep"],
     ["G", "descent"],
     ["Esc", "dungeon"],

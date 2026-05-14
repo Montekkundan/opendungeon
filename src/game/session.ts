@@ -461,6 +461,15 @@ export type VillageShopSale = {
   reaction: string
 }
 
+export type VillageCraftKind = "food" | "tool" | "charm"
+
+export type VillageCraftResult = {
+  kind: VillageCraftKind
+  item: string
+  consumed: string[]
+  message: string
+}
+
 export type HubState = {
   unlocked: boolean
   coins: number
@@ -1050,6 +1059,84 @@ export function prepareFood(session: GameSession) {
   pushSessionMessage(session, `${food} prepared for the next descent.`)
   addToast(session, "Food prepared", `${food} added to the pack.`, "success")
   return food
+}
+
+export function craftVillageRecipe(session: GameSession): VillageCraftResult | null {
+  session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  if (!session.hub.unlocked) {
+    pushSessionMessage(session, "The village must be unlocked before crafting recipes.")
+    return null
+  }
+  const recipe = nextVillageCraftRecipe(session)
+  if (!recipe) {
+    pushSessionMessage(session, "No ready recipe. Bring tool parts, relics, crops, or build the kitchen/upgrade bench.")
+    addToast(session, "Crafting waiting", "Recipes need station access and ingredients.", "warning")
+    return null
+  }
+  if (session.hub.coins < recipe.cost) {
+    pushSessionMessage(session, `${recipe.item} needs ${recipe.cost} village coins.`)
+    return null
+  }
+  session.hub.coins -= recipe.cost
+  const consumed = consumeCraftIngredients(session, recipe)
+  session.inventory.unshift(recipe.item)
+  if (recipe.kind === "food") session.hub.preparedFood.unshift(recipe.item)
+  if (recipe.kind === "charm") session.hub.unlockedGear.unshift(recipe.item)
+  gainNpcTrust(session, recipe.trustNpc, recipe.trust, false)
+  const message = `${recipe.item} crafted from ${consumed.join(", ") || "village stock"}.`
+  pushSessionMessage(session, message)
+  rememberKnowledge(session, {
+    id: `craft-${slug(recipe.item)}`,
+    title: `${recipe.item} Recipe`,
+    text: `${recipe.item} is a ${recipe.kind} craft. Ingredients: ${consumed.join(", ") || "village stock"}. It carries into the next descent through the village preparation loop.`,
+    kind: "hub",
+    floor: session.floor,
+  })
+  addToast(session, "Recipe crafted", message, "success")
+  return { kind: recipe.kind, item: recipe.item, consumed, message }
+}
+
+type VillageCraftRecipe = {
+  kind: VillageCraftKind
+  item: string
+  cost: number
+  trustNpc: VillageNpcId
+  trust: number
+  consumeItem?: RegExp
+  consumeCrop?: boolean
+}
+
+function nextVillageCraftRecipe(session: GameSession): VillageCraftRecipe | null {
+  if (session.hub.stations["upgrade-bench"].built && findInventoryIndex(session, /tool|lockpick|scrap|bundle/i) >= 0) {
+    return { kind: "tool", item: "Gate bomb", cost: 8, trustNpc: "blacksmith", trust: 2, consumeItem: /tool|lockpick|scrap|bundle/i }
+  }
+  if (session.hub.stations.kitchen.built && findInventoryIndex(session, /keepsake|relic|shard/i) >= 0 && session.hub.trust.cook.level >= 1) {
+    return { kind: "charm", item: "Hearth charm", cost: 10, trustNpc: "cook", trust: 2, consumeItem: /keepsake|relic|shard/i }
+  }
+  if (session.hub.stations.kitchen.built && (session.hub.farm.ready > 0 || session.inventory.some((item) => /recipe/i.test(item)))) {
+    return { kind: "food", item: session.hub.stations.kitchen.level >= 2 ? "Focus broth" : "Travel rations", cost: 5, trustNpc: "farmer", trust: 1, consumeCrop: session.hub.farm.ready > 0 }
+  }
+  return null
+}
+
+function consumeCraftIngredients(session: GameSession, recipe: VillageCraftRecipe) {
+  const consumed: string[] = []
+  if (recipe.consumeCrop && session.hub.farm.ready > 0) {
+    session.hub.farm.ready -= 1
+    consumed.push("village crop")
+  }
+  if (recipe.consumeItem) {
+    const index = findInventoryIndex(session, recipe.consumeItem)
+    if (index >= 0) {
+      const [item] = session.inventory.splice(index, 1)
+      consumed.push(item)
+    }
+  }
+  return consumed
+}
+
+function findInventoryIndex(session: GameSession, pattern: RegExp) {
+  return session.inventory.findIndex((item) => pattern.test(item))
 }
 
 export function upgradeWeapon(session: GameSession) {

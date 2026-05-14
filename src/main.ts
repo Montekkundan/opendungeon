@@ -7,6 +7,7 @@ import {
   applyOpeningStoryBranch,
   createNextDescentSession,
   createSession,
+  craftVillageRecipe,
   cycleTarget,
   chooseConversationOption,
   chooseLevelUpTalent,
@@ -627,6 +628,12 @@ function handleVillageKey(key: KeyEvent) {
     prepareFood(model.session)
     playAudioEvent("village-build")
     model.saveStatus = model.session.log[0] ?? "Food prepared."
+    return
+  }
+  if (key.name === "r") {
+    const craft = craftVillageRecipe(model.session)
+    playAudioEvent(craft ? "village-build" : "menu-cancel")
+    model.saveStatus = craft?.message ?? model.session.log[0] ?? "No recipe ready."
     return
   }
   if (key.name === "escape") {
