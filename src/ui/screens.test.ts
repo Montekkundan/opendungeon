@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { applyOpeningStoryBranch, chooseLevelUpTalent, createSession, grantXp, playLocalCutscene, selectSkill, tryMove, unlockHub } from "../game/session.js"
 import { setTile } from "../game/dungeon.js"
 import { defaultSettings } from "../game/settingsStore.js"
+import { localNpcStoryDialog } from "../game/story.js"
 import { hashText } from "../shared/hash.js"
 import { checkingUpdateStatus } from "../system/updateCheck.js"
 import { currentStartItemDisabled, draw, type AppModel, type ScreenId } from "./screens.js"
@@ -378,6 +379,28 @@ test("merchant response footer does not offer close-run from conversation", () =
   expect(text).toContain("Enter close")
   expect(text).toContain("Esc leave")
   expect(text).not.toContain("Q close run")
+})
+
+test("npc conversation choices keep full labels readable", () => {
+  const session = createSession(1234)
+  const dialog = localNpcStoryDialog("shrine-keeper", 2)
+  session.conversation = {
+    id: "shrine-test",
+    actorId: "shrine-test",
+    kind: "shrine-keeper",
+    speaker: dialog.speaker,
+    text: dialog.text,
+    status: "open",
+    options: dialog.options,
+    selectedOption: 1,
+  }
+  const output = draw(modelFor("game", session), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Take blessing")
+  expect(text).toContain("Ask relic lore")
+  expect(text).toContain("1-3 choose")
+  expect(text).not.toContain("Ask relic lo…")
 })
 
 test("active tutorial coach remains visible when run UI is hidden", () => {

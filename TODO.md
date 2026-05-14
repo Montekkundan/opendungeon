@@ -14,16 +14,17 @@
 
 ## Latest Playtest Bugs And Requested Fixes
 
-- [ ] GM difficulty steering: in `/gm`, let a logged-in GM steer the AI/agent from the multiplayer web view to make the current world harder or easier in a D&D-style way. The GM should see live players/state, request encounter/rule/story changes, review the generated patch, then apply it to connected players after validation.
+- [ ] GM difficulty steering: in `/gm`, let a logged-in GM steer the AI/agent from the multiplayer web view to make the current world harder or easier in a D&D-style way. The GM should see live players/state, ask the agent for encounter/rule/story changes, review the generated patch, then apply it to connected players after validation.
 - [x] Level-up talent selection bug: pressing Enter currently selects the top talent too easily. Require an explicit `1`, `2`, `3`, etc. choice first, then Enter confirms the highlighted/numbered talent.
 - [x] Talent unlock bug: unlocked talents such as Pathfinder must visibly affect available combat moves, combat strategy text, or the relevant stats. If a talent is passive-only, label it as passive in the state/character screen instead of implying it should appear as a fight move.
 - [x] Inventory hover/detail bug: the inventory detail pane should describe the hovered/highlighted item, not a stale or previously selected item.
 - [x] Item action design bug: items that currently say "No apply action yet" need real handling. Decide and implement inspect/equip/use/sell/drop/stash paths, and make unavailable actions explain what the item is for.
 - [ ] Add a fuller inventory action menu after the no-op bug fix: explicit equip, drop, stash, compare, and village sell flows instead of only Enter-use plus passive explanations.
+- [x] NPC conversation choice layout: long choices such as Shrine Keeper "Take blessing" and "Ask relic lore" should render as readable stacked rows instead of narrow hidden columns.
 - [ ] Text truncation regression: Shrine Keeper choices such as "Take blessing" / "Ask relic..." are cut off. Audit the entire game for `...` on important instructions, choices, item text, village panels, NPC dialogue, and action prompts; wrap, scroll, or add a detail pane instead.
 - [x] First arc pacing change: send the player to the village after Floor 3 instead of waiting until Floor 5. Update final-floor rules, story copy, tutorial handoff, headless first-clear scenario, docs, and balance expectations.
-- [ ] Add a state/character sheet screen that shows full stats, skill tree, unlocked talents, passive/active effects, level-up rewards, equipment bonuses, and current run modifiers.
-- [ ] Redesign the inventory screen visuals: improve item sprites/icons, slot layout, selected/hover detail, action hints, comparison text, and terminal readability.
+- [ ] Add a state/character sheet screen that shows full stats, skill tree, unlocked talents, passive/active effects, level-up rewards, equipment bonuses, current run modifiers, and what each reward changed.
+- [ ] Redesign the inventory screen visuals: improve item sprites/icons, slot layout, selected/hover detail, action hints, comparison text, and terminal readability so pack items no longer look like placeholder glyphs.
 - [ ] Rebalance post-tutorial combat for a 3-floor first arc: Floor 3 should remain approachable, but later descents need strategic battles with enemy roles, resistances/weaknesses, focus pressure, positioning, and multi-turn decisions instead of one-hit clears.
 - [ ] Replace the current mostly-text village with a real walkable sprite village: player sprite, NPC sprites, trees, walls, paths, homes, shop, farm, broken hut/ruins, restoration states, and visible upgrades as buildings improve.
 

@@ -1891,9 +1891,9 @@ function drawConversationPanel(canvas: Canvas, session: GameSession) {
   const conversation = session.conversation
   if (!conversation) return
 
-  const width = Math.min(78, canvas.width - 6)
+  const width = Math.min(84, canvas.width - 6)
   const hasChoices = conversation.options.length > 0 && conversation.status === "open"
-  const height = hasChoices ? 13 : 10
+  const height = hasChoices ? 16 : 10
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.max(1, canvas.height - gameQuickbarHeight(canvas) - height - 2)
   const trade = conversation.trade
@@ -1912,13 +1912,17 @@ function drawConversationPanel(canvas: Canvas, session: GameSession) {
   }
   if (hasChoices) {
     const optionY = y + 8
+    const optionW = width - 18
     conversation.options.slice(0, 3).forEach((option, index) => {
       const selected = index === conversation.selectedOption
-      const optionX = x + 14 + index * Math.max(14, Math.floor((width - 18) / 3))
-      canvas.write(optionX, optionY, `${index + 1}`, selected ? UI.gold : UI.muted, UI.panel)
-      canvas.write(optionX + 2, optionY, trim(option.label, 12), selected ? UI.focus : UI.soft, UI.panel)
+      const rowY = optionY + index * 2
+      if (selected) canvas.fill(x + 13, rowY, optionW + 1, 2, " ", UI.panel2, UI.panel2)
+      canvas.write(x + 14, rowY, `${index + 1}`, selected ? UI.gold : UI.muted, selected ? UI.panel2 : UI.panel)
+      canvas.write(x + 17, rowY, option.label, selected ? UI.focus : UI.soft, selected ? UI.panel2 : UI.panel)
+      const previewRows = wrappedRows(option.text, optionW - 3, 1)
+      if (previewRows[0]) canvas.write(x + 17, rowY + 1, previewRows[0], selected ? UI.ink : UI.muted, selected ? UI.panel2 : UI.panel)
     })
-    canvas.write(x + 14, y + height - 2, trim("1-3 choose  Enter confirm  Esc leave", width - 18), UI.muted, UI.panel)
+    canvas.write(x + 14, y + height - 2, trim("1-3 choose  Up/Down move  Enter confirm  Esc leave", width - 18), UI.muted, UI.panel)
   } else {
     canvas.write(x + 14, y + height - 2, trim("Enter close  Esc leave", width - 18), UI.muted, UI.panel)
   }
