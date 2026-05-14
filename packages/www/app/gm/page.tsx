@@ -234,6 +234,8 @@ export default async function GmPage({ searchParams }: GmPageProps) {
                 <span>validated patch queue</span>
               </div>
 
+              <GmTranscript events={events} hostBridge={hostBridge} />
+
               <form action={createGmWorld} data-component="gm-create">
                 <label>
                   <span>Seed</span>
@@ -482,8 +484,12 @@ function PatchPreview({
         {draft.toolCalls.map((tool) => (
           <div data-status={tool.status} key={tool.name}>
             <strong>{tool.name}</strong>
-            <span>{tool.status}</span>
+            <span>
+              {tool.status} - {tool.category}
+            </span>
             <p>{tool.summary}</p>
+            <p>{tool.description}</p>
+            <p>{tool.review}</p>
           </div>
         ))}
       </div>
@@ -501,6 +507,82 @@ function PatchPreview({
         </Button>
       </form>
     </div>
+  );
+}
+
+function GmTranscript({
+  events,
+  hostBridge,
+}: {
+  events: WorldEventRow[];
+  hostBridge: GmHostBridgeResult;
+}) {
+  const transcriptEvents = events
+    .filter((event) =>
+      [
+        "gm-patch-draft",
+        "gm-patch-approved",
+        "gm-host-snapshot-archived",
+      ].includes(event.event_type)
+    )
+    .slice(0, 5)
+    .reverse();
+
+  return (
+    <section data-component="gm-transcript">
+      <h2>GM transcript</h2>
+      {hostBridge.snapshot ? (
+        <div data-slot="gm-message" data-variant="assistant">
+          <strong>Host bridge</strong>
+          <p>
+            Reading {hostBridge.snapshot.players.length} connected players and{" "}
+            {hostBridge.snapshot.commands.length} accepted command results from{" "}
+            {hostBridge.url}.
+          </p>
+        </div>
+      ) : (
+        <div data-slot="gm-message" data-variant="assistant">
+          <strong>Host bridge</strong>
+          <p>
+            Link a running host to turn the GM prompt into live-player context.
+          </p>
+        </div>
+      )}
+      {transcriptEvents.length ? (
+        transcriptEvents.map((event) => (
+          <div data-slot="gm-message" data-variant="assistant" key={event.id}>
+            <strong>
+              {event.event_type.replace("gm-", "").replaceAll("-", " ")}
+            </strong>
+            <p>{event.message}</p>
+            {event.metadata?.draft ? (
+              <div data-component="gm-transcript-tools">
+                {event.metadata.draft.toolCalls.map((tool) => (
+                  <span data-status={tool.status} key={tool.name}>
+                    {tool.name}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {event.metadata?.counts ? (
+              <p>
+                {event.metadata.counts.players ?? 0} players,{" "}
+                {event.metadata.counts.commands ?? 0} commands,{" "}
+                {event.metadata.counts.actions ?? 0} actions archived.
+              </p>
+            ) : null}
+          </div>
+        ))
+      ) : (
+        <div data-slot="gm-message" data-variant="user">
+          <strong>GM prompt</strong>
+          <p>
+            Ask for a harder, easier, or more tactical beat. Drafts appear here
+            before they can be approved for the host.
+          </p>
+        </div>
+      )}
+    </section>
   );
 }
 

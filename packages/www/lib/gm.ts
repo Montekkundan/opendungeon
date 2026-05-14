@@ -1,3 +1,11 @@
+import {
+  fallbackGmToolCalls,
+  gmSpriteGenerationRules,
+  gmToolPromptCatalog,
+  normalizeGmToolCallPreview,
+  type ValidatedGmToolCallPreview,
+} from "./gm-tools";
+
 export const gmDifficultyLevels = [
   "easier",
   "steady",
@@ -18,11 +26,7 @@ export interface GmPatchOperation {
   value: string | number | boolean;
 }
 
-export interface GmToolCallPreview {
-  name: string;
-  status: "ready" | "needs-review";
-  summary: string;
-}
+export interface GmToolCallPreview extends ValidatedGmToolCallPreview {}
 
 export interface GmPatchDraft {
   aiNote?: string;
@@ -171,6 +175,28 @@ export function buildGmPatchDraft(input: {
   const floor = clampNumber(input.floor, 1, 9);
   const partySize = clampNumber(input.partySize, 1, 6);
   const id = `gm-${input.difficulty}-${slug(`${input.worldId}-${prompt}`)}`;
+  const operations: GmPatchOperation[] = [
+    {
+      path: "rules.enemyHpMultiplier",
+      reason: "Scale enemy staying power for the requested table pressure.",
+      value: scale.hpMultiplier,
+    },
+    {
+      path: "rules.enemyDamageBonus",
+      reason: "Tune punishment without changing deterministic combat math.",
+      value: scale.damageBonus,
+    },
+    {
+      path: `floors.${floor}.encounterBudget`,
+      reason: "Adjust the active floor instead of rewriting the whole dungeon.",
+      value: scale.encounterBudget + partySize,
+    },
+    {
+      path: "lore.gmBriefing",
+      reason: "Give players an in-world reason for the changed pressure.",
+      value: prompt,
+    },
+  ];
 
   return {
     approvalChecklist: [
@@ -181,49 +207,11 @@ export function buildGmPatchDraft(input: {
     ],
     difficulty: input.difficulty,
     id,
-    operations: [
-      {
-        path: "rules.enemyHpMultiplier",
-        reason: "Scale enemy staying power for the requested table pressure.",
-        value: scale.hpMultiplier,
-      },
-      {
-        path: "rules.enemyDamageBonus",
-        reason: "Tune punishment without changing deterministic combat math.",
-        value: scale.damageBonus,
-      },
-      {
-        path: `floors.${floor}.encounterBudget`,
-        reason:
-          "Adjust the active floor instead of rewriting the whole dungeon.",
-        value: scale.encounterBudget + partySize,
-      },
-      {
-        path: "lore.gmBriefing",
-        reason: "Give players an in-world reason for the changed pressure.",
-        value: prompt,
-      },
-    ],
+    operations,
     playerBriefing: briefingFor(input.difficulty, prompt),
     source: "rules-fallback",
     title: `${labelForDifficulty(input.difficulty)} on Floor ${floor}`,
-    toolCalls: [
-      {
-        name: "create_lore_patch",
-        status: "ready",
-        summary: "Adds a short GM-authored lore beat to the selected world.",
-      },
-      {
-        name: "rebalance_encounter",
-        status: "ready",
-        summary: "Updates HP, damage, and encounter budget within safe bounds.",
-      },
-      {
-        name: "queue_player_patch",
-        status: "needs-review",
-        summary: "Waits for GM approval before connected players receive it.",
-      },
-    ],
+    toolCalls: fallbackGmToolCalls(operations),
   };
 }
 
@@ -302,6 +290,10 @@ Rules:
   - floors.${clampNumber(input.floor, 1, 9)}.encounterBudget, integer 0 to 12
   - lore.gmBriefing, short in-world text
 - Keep the briefing useful to players and readable in a terminal.
+- Use only these tool call names:
+${gmToolPromptCatalog()}
+- If you include generate_sprite_prompt, follow these sprite rules:
+${gmSpriteGenerationRules.map((rule) => `  - ${rule}`).join("\n")}
 
 Fallback operations if unsure:
 ${JSON.stringify(fallback.operations)}
@@ -341,7 +333,7 @@ function normalizeAiDraft(
       )
     : [];
   const toolCalls = Array.isArray(input.toolCalls)
-    ? input.toolCalls.flatMap(normalizeAiToolCall)
+    ? input.toolCalls.flatMap(normalizeGmToolCallPreview)
     : [];
   const approvalChecklist = Array.isArray(input.approvalChecklist)
     ? input.approvalChecklist.flatMap((item) => cleanShortLine(item, 120))
@@ -420,36 +412,6 @@ function normalizeAiOperation(
     ];
   }
   return [];
-}
-
-function normalizeAiToolCall(input: unknown): GmToolCallPreview[] {
-  if (!input || typeof input !== "object") {
-    return [];
-  }
-  const record = input as Record<string, unknown>;
-  const name = cleanToolName(record.name);
-  if (!name) {
-    return [];
-  }
-  const status = record.status === "needs-review" ? "needs-review" : "ready";
-  return [
-    {
-      name,
-      status,
-      summary:
-        cleanShortLine(record.summary, 140)[0] ?? "Validated GM tool call.",
-    },
-  ];
-}
-
-function cleanToolName(value: unknown) {
-  if (typeof value !== "string") {
-    return "";
-  }
-  return value
-    .replace(/[^\w-]/g, "")
-    .trim()
-    .slice(0, 48);
 }
 
 function cleanShortLine(value: unknown, maxLength: number) {

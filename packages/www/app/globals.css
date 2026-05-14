@@ -572,6 +572,17 @@ body {
   border-bottom: 1px solid var(--color-border-weak);
 }
 
+[data-component="gm-transcript"] {
+  display: grid;
+  gap: 10px;
+}
+
+[data-component="gm-transcript"] h2 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--color-text-strong);
+}
+
 [data-slot="gm-message"] {
   display: grid;
   gap: 8px;
@@ -591,6 +602,23 @@ body {
     var(--color-accent) 8%,
     var(--color-background-weak)
   );
+}
+
+[data-component="gm-transcript-tools"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+[data-component="gm-transcript-tools"] span {
+  padding: 3px 6px;
+  color: var(--color-text-strong);
+  background: var(--color-background);
+  border: 1px solid var(--color-border-weak);
+}
+
+[data-component="gm-transcript-tools"] span[data-status="needs-review"] {
+  color: var(--color-accent);
 }
 
 [data-slot="gm-prompt"] {
