@@ -25,6 +25,7 @@ import {
   usePotion,
   addToast,
   applyGmPatchOperations,
+  applyOpeningStoryBranch,
   buildHubStation,
   cycleContentPack,
   cycleSharedFarmPermission,
@@ -343,6 +344,30 @@ describe("game session", () => {
     expect(session.hp).toBe(session.maxHp)
     expect(session.conversation?.status).toBe("completed")
     expect(session.worldLog.length).toBeGreaterThan(1)
+  })
+
+  test("completed quest chains apply village-facing outcomes", () => {
+    const session = createSession(1234)
+    const questEvent = session.world.events.find((event) => event.type === "quest")
+    expect(questEvent).toBeTruthy()
+    questEvent!.status = "active"
+    session.world.quests.unshift({
+      id: "quest-test-rescue",
+      title: "Rescue: Floors 1-2",
+      summary: "Find a trapped villager. Village outcome: trust and keepsake lead.",
+      status: "active",
+      objectiveEventIds: [questEvent!.id],
+      rewardEntityIds: [],
+      triggerEventIds: [],
+    })
+
+    applyOpeningStoryBranch(session, "follow-voice")
+
+    expect(session.world.quests[0]?.status).toBe("completed")
+    expect(session.inventory).toContain("Rescue keepsake")
+    expect(session.knowledge.find((entry) => entry.id === "quest-outcome-quest-test-rescue")?.title).toContain("Quest Complete")
+    expect(session.hub.relationshipLog[0]).toContain("Quest outcome")
+    expect(session.toasts).toEqual(expect.arrayContaining([expect.objectContaining({ title: "Quest complete" })]))
   })
 
   test("NPCs remember already-used choices for the current descent", () => {

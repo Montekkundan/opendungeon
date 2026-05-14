@@ -21,12 +21,33 @@ describe("world config", () => {
       expect.stringContaining("Escort"),
       expect.stringContaining("Rescue"),
       expect.stringContaining("Timed Curse"),
-      expect.stringContaining("Locked Shrine"),
+      expect.stringContaining("Shrine Repair"),
       expect.stringContaining("Bounty"),
-      expect.stringContaining("Multi-Floor Chain"),
+      expect.stringContaining("Merchant Delivery"),
+      expect.stringContaining("Final-Gate Keys"),
     ])
     expect(left.events.map((event) => event.title)).toEqual(right.events.map((event) => event.title))
     expect(left.events.every((event) => anchors.some((anchor) => anchor.id === event.anchorId))).toBe(true)
+  })
+
+  test("initial quest chains can span multiple floors with village outcomes", () => {
+    const anchors = [1, 2, 3].flatMap((floor) => worldAnchorsFromDungeonAnchors(createDungeon(1234, floor).anchors))
+    const world = createInitialWorldConfig(1234, anchors)
+
+    expect(validateWorldConfig(world)).toEqual([])
+    expect(world.quests).toHaveLength(7)
+    expect(world.quests.every((quest) => quest.summary.includes("Village outcome"))).toBe(true)
+    expect(
+      world.quests.every((quest) => {
+        const floors = new Set(
+          quest.objectiveEventIds.map((eventId) => {
+            const anchorId = world.events.find((event) => event.id === eventId)?.anchorId ?? ""
+            return Number(anchorId.match(/^f(\d+)-/)?.[1] ?? 0)
+          }),
+        )
+        return floors.size > 1
+      }),
+    ).toBe(true)
   })
 
   test("rejects broken event references before they reach gameplay", () => {

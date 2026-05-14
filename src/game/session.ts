@@ -22,6 +22,7 @@ import {
   type WorldEvent,
   type WorldEventType,
   type WorldLogEntry,
+  type WorldQuest,
 } from "../world/worldConfig.js"
 import { clamp, wrap } from "../shared/numeric.js"
 import { normalizeHeroAppearance, type HeroAppearance } from "./appearance.js"
@@ -4930,6 +4931,7 @@ function createWorldForSeed(seed: number, finalFloor: number) {
 }
 
 function completeWorldProgress(session: GameSession, type: WorldEventType, point: Point, message: string) {
+  const completedQuestsBefore = new Set(session.world.quests.filter((quest) => quest.status === "completed").map((quest) => quest.id))
   const event = completeFirstMatchingWorldEvent(session.world, type, nearestWorldAnchorId(session, point)) ?? completeFirstMatchingWorldEvent(session.world, type)
   if (!event) return
   session.worldLog.push(
@@ -4940,7 +4942,66 @@ function completeWorldProgress(session: GameSession, type: WorldEventType, point
       metadata: { eventType: event.type, completed: completedWorldEventCount(session.world) },
     }),
   )
+  applyCompletedQuestOutcomes(session, completedQuestsBefore)
   queueWorldMilestones(session, event)
+}
+
+function applyCompletedQuestOutcomes(session: GameSession, completedBefore: Set<string>) {
+  const completedNow = session.world.quests.filter((quest) => quest.status === "completed" && !completedBefore.has(quest.id))
+  for (const quest of completedNow) applyQuestOutcome(session, quest)
+}
+
+function applyQuestOutcome(session: GameSession, quest: WorldQuest) {
+  const title = quest.title.toLowerCase()
+  const reward = questOutcomeForTitle(title)
+  if (!reward) return
+
+  if (reward.item && !session.inventory.includes(reward.item)) session.inventory.unshift(reward.item)
+  if (reward.gold) session.gold += reward.gold
+  if (reward.hubCoins) session.hub.coins += reward.hubCoins
+  if (reward.trustNpc) gainNpcTrust(session, reward.trustNpc, reward.trust, true)
+  if (reward.maxFocus) {
+    session.maxFocus += reward.maxFocus
+    session.focus = Math.min(session.maxFocus, session.focus + reward.maxFocus)
+  }
+  if (reward.maxHp) {
+    session.maxHp += reward.maxHp
+    session.hp = Math.min(session.maxHp, session.hp + reward.maxHp)
+  }
+
+  session.hub.relationshipLog.unshift(`Quest outcome: ${quest.title}. ${reward.message}`)
+  trimHubLog(session.hub)
+  rememberKnowledge(session, {
+    id: `quest-outcome-${quest.id}`,
+    title: `Quest Complete: ${quest.title}`,
+    text: `${quest.summary} ${reward.message}`,
+    kind: "hub",
+    floor: session.floor,
+  })
+  pushSessionMessage(session, `Quest complete: ${quest.title}. ${reward.message}`)
+  addToast(session, "Quest complete", reward.message, "success")
+}
+
+function questOutcomeForTitle(title: string):
+  | {
+      message: string
+      item?: string
+      gold?: number
+      hubCoins?: number
+      trustNpc?: VillageNpcId
+      trust: number
+      maxFocus?: number
+      maxHp?: number
+    }
+  | null {
+  if (title.includes("escort")) return { message: "Cartographer trust rises and a route token joins the pack.", item: "Escort route token", hubCoins: 8, trustNpc: "cartographer", trust: 3 }
+  if (title.includes("rescue")) return { message: "The rescued lead becomes a keepsake and the surgeon trusts you more.", item: "Rescue keepsake", hubCoins: 10, trustNpc: "cook", trust: 3, maxHp: 1 }
+  if (title.includes("timed curse")) return { message: "A curse ward note reduces future panic and adds focus preparation.", item: "Curse ward note", gold: 8, trustNpc: "guildmaster", trust: 2, maxFocus: 1 }
+  if (title.includes("shrine repair")) return { message: "Shrine repair adds a blessing clue for the final gate.", item: "Shrine repair key", hubCoins: 12, trustNpc: "guildmaster", trust: 3 }
+  if (title.includes("bounty")) return { message: "Bounty proof pays out and updates the monster book.", item: "Bounty proof", gold: 16, hubCoins: 12, trustNpc: "guildmaster", trust: 4 }
+  if (title.includes("merchant delivery")) return { message: "Merchant delivery improves market reputation and price tests.", item: "Delivery receipt", hubCoins: 14, trustNpc: "blacksmith", trust: 3 }
+  if (title.includes("final-gate keys")) return { message: "A final-gate key is ready for the road home.", item: "Final gate key", gold: 12, hubCoins: 18, trustNpc: "cartographer", trust: 4 }
+  return null
 }
 
 function queueWorldMilestones(session: GameSession, event: WorldEvent) {
