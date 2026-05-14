@@ -57,6 +57,12 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_o-QLR6jUUh04QCm58di_8w_7bP4M
 
 Keep service-role keys server-only. The Next.js website only needs the publishable key.
 
+### Play Modes
+
+- **Single Player** is the canonical authored story loop: local dungeon rules, lore, curated assets, village progression, and offline saves.
+- **Multiplayer** uses that same story loop with multiple players sharing the run and village through a lobby host. `coop` is the shared-story lobby variant; `race` is only a same-seed challenge variant.
+- **Multiplayer with GM** is a logged-in website flow for GM-created worlds. AI/GM lore, rooms, quests, and generated assets must stay per-world in Supabase and must not replace the Single Player story.
+
 ### Multiplayer
 
 `127.0.0.1` and `localhost` only work on the same computer. For friends on the same Wi-Fi/LAN, host on `0.0.0.0` and share the LAN IP printed by the host.

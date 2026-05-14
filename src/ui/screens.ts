@@ -156,9 +156,9 @@ const classOptions: Array<{ id: HeroClass; name: string; text: string }> = [
   { id: "grave-knight", name: "Grave Knight", text: "Heavy oathbound crawler with durable melee stats." },
 ]
 const modeOptions: Array<{ id: MultiplayerMode; name: string; text: string }> = [
-  { id: "solo", name: "Solo", text: "One crawl, local run." },
-  { id: "coop", name: "Co-op", text: "Shared dungeon host. Friends progress together." },
-  { id: "race", name: "Race", text: "Same seed, separate runs. Fastest descent wins." },
+  { id: "solo", name: "Single Player", text: "Canonical authored story. Start from New descent." },
+  { id: "coop", name: "Multiplayer co-op", text: "Same authored story with a shared host and village." },
+  { id: "race", name: "Multiplayer race", text: "Same seed challenge with separate runs and results." },
 ]
 const multiplayerModeOptions = modeOptions.filter((option) => option.id !== "solo")
 const settingTabs = [
@@ -552,21 +552,24 @@ function drawCharacter(canvas: Canvas, model: AppModel) {
 
 function drawMode(canvas: Canvas, model: AppModel) {
   drawDungeonBackdrop(canvas, model.seed + 4, model.settings)
-  const { x, y, width, height } = centeredPanelBounds(canvas, 86, 22)
+  const { x, y, width, height } = centeredPanelBounds(canvas, 94, 26)
   drawPanel(canvas, x, y, width, height, "Multiplayer", UI.gold)
-  drawD20Sprite(canvas, x + 5, y + 4, 20, d20FrameCount() - 1, 10, 5, model.settings.diceSkin)
+  drawD20Sprite(canvas, x + 5, y + 7, 20, d20FrameCount() - 1, 10, 5, model.settings.diceSkin)
+  canvas.write(x + 18, y + 3, "Single Player uses New descent. This screen starts Multiplayer lobby variants.", UI.soft, UI.panel)
+  canvas.write(x + 18, y + 4, "Multiplayer with GM lives on the logged-in website /gm console.", UI.muted, UI.panel)
 
   multiplayerModeOptions.forEach((option, index) => {
     const selected = model.menuIndex === index
-    const row = y + 4 + index * 4
+    const row = y + 7 + index * 4
     const rowX = x + 18
     if (selected) drawSelectCard(canvas, rowX - 2, row - 1, width - 24, 3, true)
     canvas.write(rowX, row, `${selected ? ">" : " "} ${option.name}`, selected ? UI.gold : UI.ink, selected ? UI.panel3 : UI.panel)
-    canvas.write(rowX + 4, row + 1, option.text, selected ? UI.ink : UI.soft, selected ? UI.panel3 : UI.panel)
+    canvas.write(rowX + 4, row + 1, trim(option.text, width - 26), selected ? UI.ink : UI.soft, selected ? UI.panel3 : UI.panel)
   })
 
   const selectedMode = multiplayerModeForSelection(model.menuIndex)
-  canvas.write(x + 4, y + height - 5, "Solo runs start from New descent on the title screen.", UI.muted, UI.panel)
+  canvas.write(x + 4, y + height - 6, "GM worlds and AI-made content stay separate from the canonical story.", UI.muted, UI.panel)
+  canvas.write(x + 4, y + height - 5, "Single Player runs start from New descent on the title screen.", UI.muted, UI.panel)
   canvas.write(x + 4, y + height - 4, `Host local: bun run host -- --host 127.0.0.1 --mode ${selectedMode.id} --seed ${model.seed}`, UI.soft, UI.panel)
   canvas.write(x + 4, y + height - 3, "Open another terminal tab with opendungeon join http://127.0.0.1:3737.", UI.muted, UI.panel)
   drawFooter(canvas, [

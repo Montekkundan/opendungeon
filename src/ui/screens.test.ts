@@ -112,9 +112,10 @@ test("multiplayer picker only shows multiplayer modes", () => {
   const text = screenText(output.chunks)
 
   expect(text).toContain("Multiplayer")
-  expect(text).toContain("Co-op")
-  expect(text).toContain("Race")
-  expect(text).toContain("Solo runs start from New descent")
+  expect(text).toContain("Multiplayer co-op")
+  expect(text).toContain("Multiplayer race")
+  expect(text).toContain("Single Player uses New descent")
+  expect(text).toContain("Multiplayer with GM lives")
   expect(text).toContain("opendungeon join http://127.0.0.1:3737")
   expect(text).not.toContain("One crawl, local run.")
 })

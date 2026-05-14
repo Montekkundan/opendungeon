@@ -15,17 +15,18 @@ export default function CreatePage() {
           <p data-slot="eyebrow">multiplayer</p>
           <h1>Create</h1>
           <p>
-            Create a shareable lobby page for a co-op or race run. The website
-            can make the invite card on Vercel for free; the current live game
-            still needs an opendungeon-host process for WebSocket play.
+            Create a shareable Multiplayer lobby page. Multiplayer co-op keeps
+            the authored story and village loop shared between players; race is
+            only a same-seed challenge variant. The current live game still
+            needs an opendungeon-host process for WebSocket play.
           </p>
 
           <form action={createLobby} data-component="lobby-form">
             <label>
               <span>Mode</span>
               <select defaultValue="coop" name="mode">
-                <option value="coop">Co-op</option>
-                <option value="race">Race</option>
+                <option value="coop">Multiplayer co-op</option>
+                <option value="race">Multiplayer race challenge</option>
               </select>
             </label>
             <label>

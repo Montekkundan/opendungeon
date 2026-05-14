@@ -22,7 +22,7 @@ Options:
   --host <address>       Bind address. Use 0.0.0.0 for LAN/server hosting.
   --public-url <url>     Public URL printed in invites when behind a proxy or on a VPS.
   --port <port>          TCP port. Defaults to PORT or 3737.
-  --mode <coop|race>     Lobby mode.
+  --mode <coop|race>     Multiplayer lobby variant. coop shares the authored story; race is a same-seed challenge.
   --seed <number>        Shared dungeon seed.
   --invite <code>        Optional stable invite code.
   --leaderboard <path>   Persist race leaderboard JSON.

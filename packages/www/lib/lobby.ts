@@ -5,7 +5,17 @@ export type LobbyMode = "coop" | "race";
 export function normalizeLobbyMode(
   value: FormDataEntryValue | string | null
 ): LobbyMode {
-  return value === "coop" ? "coop" : "race";
+  return value === "race" ? "race" : "coop";
+}
+
+export function lobbyModeLabel(mode: LobbyMode) {
+  return mode === "race" ? "Multiplayer race challenge" : "Multiplayer co-op";
+}
+
+export function lobbyModeSummary(mode: LobbyMode) {
+  return mode === "race"
+    ? "A same-seed multiplayer challenge for comparing separate runs and leaderboard results."
+    : "The authored opendungeon story loop shared by multiple players through one lobby host.";
 }
 
 export function normalizeSeed(value: FormDataEntryValue | string | null) {

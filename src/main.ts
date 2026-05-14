@@ -124,6 +124,11 @@ Environment:
   OPENDUNGEON_DEBUG_OVERLAY=1 enables debug map/console overlays
   OPENDUNGEON_LOBBY_URL    Hosted lobby URL for co-op/race result sync
 
+Modes:
+  Single Player        New descent on the title screen; canonical offline story.
+  Multiplayer          join <lobby-url>; same authored story through a lobby host.
+  Multiplayer with GM  Website /gm console; logged-in GM worlds stay separate.
+
 ${authHelpText()}
 ${saveCommandHelp()}
 ${assetsCommandHelp()}
