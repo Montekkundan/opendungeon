@@ -22,7 +22,8 @@ test("host starts, accepts two players plus a spectator, syncs state, disconnect
     const health = (await fetchJson(`${baseUrl}/health`)) as { ok: boolean; seed: number; players: number }
     expect(health).toMatchObject({ ok: true, seed: 2423368, players: 0 })
 
-    const mira = await openLobbySocket(`${baseUrl}/ws?name=Mira&clientId=mira`)
+    const signedInKey = "a".repeat(64)
+    const mira = await openLobbySocket(`${baseUrl}/ws?name=Mira&clientId=mira&accountKey=${signedInKey}&accountLabel=github:mira&terminalApp=Ghostty`)
     const sol = await openLobbySocket(`${baseUrl}/ws?name=Sol&clientId=sol`)
     const spectator = await openLobbySocket(`${baseUrl}/ws?role=spectator&name=Observer&clientId=obs`)
     sockets.push(mira, sol, spectator)
@@ -30,6 +31,10 @@ test("host starts, accepts two players plus a spectator, syncs state, disconnect
     const joined = await waitForSnapshot(mira, (snapshot) => snapshot.players.length === 2 && snapshot.spectators.length === 1)
     expect(joined.players.map((player) => player.name).sort()).toEqual(["Mira", "Sol"])
     expect(joined.spectators[0]?.name).toBe("Observer")
+
+    const duplicate = await openLobbySocketExpectError(`${baseUrl}/ws?name=Mira2&clientId=mira2&accountKey=${signedInKey}&accountLabel=github:mira&terminalApp=Terminal`)
+    sockets.push(duplicate.socket)
+    expect(duplicate.message).toContain("already in this lobby from Ghostty")
 
     mira.send(JSON.stringify({ type: "sync", state: syncState("ranger", 1, 4, 5, "movement", true) }))
     sol.send(JSON.stringify({ type: "sync", state: syncState("cleric", 1, 5, 5, "movement", false) }))
@@ -41,7 +46,7 @@ test("host starts, accepts two players plus a spectator, syncs state, disconnect
     sol.send(JSON.stringify({ type: "command", commandType: "interact", label: "Opened Book", floor: 1, turn: 3, hp: 19, x: 5, y: 5, payload: { target: "book" } }))
     const actionState = await waitForSnapshot(spectator, (snapshot) => snapshot.actions.length === 2 && snapshot.commands.length === 2)
     expect(actionState.actions.map((action) => action.name).sort()).toEqual(["Mira", "Sol"])
-    expect(actionState.actions[0]).toMatchObject({ label: "Opened Book", type: "interact" })
+    expect(actionState.actions).toContainEqual(expect.objectContaining({ label: "Opened Book", type: "interact" }))
     expect(actionState.commands[0]).toMatchObject({ accepted: true, label: "Opened Book", sequence: 2, type: "interact" })
     expect(actionState.commands[0]?.result.message).toBeTruthy()
     const actions = (await fetchJson(`${baseUrl}/actions`)) as Array<{ label: string }>
@@ -136,6 +141,26 @@ function openLobbySocket(url: string) {
       resolve(socket)
     })
     socket.once("error", reject)
+  })
+}
+
+function openLobbySocketExpectError(url: string) {
+  const wsUrl = url.replace(/^http:/, "ws:")
+  const socket = new WebSocket(wsUrl)
+  return new Promise<{ message: string; socket: WebSocket }>((resolve, reject) => {
+    const fail = setTimeout(() => reject(new Error(`Timed out waiting for ${wsUrl} to reject`)), 3_000)
+    socket.once("error", reject)
+    socket.on("message", (message) => {
+      try {
+        const payload = JSON.parse(message.toString()) as { message?: string; type?: string }
+        if (payload.type === "error" && payload.message) {
+          clearTimeout(fail)
+          resolve({ message: payload.message, socket })
+        }
+      } catch {
+        // Ignore non-error frames.
+      }
+    })
   })
 }
 

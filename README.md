@@ -117,6 +117,7 @@ bun run host -- --mode coop --seed 2423368 --port 3737
 
 Signed-in accounts are protected from duplicate local play: opening a second Ghostty tab with the same saved login shows an already-in-game message. Guest/local tabs are allowed, so multiple players can join from one laptop without logging in.
 `OPENDUNGEON_PLAYER_NAME` is process-local, so every guest tab can use a different crawler name without changing your saved profile.
+Hosted lobbies also reject a second live player using the same signed-in account identity, including over LAN. Use `OPENDUNGEON_AUTH_DIR="$(mktemp -d)"` when you intentionally want another guest client from the same machine.
 
 ### Contributing
 

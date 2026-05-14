@@ -16,6 +16,38 @@ describe("multiplayer lobby state", () => {
     expect(snapshot.spectators.map((player) => player.name)).toEqual(["Work Friend"])
   })
 
+  test("rejects duplicate signed-in player identities while allowing guests", () => {
+    const lobby = new MultiplayerLobbyState({ mode: "coop", seed: 1234, now: () => 10 })
+    lobby.join("guest-1", "Guest One")
+    lobby.join("guest-2", "Guest Two")
+    lobby.join("p1", "Mira", "player", {
+      accountKey: "a".repeat(64),
+      accountLabel: "github:mira",
+      terminalApp: "Ghostty",
+    })
+
+    expect(() =>
+      lobby.join("p2", "Mira Again", "player", {
+        accountKey: "a".repeat(64),
+        accountLabel: "github:mira",
+        terminalApp: "Terminal",
+      })
+    ).toThrow("already in this lobby from Ghostty")
+
+    lobby.join("p3", "Sol", "player", {
+      accountKey: "b".repeat(64),
+      accountLabel: "github:sol",
+      terminalApp: "Terminal",
+    })
+
+    expect(lobby.snapshot().players.map((player) => player.name)).toEqual([
+      "Guest One",
+      "Guest Two",
+      "Mira",
+      "Sol",
+    ])
+  })
+
   test("tracks live co-op state sync and combat turn coordination", () => {
     const lobby = new MultiplayerLobbyState({ mode: "coop", seed: 1234, now: () => 20 })
     lobby.join("p1", "Mira")

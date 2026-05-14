@@ -1,4 +1,5 @@
 import { FrameBufferRenderable, createCliRenderer, type KeyEvent, type MouseEvent as OpenTuiMouseEvent } from "@opentui/core"
+import { createHash } from "node:crypto"
 import WebSocket from "ws"
 import {
   addToast,
@@ -87,7 +88,7 @@ import { loadAuthSession } from "./cloud/authStore.js"
 import { formatTerminalCapabilityReport, terminalCapabilityReport } from "./system/terminalDoctor.js"
 import { formatServerSetupReport, serverSetupReport } from "./system/serverSetupCheck.js"
 import { handleSetupCommand } from "./system/firstRunSetup.js"
-import { acquireLocalRunLock, releaseLocalRunLock, type LocalRunLock } from "./system/localRunLock.js"
+import { acquireLocalRunLock, releaseLocalRunLock, terminalAppName, type LocalRunLock } from "./system/localRunLock.js"
 import { debugOverlaysEnabled } from "./system/debugFlags.js"
 import { checkInternetConnectivity } from "./net/connectivity.js"
 import { lobbyInviteErrorMessage, lobbyInviteMismatchNotice, lobbyJoinUsageMessage, normalizeLobbyBaseUrl } from "./net/hostConfig.js"
@@ -1957,6 +1958,12 @@ function connectLobby() {
     socketUrl.searchParams.set("name", currentPlayerName())
     socketUrl.searchParams.set("role", "player")
     socketUrl.searchParams.set("clientId", localLobbyClientId)
+    const lobbyIdentity = lobbyAccountIdentity()
+    if (lobbyIdentity) {
+      socketUrl.searchParams.set("accountKey", lobbyIdentity.accountKey)
+      socketUrl.searchParams.set("accountLabel", lobbyIdentity.accountLabel)
+      socketUrl.searchParams.set("terminalApp", lobbyIdentity.terminalApp)
+    }
     const socket = new WebSocket(socketUrl)
     lobbySocket = socket
     socket.on("open", () => {
@@ -2034,7 +2041,16 @@ function sendLobbyAction(actionType: LobbyActionType, label: string) {
 
 function updateLobbyStatus(text: string) {
   try {
-    const snapshot = JSON.parse(text) as Partial<LobbySnapshot>
+    const parsed = JSON.parse(text) as Partial<LobbySnapshot> & { message?: unknown; type?: unknown }
+    if (parsed.type === "error") {
+      const message = String(parsed.message || "Lobby rejected the connection.")
+      model.session.log.unshift(message)
+      model.saveStatus = message
+      addToast(model.session, "Lobby", message, "warning")
+      refresh()
+      return
+    }
+    const snapshot = parsed as Partial<LobbySnapshot>
     const players = Array.isArray(snapshot.players) ? snapshot.players.length : 0
     if (players && players !== lobbyConnectedPlayers) {
       lobbyConnectedPlayers = players
@@ -2235,6 +2251,17 @@ function lobbyUrlFromConfig() {
 
 function currentPlayerName() {
   return playerNameFromEnv() || model.session.hero.name
+}
+
+function lobbyAccountIdentity() {
+  const session = loadAuthSession()
+  if (!session) return null
+  const stableIdentity = session.userId || `${session.provider}:${session.username}`
+  return {
+    accountKey: createHash("sha256").update(stableIdentity).digest("hex"),
+    accountLabel: `${session.provider}:${session.username}`,
+    terminalApp: terminalAppName(),
+  }
 }
 
 function seedFromEnv() {

@@ -5,9 +5,12 @@ import { HostCommandRelay } from "./hostCommandRelay.js"
 import { MultiplayerLobbyState, loadRaceResults, saveRaceResults, type LobbyRole } from "./lobbyState.js"
 
 type LobbySocketData = {
+  accountKey?: string
+  accountLabel?: string
   id: string
   name: string
   role: LobbyRole
+  terminalApp?: string
 }
 
 type LobbyWebSocket = WebSocket & { data: LobbySocketData }
@@ -68,7 +71,14 @@ server.on("upgrade", (request, socket, head) => {
   }
   const role: LobbyRole = url.searchParams.get("role") === "spectator" ? "spectator" : "player"
   const name = url.searchParams.get("name")?.trim() || (role === "spectator" ? "Spectator" : "Crawler")
-  const data: LobbySocketData = { id: cleanClientId(url.searchParams.get("clientId")) || crypto.randomUUID(), name, role }
+  const data: LobbySocketData = {
+    accountKey: cleanQueryLabel(url.searchParams.get("accountKey"), 128),
+    accountLabel: cleanQueryLabel(url.searchParams.get("accountLabel"), 80),
+    id: cleanClientId(url.searchParams.get("clientId")) || crypto.randomUUID(),
+    name,
+    role,
+    terminalApp: cleanQueryLabel(url.searchParams.get("terminalApp"), 80),
+  }
   websocketServer.handleUpgrade(request, socket, head, (socket) => {
     const ws = socket as LobbyWebSocket
     ws.data = data
@@ -77,7 +87,22 @@ server.on("upgrade", (request, socket, head) => {
 })
 
 websocketServer.on("connection", (ws: LobbyWebSocket) => {
-  lobby.join(ws.data.id, ws.data.name, ws.data.role)
+  try {
+    lobby.join(ws.data.id, ws.data.name, ws.data.role, {
+      accountKey: ws.data.accountKey,
+      accountLabel: ws.data.accountLabel,
+      terminalApp: ws.data.terminalApp,
+    })
+  } catch (error) {
+    ws.send(
+      JSON.stringify({
+        type: "error",
+        message: error instanceof Error ? error.message : "Could not join lobby.",
+      })
+    )
+    ws.close(4008, "duplicate account")
+    return
+  }
   sockets.add(ws)
   broadcastState()
   ws.on("close", () => {
@@ -382,6 +407,10 @@ function renderLobbyPage(publicUrl: string): string {
 function cleanClientId(value: string | null) {
   const id = value?.trim() ?? ""
   return /^[A-Za-z0-9_-]{4,80}$/.test(id) ? id : ""
+}
+
+function cleanQueryLabel(value: string | null, maxLength: number) {
+  return String(value || "").replace(/[^\w .:@-]/g, "").trim().slice(0, maxLength)
 }
 
 function htmlEscape(value: string) {

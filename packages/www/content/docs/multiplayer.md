@@ -82,6 +82,12 @@ Signed-in runs are guarded by a local active-run lock. If the same GitHub or pas
 OPENDUNGEON_TERMINAL_APP=Ghostty bun run dev -- join http://127.0.0.1:3737
 ```
 
+The lobby host also rejects a second connected player with the same signed-in account identity, so the protection still applies on LAN. Guest sessions do not send an account identity and can still run side by side:
+
+```txt
+OPENDUNGEON_AUTH_DIR="$(mktemp -d)" OPENDUNGEON_PLAYER_NAME=Guest bun run dev -- join http://127.0.0.1:3737
+```
+
 ## Website invite pages
 
 `/create` generates a shareable lobby URL. `/create/[id]` renders the commands friends need. The website does not keep the current CLI WebSocket lobby alive by itself, so the host process still needs to run somewhere reachable.

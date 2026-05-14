@@ -6,9 +6,24 @@ export type LobbyMode = "race" | "coop"
 export type LobbyRole = "player" | "spectator"
 
 export type LobbyPlayer = {
+  accountKey?: string
+  accountLabel?: string
   id: string
   name: string
   role: LobbyRole
+  terminalApp?: string
+  joinedAt: number
+}
+
+export type LobbyPlayerIdentity = {
+  accountKey?: unknown
+  accountLabel?: unknown
+  terminalApp?: unknown
+}
+
+export type PublicLobbyPlayer = {
+  id: string
+  name: string
   joinedAt: number
 }
 
@@ -126,8 +141,8 @@ export type LobbySnapshot = {
   mode: LobbyMode
   seed: number
   inviteCode: string
-  players: Array<Omit<LobbyPlayer, "role">>
-  spectators: Array<Omit<LobbyPlayer, "role">>
+  players: PublicLobbyPlayer[]
+  spectators: PublicLobbyPlayer[]
   coopStates: CoopSyncState[]
   combat: CombatTurnState
   actions: LobbyActionEntry[]
@@ -169,11 +184,23 @@ export class MultiplayerLobbyState {
     this.results = [...(options.initialResults ?? [])]
   }
 
-  join(id: string, name: string, role: LobbyRole = "player") {
+  join(id: string, name: string, role: LobbyRole = "player", identity: LobbyPlayerIdentity = {}) {
+    const accountKey = cleanAccountKey(identity.accountKey)
+    const accountLabel = cleanAccountLabel(identity.accountLabel)
+    const terminalApp = cleanAccountLabel(identity.terminalApp || "terminal")
+    if (role === "player" && accountKey) {
+      const duplicate = [...this.players.values()].find((player) => player.id !== id && player.role === "player" && player.accountKey === accountKey)
+      if (duplicate) {
+        throw new Error(`${accountLabel || "Signed-in player"} is already in this lobby from ${duplicate.terminalApp || "another terminal"}. Use a guest auth dir for another local player.`)
+      }
+    }
     const player: LobbyPlayer = {
+      accountKey: accountKey || undefined,
+      accountLabel: accountLabel || undefined,
       id,
       name: cleanName(name || (role === "spectator" ? "Spectator" : "Crawler")),
       role,
+      terminalApp: terminalApp || undefined,
       joinedAt: this.now(),
     }
     this.players.set(id, player)
@@ -587,6 +614,15 @@ function publicPlayer(player: LobbyPlayer) {
 
 function cleanName(value: unknown) {
   return String(value || "Crawler").replace(/[^\w .-]/g, "").trim().slice(0, 32) || "Crawler"
+}
+
+function cleanAccountKey(value: unknown) {
+  const text = String(value || "").trim().toLowerCase()
+  return /^[a-f0-9]{16,128}$/.test(text) ? text.slice(0, 128) : ""
+}
+
+function cleanAccountLabel(value: unknown) {
+  return String(value || "").replace(/[^\w .:@-]/g, "").trim().slice(0, 80)
 }
 
 function cleanPatchId(value: unknown) {

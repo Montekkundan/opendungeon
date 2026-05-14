@@ -126,6 +126,8 @@ Signed-in sessions use a local active-run lock. Starting the same signed-in acco
 OPENDUNGEON_TERMINAL_APP=Ghostty bun run dev -- join http://127.0.0.1:3737
 ```
 
+The lobby host also guards signed-in identities over WebSocket joins. If the same account is already connected to the lobby, the second client receives an already-in-this-lobby message. Guest clients do not send an account identity and can still run side by side.
+
 For LAN testing from another device, bind the host to all interfaces and use the LAN URL printed by the host:
 
 ```txt
