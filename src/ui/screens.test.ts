@@ -79,8 +79,8 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: villageModel(),
-      expectedHash: "193d4514",
-      requiredText: ["Village", "Walkable Village", "NPC Schedule", "Market and Balance", "Seed plan", "S seed", "G starts"],
+      expectedHash: "af13cba4",
+      requiredText: ["Village", "Walkable Village", "NPC Schedule", "Market and Balance", "Seed Fresh", "S seed", "G starts"],
     },
   ]
 
@@ -336,6 +336,20 @@ test("state sheet shows stats talents and combat rewards", () => {
   expect(text).toContain("Aimed Shot +1 damage")
   expect(text).toContain("Combat And Rewards")
   expect(text).toContain("DEX")
+})
+
+test("village panels wrap long location and market copy", () => {
+  const session = createSession(1234, "coop", "ranger", "Mira")
+  unlockHub(session)
+  session.hub.village.selectedLocation = "market"
+  session.hub.village.shopLog.unshift("Customers test prices for dungeon loot before dawn because the market remembers scarcity.")
+  const output = draw(modelFor("village", session, { saveStatus: "Next descent seed: fresh random seed with loot, build, and food preparation complete." }), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Customers test prices for dungeon")
+  expect(text).toContain("loot before dawn")
+  expect(text).toContain("Next descent seed: fresh random seed")
+  expect(text).not.toContain("Customers test prices for dungeon lo…")
 })
 
 test("quickbar does not expose gold as a dead G action", () => {

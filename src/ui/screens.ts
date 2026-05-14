@@ -897,14 +897,14 @@ function drawVillage(canvas: Canvas, model: AppModel) {
   const sideX = mapX + mapW + 3
   const sideW = width - (sideX - x) - 4
   const selected = villageLocations[hub.village.selectedLocation]
-  drawPanel(canvas, sideX, mapY, sideW, 9, selected.label, UI.gold)
-  canvas.write(sideX + 3, mapY + 2, trim(selected.text, sideW - 6), UI.ink, UI.panel)
-  canvas.write(sideX + 3, mapY + 4, trim(`Coins ${hub.coins}  Loot sold ${hub.lootSold}  Pack ${hub.contentPacks.active}`, sideW - 6), UI.soft, UI.panel)
-  canvas.write(sideX + 3, mapY + 5, trim(`Farm permissions ${hub.village.sharedFarm.permissions}`, sideW - 6), UI.soft, UI.panel)
-  canvas.write(sideX + 3, mapY + 6, trim(`Seed plan ${villageSeedModeLabel(model.villageSeedMode)}. S cycles.`, sideW - 6), UI.gold, UI.panel)
-  canvas.write(sideX + 3, mapY + 7, trim("G starts when loot, build, and food are ready.", sideW - 6), UI.focus, UI.panel)
+  drawPanel(canvas, sideX, mapY, sideW, 10, selected.label, UI.gold)
+  writeWrapped(canvas, sideX + 3, mapY + 2, sideW - 6, [selected.text], 2, UI.ink, UI.panel)
+  canvas.write(sideX + 3, mapY + 5, trim(`Coins ${hub.coins}  Loot sold ${hub.lootSold}`, sideW - 6), UI.soft, UI.panel)
+  canvas.write(sideX + 3, mapY + 6, trim(`Pack ${hub.contentPacks.active}  Farm ${hub.village.sharedFarm.permissions}`, sideW - 6), UI.soft, UI.panel)
+  canvas.write(sideX + 3, mapY + 7, trim(`Seed ${villageSeedModeLabel(model.villageSeedMode)}. S cycles.`, sideW - 6), UI.gold, UI.panel)
+  writeWrapped(canvas, sideX + 3, mapY + 8, sideW - 6, ["G starts when loot, build, and food are ready."], 1, UI.focus, UI.panel)
 
-  const scheduleY = mapY + 10
+  const scheduleY = mapY + 11
   drawPanel(canvas, sideX, scheduleY, sideW, 9, "NPC Schedule", UI.edge)
   hub.village.schedules.slice(0, 5).forEach((schedule, index) => {
     const rowY = scheduleY + 2 + index
@@ -915,15 +915,16 @@ function drawVillage(canvas: Canvas, model: AppModel) {
   })
 
   const marketY = scheduleY + 10
-  drawPanel(canvas, sideX, marketY, sideW, Math.max(7, height - (marketY - y) - 5), "Market and Balance", UI.edgeDim)
+  const marketH = Math.max(7, height - (marketY - y) - 5)
+  drawPanel(canvas, sideX, marketY, sideW, marketH, "Market and Balance", UI.edgeDim)
   const shopLog = hub.village.shopLog[0] ?? "No customer price test yet."
-  canvas.write(sideX + 3, marketY + 2, trim(shopLog, sideW - 6), UI.ink, UI.panel)
+  writeWrapped(canvas, sideX + 3, marketY + 2, sideW - 6, [shopLog], 2, UI.ink, UI.panel)
   const dashboard = hub.balanceDashboard
-  canvas.write(sideX + 3, marketY + 4, trim(`Balance ${dashboard.runs} runs  ${session.hero.classId} ${dashboard.classWinRate[session.hero.classId] ?? 0}%`, sideW - 6), UI.soft, UI.panel)
-  canvas.write(sideX + 3, marketY + 5, trim(`Gold ${dashboard.averageGold}  Hub coins ${dashboard.averageHubCoins}  Pace ${dashboard.upgradePacing}%`, sideW - 6), UI.soft, UI.panel)
-  if (dashboard.notes[0]) canvas.write(sideX + 3, marketY + 6, trim(dashboard.notes[0], sideW - 6), UI.muted, UI.panel)
+  canvas.write(sideX + 3, marketY + 5, trim(`Balance ${dashboard.runs} runs  ${session.hero.classId} ${dashboard.classWinRate[session.hero.classId] ?? 0}%`, sideW - 6), UI.soft, UI.panel)
+  canvas.write(sideX + 3, marketY + 6, trim(`Gold ${dashboard.averageGold}  Hub coins ${dashboard.averageHubCoins}  Pace ${dashboard.upgradePacing}%`, sideW - 6), UI.soft, UI.panel)
+  if (dashboard.notes[0] && marketH > 8) writeWrapped(canvas, sideX + 3, marketY + 7, sideW - 6, [dashboard.notes[0]], marketH - 8, UI.muted, UI.panel)
 
-  if (model.saveStatus) canvas.write(x + 4, y + height - 4, trim(model.saveStatus, width - 8), UI.focus, UI.panel)
+  if (model.saveStatus) writeWrapped(canvas, x + 4, y + height - 5, width - 8, [model.saveStatus], 2, UI.focus, UI.panel)
   drawFooter(canvas, [
     ["Arrows", "walk"],
     ["Enter", "visit"],
