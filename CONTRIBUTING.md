@@ -51,6 +51,17 @@ bun run check
 git diff --check
 ```
 
+For a release-facing or cross-surface contribution, run the contributor pass:
+
+```txt
+bun run verify:contributor
+```
+
+That command set covers gameplay rules, terminal renderer snapshots, scripted
+headless scenarios, the Next.js website verification, TypeScript, the full Bun
+test suite, compiled JS output, global npm/Bun install smoke, and package dry
+run readiness.
+
 For website-only work:
 
 ```txt

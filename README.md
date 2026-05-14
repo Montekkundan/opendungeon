@@ -37,6 +37,7 @@ opendungeon update
 ```bash
 bun install
 bun run dev
+bun run verify:gameplay
 ```
 
 Website:
@@ -118,6 +119,7 @@ Ghost-style server platforms can use `packaging/ghost/opendungeon` as the game t
 
 ```bash
 bun install --frozen-lockfile
+bun run verify:contributor
 bun run package:check
 bun run changeset
 git push origin main

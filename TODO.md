@@ -184,7 +184,7 @@
 ### Definition Of Finished Enough For 1.0
 
 - [ ] A new player can install, start a run, complete the tutorial, understand d20 checks/combat, clear the first dungeon arc, enter the village, prepare a second descent, and save/load without reading source code.
-- [ ] A contributor can run one command set to verify gameplay, UI snapshots, website build, headless scenarios, and package readiness.
+- [x] A contributor can run one command set to verify gameplay, UI snapshots, website build, headless scenarios, and package readiness.
 - [ ] Local multiplayer works on one laptop and LAN with documented host/join commands, guest sessions, duplicate signed-in account protection, and clear failure messages.
 - [ ] Website docs explain install, controls, mechanics, monsters, NPCs, village, multiplayer, Supabase, deployment, changelog, and contributing in the same visual style.
 - [ ] Cloud/profile features work with Supabase locally and on Vercel without private secrets leaking to the browser or repo.
