@@ -898,14 +898,15 @@ function drawVillage(canvas: Canvas, model: AppModel) {
   const sideX = mapX + mapW + 3
   const sideW = width - (sideX - x) - 4
   const selected = villageLocations[hub.village.selectedLocation]
-  drawPanel(canvas, sideX, mapY, sideW, 10, selected.label, UI.gold)
-  writeWrapped(canvas, sideX + 3, mapY + 2, sideW - 6, [selected.text], 2, UI.ink, UI.panel)
-  canvas.write(sideX + 3, mapY + 5, trim(`Coins ${hub.coins}  Loot sold ${hub.lootSold}`, sideW - 6), UI.soft, UI.panel)
-  canvas.write(sideX + 3, mapY + 6, trim(`Pack ${hub.contentPacks.active}  Farm ${hub.village.sharedFarm.permissions}`, sideW - 6), UI.soft, UI.panel)
-  canvas.write(sideX + 3, mapY + 7, trim(`Seed ${villageSeedModeLabel(model.villageSeedMode)}. S cycles.`, sideW - 6), UI.gold, UI.panel)
-  writeWrapped(canvas, sideX + 3, mapY + 8, sideW - 6, ["G starts when loot, build, and food are ready."], 1, UI.focus, UI.panel)
+  const locationH = 12
+  drawPanel(canvas, sideX, mapY, sideW, locationH, selected.label, UI.gold)
+  writeWrapped(canvas, sideX + 3, mapY + 2, sideW - 6, [selected.text], 3, UI.ink, UI.panel)
+  writeWrapped(canvas, sideX + 3, mapY + 6, sideW - 6, [`Coins ${hub.coins}  Loot sold ${hub.lootSold}`], 1, UI.soft, UI.panel)
+  writeWrapped(canvas, sideX + 3, mapY + 7, sideW - 6, [`Pack ${hub.contentPacks.active}  Farm ${hub.village.sharedFarm.permissions}`], 1, UI.soft, UI.panel)
+  writeWrapped(canvas, sideX + 3, mapY + 8, sideW - 6, [`Seed ${villageSeedModeLabel(model.villageSeedMode)}. S cycles.`], 1, UI.gold, UI.panel)
+  writeWrapped(canvas, sideX + 3, mapY + 9, sideW - 6, ["G starts when loot, build, and food are ready."], 2, UI.focus, UI.panel)
 
-  const scheduleY = mapY + 11
+  const scheduleY = mapY + locationH + 1
   drawPanel(canvas, sideX, scheduleY, sideW, 9, "NPC Schedule", UI.edge)
   hub.village.schedules.slice(0, 5).forEach((schedule, index) => {
     const rowY = scheduleY + 2 + index
@@ -1678,12 +1679,26 @@ function compactToastText(text: string, width: number) {
 }
 
 function wrappedRows(text: string, width: number, maxRows: number) {
+  const safeWidth = Math.max(1, width)
   const words = text.split(/\s+/).filter(Boolean)
   const rows: string[] = []
   let current = ""
   for (const word of words) {
+    if (word.length > safeWidth) {
+      if (current) {
+        rows.push(current)
+        current = ""
+      }
+      for (let offset = 0; offset < word.length && rows.length < maxRows; offset += safeWidth) {
+        const chunk = word.slice(offset, offset + safeWidth)
+        if (chunk.length === safeWidth || offset + safeWidth < word.length) rows.push(chunk)
+        else current = chunk
+      }
+      if (rows.length >= maxRows) break
+      continue
+    }
     const next = current ? `${current} ${word}` : word
-    if (next.length <= width) {
+    if (next.length <= safeWidth) {
       current = next
       continue
     }
@@ -1898,7 +1913,7 @@ function drawConversationPanel(canvas: Canvas, session: GameSession) {
 
   const width = Math.min(84, canvas.width - 6)
   const hasChoices = conversation.options.length > 0 && conversation.status === "open"
-  const height = hasChoices ? 16 : 10
+  const height = hasChoices ? Math.min(20, Math.max(16, canvas.height - gameQuickbarHeight(canvas) - 2)) : 11
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.max(1, canvas.height - gameQuickbarHeight(canvas) - height - 2)
   const trade = conversation.trade
@@ -1910,7 +1925,7 @@ function drawConversationPanel(canvas: Canvas, session: GameSession) {
   if (portraitId) drawPixelBlock(canvas, x + 3, y + 2, portraitSprite(portraitId, 9, 4), 1)
   else drawMiniIcon(canvas, x + 3, y + 2, actorSpriteId(conversation.kind), 8, 2)
   canvas.write(x + 14, y + 2, trim(conversation.speaker, width - 18), UI.gold, UI.panel)
-  writeWrapped(canvas, x + 14, y + 4, width - 18, [conversation.text], 2, UI.ink, UI.panel)
+  writeWrapped(canvas, x + 14, y + 4, width - 18, [conversation.text], hasChoices ? 3 : 4, UI.ink, UI.panel)
   if (trade) {
     const tradeText = trade.purchased ? `${trade.item} in pack` : `${trade.item}  ${trade.price}g`
     canvas.write(x + 14, y + height - 4, trim(tradeText, width - 26), trade.purchased ? UI.focus : UI.brass, UI.panel)
@@ -1918,14 +1933,16 @@ function drawConversationPanel(canvas: Canvas, session: GameSession) {
   if (hasChoices) {
     const optionY = y + 8
     const optionW = width - 18
+    const rowH = height >= 20 ? 3 : 2
+    const previewMaxRows = Math.max(1, rowH - 1)
     conversation.options.slice(0, 3).forEach((option, index) => {
       const selected = index === conversation.selectedOption
-      const rowY = optionY + index * 2
-      if (selected) canvas.fill(x + 13, rowY, optionW + 1, 2, " ", UI.panel2, UI.panel2)
+      const rowY = optionY + index * rowH
+      if (selected) canvas.fill(x + 13, rowY, optionW + 1, rowH, " ", UI.panel2, UI.panel2)
       canvas.write(x + 14, rowY, `${index + 1}`, selected ? UI.gold : UI.muted, selected ? UI.panel2 : UI.panel)
       canvas.write(x + 17, rowY, option.label, selected ? UI.focus : UI.soft, selected ? UI.panel2 : UI.panel)
-      const previewRows = wrappedRows(option.text, optionW - 3, 1)
-      if (previewRows[0]) canvas.write(x + 17, rowY + 1, previewRows[0], selected ? UI.ink : UI.muted, selected ? UI.panel2 : UI.panel)
+      const previewRows = wrappedRows(option.text, optionW - 3, previewMaxRows)
+      writeRows(canvas, x + 17, rowY + 1, optionW - 3, previewRows, selected ? UI.ink : UI.muted, selected ? UI.panel2 : UI.panel)
     })
     canvas.write(x + 14, y + height - 2, trim("1-3 choose  Up/Down move  Enter confirm  Esc leave", width - 18), UI.muted, UI.panel)
   } else {
@@ -2431,14 +2448,14 @@ function inventoryLayout(model: AppModel, width: number, height: number): Invent
   const innerW = frame.width - 6
   const innerH = frame.height - 8
   const characterW = Math.min(36, Math.max(24, Math.floor(innerW * 0.32)))
-  const character: Rect = { x: innerX, y: innerY, width: characterW, height: innerH - 7 }
+  const character: Rect = { x: innerX, y: innerY, width: characterW, height: innerH - 9 }
   const pack: Rect = {
     x: innerX + characterW + 2,
     y: innerY,
     width: Math.max(28, innerW - characterW - 2),
-    height: innerH - 7,
+    height: innerH - 9,
   }
-  const details: Rect = { x: innerX, y: frame.y + frame.height - 10, width: innerW, height: 6 }
+  const details: Rect = { x: innerX, y: frame.y + frame.height - 12, width: innerW, height: 8 }
   const apply: Rect = { x: frame.x + frame.width - 34, y: frame.y + frame.height - 3, width: 14, height: 1 }
   const close: Rect = { x: frame.x + frame.width - 18, y: frame.y + frame.height - 3, width: 12, height: 1 }
   const columns = clamp(Math.floor((pack.width - 4) / 12), 3, 6)
@@ -2566,11 +2583,11 @@ function drawInventoryDialog(canvas: Canvas, model: AppModel) {
     const actions = inventoryActionsForItem(model.session, selectedIndex)
     const enabledActions = actions.map((action) => `${action.key} ${action.label}${action.enabled ? "" : " off"}`)
     drawMiniIcon(canvas, layout.details.x + 2, layout.details.y + 1, inventorySprite(selectedItem), 6, 1)
-    canvas.write(layout.details.x + 10, layout.details.y + 1, trim(selectedItem, Math.floor(layout.details.width * 0.32)), UI.gold, UI.panel)
-    writeWrapped(canvas, layout.details.x + Math.floor(layout.details.width * 0.36), layout.details.y + 1, Math.floor(layout.details.width * 0.58), [inventoryItemDescription(selectedItem)], 2, UI.soft, UI.panel)
+    writeWrapped(canvas, layout.details.x + 10, layout.details.y + 1, Math.floor(layout.details.width * 0.28), [selectedItem], 2, UI.gold, UI.panel)
+    writeWrapped(canvas, layout.details.x + Math.floor(layout.details.width * 0.36), layout.details.y + 1, Math.floor(layout.details.width * 0.58), [inventoryItemDescription(selectedItem)], 3, UI.soft, UI.panel)
     const compare = inventoryCompareText(model.session, selectedItem)
-    canvas.write(layout.details.x + 10, layout.details.y + 3, trim(compare, layout.details.width - 12), UI.muted, UI.panel)
-    writeWrapped(canvas, layout.details.x + 2, layout.details.y + 4, layout.details.width - 4, [enabledActions.join("  ")], 2, UI.ink, UI.panel)
+    writeWrapped(canvas, layout.details.x + 2, layout.details.y + 4, layout.details.width - 4, [compare], 1, UI.muted, UI.panel)
+    writeWrapped(canvas, layout.details.x + 2, layout.details.y + 5, layout.details.width - 4, [enabledActions.join("  ")], 2, UI.ink, UI.panel)
   } else {
     canvas.write(layout.details.x + 2, layout.details.y + 1, model.session.inventory.length ? "Empty slot." : "Pack is empty.", UI.soft, UI.panel)
   }
@@ -3292,8 +3309,7 @@ function onOff(value: boolean) {
 function trim(text: string, width: number) {
   if (width <= 0) return ""
   if (text.length <= width) return text
-  if (width === 1) return "…"
-  return `${text.slice(0, Math.max(0, width - 1))}…`
+  return text.slice(0, width)
 }
 
 function trimInventoryLabel(text: string, width: number) {

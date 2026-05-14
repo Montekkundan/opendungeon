@@ -47,7 +47,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: combatModel(),
-      expectedHash: "9a26e3ea",
+      expectedHash: "3d2e7161",
       requiredText: ["Turn Combat", "Order", "Shado", "Necroman", "Weakness"],
     },
     {
@@ -55,7 +55,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("settings", createSession(4321), { settingsTabIndex: 3 }),
-      expectedHash: "fcac0598",
+      expectedHash: "fa8553aa",
       requiredText: ["Settings", "Visuals", "Camera FOV"],
     },
     {
@@ -63,7 +63,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("tutorial", createSession(1234), { tutorialIndex: 1, menuIndex: 1 }),
-      expectedHash: "ec3501a6",
+      expectedHash: "b710fab2",
       requiredText: ["Tutorial", "Combat", "Initiative", "d20"],
     },
     {
@@ -71,7 +71,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("game", createSession(1234), { dialog: "book" }),
-      expectedHash: "5f68b90f",
+      expectedHash: "90406631",
       requiredText: ["BOOK", "All entries", "Story", "Monsters", "Waking Cell", "Portal Room"],
     },
     {
@@ -79,7 +79,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: villageModel(),
-      expectedHash: "af13cba4",
+      expectedHash: "d1e8eabb",
       requiredText: ["Village", "Walkable Village", "NPC Schedule", "Market and Balance", "Seed Fresh", "S seed", "G starts"],
     },
   ]
@@ -472,6 +472,37 @@ test("talent check modal shows the full D20 rule and result copy", () => {
   expect(text).toContain("You got a Bound relic, focus, gold, and XP.")
   expect(text).toContain("Press I to inspect inventory.")
   expect(text).not.toContain("1 fa…")
+})
+
+test("important playtest surfaces do not hide instructions behind ellipses", () => {
+  const session = createSession(1234, "solo", "ranger", "Mira")
+  const dialog = localNpcStoryDialog("shrine-keeper", 2)
+  session.conversation = {
+    id: "shrine-test",
+    actorId: "shrine-test",
+    kind: "shrine-keeper",
+    speaker: dialog.speaker,
+    text: dialog.text,
+    status: "open",
+    options: dialog.options,
+    selectedOption: 1,
+  }
+
+  const village = createSession(4321, "coop", "ranger", "Mira")
+  unlockHub(village)
+  village.hub.village.selectedLocation = "market"
+  village.hub.village.shopLog.unshift("Customers test prices for dungeon loot before dawn because the market remembers scarcity.")
+
+  const outputs = [
+    draw(modelFor("game", session), 120, 40),
+    draw(skillCheckModel(), 120, 40),
+    draw(modelFor("game", createSession(2345), { dialog: "inventory", inventoryIndex: 1 }), 120, 40),
+    draw(modelFor("village", village), 120, 40),
+  ]
+
+  for (const output of outputs) {
+    expect(screenText(output.chunks)).not.toContain("…")
+  }
 })
 
 test("level-up modal requires an explicit talent selection before enter", () => {
