@@ -450,6 +450,13 @@ body {
 [data-component="what"],
 [data-component="preview-copy"] {
   width: 100%;
+  max-width: none;
+  margin-right: 0;
+  margin-left: 0;
+}
+
+[data-component="what"] > *,
+[data-component="preview-copy"] > * {
   max-width: 58rem;
   margin-right: auto;
   margin-left: auto;
