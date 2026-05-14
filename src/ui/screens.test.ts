@@ -39,7 +39,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: skillCheckModel(),
-      expectedHash: "51fa88be",
+      expectedHash: "2da5b129",
       requiredText: ["Talent Check", "Whispering Relic", "Total >= difficulty", "Enter roll d20", "Esc step away"],
     },
     {
@@ -47,7 +47,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: combatModel(),
-      expectedHash: "3d2e7161",
+      expectedHash: "35750a46",
       requiredText: ["Turn Combat", "Order", "Shado", "Necroman", "Weakness"],
     },
     {
@@ -71,7 +71,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("game", createSession(1234), { dialog: "book" }),
-      expectedHash: "90406631",
+      expectedHash: "4ef0166b",
       requiredText: ["BOOK", "All entries", "Story", "Monsters", "Waking Cell", "Portal Room"],
     },
     {
@@ -79,8 +79,8 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: villageModel(),
-      expectedHash: "a0198a21",
-      requiredText: ["Village", "Walkable Village", "NPC Schedule", "Market and Balance", "broken", "Seed Fresh", "S seed", "G starts"],
+      expectedHash: "e6f26f11",
+      requiredText: ["Village", "Walkable Village", "NPC Schedule", "Market and Balance", "broken", "Seed Fresh", "S seed", "R craft"],
     },
   ]
 
@@ -149,6 +149,7 @@ test("co-op game screen renders remote party members on the map and radar", () =
 
   expect(text).toContain("Sol")
   expect(text).toContain("&ally")
+  expect(text).toContain("Party Sol F1 19hp near")
 })
 
 test("normal screen changes do not draw transition banners", () => {
@@ -296,7 +297,7 @@ test("quest journal only lists discovered chains at the start", () => {
   const output = draw(modelFor("game", session, { dialog: "quests" }), 120, 40)
   const text = screenText(output.chunks)
 
-  expect(text).toContain("Escort: crypt")
+  expect(text).toContain("Escort: Floors 1-2")
   expect(text).toContain("locked quest chains hidden")
   const firstObjective = session.world.events.find((event) => event.id === session.world.quests.find((quest) => quest.status === "active")?.objectiveEventIds[0])?.title
   if (firstObjective) expect(text).toContain(firstObjective)
@@ -371,8 +372,8 @@ test("minimap renders a local radar with objective direction", () => {
   const output = draw(modelFor("game", createSession(1234)), 120, 40)
   const text = screenText(output.chunks)
 
-  expect(text).toContain("Radar  goal E15")
-  expect(text).toContain("Goal E15 (15 steps)")
+  expect(text).toContain("Radar  goal E43")
+  expect(text).toContain("Goal E43 (43 steps)")
   expect(text).toContain("@you &ally")
   expect(text).not.toContain("Mini map")
 })

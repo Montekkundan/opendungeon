@@ -19,7 +19,7 @@ describe("lobby host config", () => {
 
     expect(options.bindHost).toBe("0.0.0.0")
     expect(options.port).toBe(3737)
-    expect(options.mode).toBe("race")
+    expect(options.mode).toBe("coop")
   })
 
   test("accepts LAN and public server advertise options", () => {

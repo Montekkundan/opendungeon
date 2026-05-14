@@ -18,7 +18,7 @@ export function parseLobbyHostArgs(args: string[], env: Env = process.env): Lobb
     port: positivePort(env.OPENDUNGEON_PORT ?? env.PORT, 3737),
     bindHost: env.OPENDUNGEON_BIND_HOST || env.OPENDUNGEON_HOST || env.HOST || "0.0.0.0",
     seed: positiveInt(env.OPENDUNGEON_SEED, Math.floor(Math.random() * 9_000_000) + 1_000_000),
-    mode: env.OPENDUNGEON_MODE === "coop" || env.OPENDUNGEON_MODE === "race" ? env.OPENDUNGEON_MODE : "race",
+    mode: env.OPENDUNGEON_MODE === "coop" || env.OPENDUNGEON_MODE === "race" ? env.OPENDUNGEON_MODE : "coop",
     inviteCode: "",
     leaderboardPath: env.OPENDUNGEON_LOBBY_LEADERBOARD || "",
     publicUrl: normalizeLobbyBaseUrl(env.OPENDUNGEON_PUBLIC_URL || env.OPENDUNGEON_LOBBY_PUBLIC_URL || ""),

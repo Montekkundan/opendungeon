@@ -871,7 +871,7 @@ function drawGame(canvas: Canvas, model: AppModel) {
   const moveAnimation = activePlayerMoveAnimation(model)
   drawMap(canvas, session, model.debugView, model.settings, model.animationFrame, moveAnimation, model.cameraFocus ?? null, model.remotePlayers)
   if (!model.uiHidden) {
-    drawHud(canvas, session)
+    drawHud(canvas, session, model.remotePlayers, model.coopGateStatus)
     if (!model.debugView && model.settings.showMinimap) drawMinimap(canvas, session, model.remotePlayers)
     if (!model.debugView) drawQuickbar(canvas, session, model.diceRollAnimation, model.settings)
     if (session.combat.active) drawCombatPanel(canvas, session, model.diceRollAnimation, model.settings)
@@ -1129,10 +1129,10 @@ function drawMap(
       const y = startY + sy
       const point = { x, y }
       const previewVisible = Boolean(cameraFocus && Math.abs(cameraFocus.x - x) + Math.abs(cameraFocus.y - y) <= previewRadius)
-      const visible = session.visible.has(pointKey(point)) || previewVisible
-      const seen = session.seen.has(pointKey(point)) || previewVisible
+      const remote = remotePlayerAt(remotes, point)
+      const visible = session.visible.has(pointKey(point)) || previewVisible || Boolean(remote)
+      const seen = session.seen.has(pointKey(point)) || previewVisible || Boolean(remote)
       const actor = visible ? actorAt(session.dungeon.actors, point) : undefined
-      const remote = visible ? remotePlayerAt(remotes, point) : undefined
       const screenX = sx * tileWidth
       const screenY = sy * tileHeight
 
@@ -1227,7 +1227,7 @@ function drawMinimap(canvas: Canvas, session: GameSession, remotePlayers: Remote
       const seen = session.seen.has(key)
       let marker = minimapTileMarker(session.dungeon.tiles[mapY]?.[mapX] ?? "void", visible, seen)
       const actor = visible ? actorAt(session.dungeon.actors, point) : undefined
-      const remote = visible ? remotePlayerAt(remotes, point) : undefined
+      const remote = remotePlayerAt(remotes, point)
 
       if (actor) marker = minimapActorMarker(actor.kind)
       if (remote) marker = { ch: "&", fg: UI.cyan }
@@ -1668,8 +1668,9 @@ function stoneColor(x: number, y: number) {
   return "#3b4048"
 }
 
-function drawHud(canvas: Canvas, session: GameSession) {
+function drawHud(canvas: Canvas, session: GameSession, remotePlayers: RemotePlayerMarker[] = [], coopGateStatus = "") {
   const height = gameHudHeight(canvas)
+  const partyLine = coopPartyHudLine(session, remotePlayers, coopGateStatus)
 
   if (canvas.width < 96 || height < 5) {
     canvas.fill(0, 0, canvas.width, Math.min(4, canvas.height), " ", cleanPanel, cleanPanel)
@@ -1678,7 +1679,7 @@ function drawHud(canvas: Canvas, session: GameSession) {
     canvas.write(1, 0, hero, UI.ink, cleanPanel)
     drawHudBar(canvas, 1, 1, Math.max(12, Math.floor(canvas.width * 0.32)), "HP", session.hp, session.maxHp, UI.hp, UI.hpBack)
     drawHudBar(canvas, Math.floor(canvas.width * 0.43), 1, Math.max(10, Math.floor(canvas.width * 0.25)), "FOCUS", session.focus, session.maxFocus, UI.focus, UI.focusBack)
-    canvas.write(1, 3, trim(session.log[0] ?? "The dungeon waits.", canvas.width - 2), UI.soft, cleanPanel)
+    canvas.write(1, 3, trim(partyLine || session.log[0] || "The dungeon waits.", canvas.width - 2), partyLine ? UI.cyan : UI.soft, cleanPanel)
     return
   }
 
@@ -1702,6 +1703,30 @@ function drawHud(canvas: Canvas, session: GameSession) {
   } else {
     canvas.write(infoX, 3, trim(session.log[0] ?? "The dungeon waits.", contentW), UI.soft, UI.panel)
   }
+  if (partyLine) canvas.write(infoX, 4, trim(partyLine, contentW), UI.cyan, UI.panel)
+}
+
+function coopPartyHudLine(session: GameSession, remotePlayers: RemotePlayerMarker[], coopGateStatus: string) {
+  if (session.mode !== "coop" && !remotePlayers.length && !coopGateStatus) return ""
+  const connected = remotePlayers.filter((player) => player.connected)
+  const party = connected.length
+    ? connected
+        .slice(0, 4)
+        .map((player) => `${player.name} F${player.floor} ${player.hp}hp ${directionFromTo(session.player, player)}`)
+        .join("  ")
+    : "waiting for lobby sync"
+  const overflow = connected.length > 4 ? ` +${connected.length - 4}` : ""
+  const gate = coopGateStatus ? ` | ${coopGateStatus}` : ""
+  return `Party ${party}${overflow}${gate}`
+}
+
+function directionFromTo(from: { x: number; y: number }, to: { x: number; y: number }) {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) return "near"
+  const eastWest = dx > 1 ? "E" : dx < -1 ? "W" : ""
+  const northSouth = dy > 1 ? "S" : dy < -1 ? "N" : ""
+  return `${northSouth}${eastWest}` || "near"
 }
 
 function drawQuestHudLine(
