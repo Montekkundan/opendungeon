@@ -1551,7 +1551,8 @@ function setScreen(screen: ScreenId, label: string, kind: ScreenTransition["kind
 }
 
 function startScreenTransition(from: ScreenId, to: ScreenId, label: string, kind: ScreenTransition["kind"]) {
-  if (kind !== "screen") playTransitionAudio(kind)
+  const durationMs = transitionDurationForKind(kind, model.settings.reduceMotion)
+  if (kind !== "screen") playTransitionAudio(kind, durationMs)
   if (kind === "screen" || model.settings.reduceMotion) {
     model.screenTransition = null
     return
@@ -1562,7 +1563,7 @@ function startScreenTransition(from: ScreenId, to: ScreenId, label: string, kind
     label,
     kind,
     startedAt: Date.now(),
-    durationMs: transitionDurationForKind(kind),
+    durationMs,
   }
   queueScreenTransitionFrame()
 }
@@ -1683,12 +1684,12 @@ function playAudioEvent(eventId: AudioEventId) {
   void audioController.playEvent(eventId, model.settings)
 }
 
-function playTransitionAudio(kind: ScreenTransition["kind"]) {
+function playTransitionAudio(kind: ScreenTransition["kind"], durationMs = transitionDurationForKind(kind)) {
   if (kind !== "portal") return
   playAudioEvent("teleport-start")
   setTimeout(() => {
     if (!destroyed) playAudioEvent("teleport-end")
-  }, Math.max(120, transitionDurationForKind(kind) - 80))
+  }, Math.max(120, durationMs - 80))
 }
 
 function syncToastLifetimes() {
@@ -1747,6 +1748,13 @@ function queueToastFrame() {
 }
 
 function startDiceRollAnimation(result: number) {
+  if (model.settings.reduceMotion) {
+    if (diceTimer) clearTimeout(diceTimer)
+    diceTimer = null
+    model.diceRollAnimation = null
+    refresh()
+    return
+  }
   model.diceRollAnimation = {
     result,
     startedAt: Date.now(),

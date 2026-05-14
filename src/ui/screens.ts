@@ -1754,7 +1754,7 @@ function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollA
     if (item.custom === "d20") {
       const diceWidth = height >= 10 ? 11 : 8
       const diceHeight = height >= 10 ? 5 : 3
-      drawD20Sprite(canvas, slotX + 2, y + 2, diceResult(session, animation), diceFrame(session, animation), diceWidth, diceHeight, settings.diceSkin, item.active && !settings.reduceMotion, animation)
+      drawD20Sprite(canvas, slotX + 2, y + 2, diceResult(session, animation), diceFrame(session, animation, settings.reduceMotion), diceWidth, diceHeight, settings.diceSkin, item.active && !settings.reduceMotion, animation)
     } else if (item.sprite) {
       drawMiniIcon(canvas, slotX + 3, y + 2, item.sprite, height >= 10 ? 9 : 7, height >= 10 ? 4 : 3)
     }
@@ -1859,7 +1859,7 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
   const diceAccent = roll ? (roll.hit ? UI.focus : UI.hp) : UI.gold
   canvas.fill(diceX, diceY, diceW, 5, " ", UI.panel2, UI.panel2)
   canvas.border(diceX, diceY, diceW, 5, diceAccent)
-  drawD20Sprite(canvas, diceX + 1, diceY + 1, diceResult(session, animation), diceFrame(session, animation), 8, 3, settings.diceSkin, !settings.reduceMotion, animation)
+  drawD20Sprite(canvas, diceX + 1, diceY + 1, diceResult(session, animation), diceFrame(session, animation, settings.reduceMotion), 8, 3, settings.diceSkin, !settings.reduceMotion, animation)
   canvas.write(diceX + 10, diceY + 1, roll ? String(roll.d20).padStart(2, "0") : "d20", "#ffffff", UI.panel2)
   canvas.write(diceX + 2, diceY + 3, roll ? `${roll.total}/${roll.dc}` : statAbbreviations[selectedSkill.stat], "#ffffff", UI.panel2)
 
@@ -1927,7 +1927,7 @@ function drawSkillCheckModal(canvas: Canvas, session: GameSession, animation: Di
   const modifier = roll?.modifier ?? skillCheckModifier(session, check.stat)
   const total = roll?.total
   const result = roll?.d20 ?? animation?.result ?? 20
-  const frame = animation ? diceFrame(session, animation) : roll ? d20FrameCount() - 1 : 0
+  const frame = animation ? diceFrame(session, animation, settings.reduceMotion) : roll ? d20FrameCount() - 1 : 0
   const resolved = check.status === "resolved" && roll
 
   drawPanel(canvas, x, y, width, height, "Talent Check", resolved ? (roll.success ? UI.focus : UI.hp) : UI.gold)
@@ -1940,7 +1940,7 @@ function drawSkillCheckModal(canvas: Canvas, session: GameSession, animation: Di
   const diceY = y + 7
   canvas.fill(diceX, diceY, dicePanelW, dicePanelH, " ", UI.panel2, UI.panel2)
   canvas.border(diceX, diceY, dicePanelW, dicePanelH, UI.edge)
-  drawD20Sprite(canvas, diceX + 4, diceY + 1, result, frame, 12, 5, settings.diceSkin, check.status === "pending" || Boolean(animation), animation)
+  drawD20Sprite(canvas, diceX + 4, diceY + 1, result, frame, 12, 5, settings.diceSkin, !settings.reduceMotion && (check.status === "pending" || Boolean(animation)), animation)
   canvas.write(diceX + 20, diceY + 2, `${statLabels[check.stat]} ${session.stats[check.stat]}`, UI.gold, UI.panel2)
   canvas.write(diceX + 20, diceY + 3, `Modifier ${formatModifier(modifier)}`, UI.ink, UI.panel2)
   canvas.write(diceX + 20, diceY + 4, roll ? `Roll ${roll.d20}` : "Press Enter to roll", roll ? UI.soft : UI.focus, UI.panel2)
@@ -2298,8 +2298,8 @@ function diceResult(session: GameSession, animation?: DiceRollAnimation | null) 
   return animation?.result ?? session.combat.lastRoll?.d20 ?? 20
 }
 
-function diceFrame(_session: GameSession, animation?: DiceRollAnimation | null) {
-  if (!animation) return d20FrameCount() - 1
+function diceFrame(_session: GameSession, animation?: DiceRollAnimation | null, reduceMotion = false) {
+  if (!animation || reduceMotion) return d20FrameCount() - 1
   const elapsed = Date.now() - animation.startedAt
   const progress = clamp(elapsed / animation.durationMs, 0, 1)
   return clamp(Math.floor(progress * d20FrameCount()), 0, d20FrameCount() - 1)

@@ -20,6 +20,12 @@ export const teleportTransitionDurationMs: Record<ScreenTransitionKind, number> 
   village: 720,
 }
 
+const reducedMotionTransitionDurationMs: Record<ScreenTransitionKind, number> = {
+  screen: 0,
+  portal: 0,
+  village: 0,
+}
+
 const palettes: Record<TeleportTransitionKind, TeleportPalette> = {
   portal: {
     title: "PORTAL",
@@ -41,11 +47,12 @@ const palettes: Record<TeleportTransitionKind, TeleportPalette> = {
   },
 }
 
-export function transitionDurationForKind(kind: ScreenTransitionKind) {
-  return teleportTransitionDurationMs[kind]
+export function transitionDurationForKind(kind: ScreenTransitionKind, reduceMotion = false) {
+  return reduceMotion ? reducedMotionTransitionDurationMs[kind] : teleportTransitionDurationMs[kind]
 }
 
 export function teleportTransitionFrame(kind: TeleportTransitionKind, startedAt: number, durationMs: number, canvasHeight: number, now = Date.now()) {
+  if (durationMs <= 0) return null
   const progress = clamp((now - startedAt) / Math.max(1, durationMs), 0, 1)
   if (progress >= 1) return null
   const eased = easeOutQuart(progress)

@@ -4,6 +4,9 @@ import { teleportTileSprite, teleportTransitionFrame, transitionDurationForKind 
 test("teleport animation owns shared transition timing and tile frames", () => {
   expect(transitionDurationForKind("portal")).toBe(1450)
   expect(transitionDurationForKind("village")).toBe(720)
+  expect(transitionDurationForKind("portal", true)).toBe(0)
+  expect(transitionDurationForKind("village", true)).toBe(0)
+  expect(teleportTransitionFrame("portal", 1000, 0, 24, 1000)).toBeNull()
 
   const frame = teleportTransitionFrame("portal", 1000, 1450, 24, 1000)
   expect(frame).toMatchObject({
