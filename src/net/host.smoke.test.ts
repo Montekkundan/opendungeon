@@ -98,6 +98,52 @@ test("host starts, accepts two players plus a spectator, syncs state, disconnect
   }
 }, 10_000)
 
+test("host keeps co-op tutorial movement streams smooth per player", async () => {
+  const port = await freePort()
+  const baseUrl = `http://127.0.0.1:${port}`
+  const host = spawn(process.execPath, ["run", "src/net/host.ts", "--host", "127.0.0.1", "--mode", "coop", "--seed", "2423368", "--port", String(port)], {
+    cwd: process.cwd(),
+    env: { ...process.env, NO_COLOR: "1" },
+  })
+  drain(host)
+
+  const sockets: WebSocket[] = []
+  try {
+    await waitForHealth(baseUrl)
+    const mira = await openLobbySocket(`${baseUrl}/ws?name=Mira&clientId=mira`)
+    const sol = await openLobbySocket(`${baseUrl}/ws?name=Sol&clientId=sol`)
+    sockets.push(mira, sol)
+
+    mira.send(JSON.stringify({ type: "sync", state: syncState("ranger", 1, 10, 10, "movement", false) }))
+    sol.send(JSON.stringify({ type: "sync", state: syncState("ranger", 1, 12, 10, "movement", false) }))
+    await waitForSnapshot(mira, (snapshot) => snapshot.coopStates.length === 2)
+
+    const tutorialPayload = { classId: "ranger", direction: "east", tutorialEnabled: true, tutorialStage: "movement" }
+    mira.send(JSON.stringify({ type: "command", commandType: "move", label: "Moved east", floor: 1, turn: 1, hp: 19, x: 10, y: 10, payload: tutorialPayload }))
+    mira.send(JSON.stringify({ type: "command", commandType: "move", label: "Moved east", floor: 1, turn: 2, hp: 19, x: 11, y: 10, payload: tutorialPayload }))
+    sol.send(JSON.stringify({ type: "command", commandType: "move", label: "Moved east", floor: 1, turn: 1, hp: 19, x: 12, y: 10, payload: tutorialPayload }))
+
+    const moved = await waitForSnapshot(sol, (snapshot) => snapshot.commands.length >= 3)
+    const commands = moved.commands.slice().sort((left, right) => left.sequence - right.sequence)
+    const miraFirst = commands[0]?.result
+    const miraSecond = commands[1]?.result
+    const solFirst = commands[2]?.result
+    expect(miraFirst?.accepted).toBe(true)
+    expect(miraSecond?.x).toBeGreaterThan(miraFirst?.x ?? 0)
+    expect(solFirst).toMatchObject({ accepted: true, x: miraFirst?.x, y: miraFirst?.y })
+
+    mira.send(JSON.stringify({ type: "command", commandType: "move", label: "Moved nowhere", floor: 1, turn: 3, hp: 19, x: 10, y: 10, payload: {} }))
+    const rejected = await waitForSnapshot(sol, (snapshot) => snapshot.commands.some((command) => command.label === "Moved nowhere"))
+    expect(rejected.commands.find((command) => command.label === "Moved nowhere")?.result.accepted).toBe(false)
+    expect(rejected.coopStates.find((state) => state.name === "Mira")).toMatchObject({ x: miraSecond?.x, y: miraSecond?.y })
+  } finally {
+    for (const socket of sockets) {
+      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) socket.close()
+    }
+    await stopHost(host)
+  }
+}, 10_000)
+
 async function freePort() {
   const server = createServer()
   server.listen(0, "127.0.0.1")

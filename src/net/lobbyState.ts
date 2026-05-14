@@ -448,6 +448,10 @@ export class MultiplayerLobbyState {
   private applyCommandResultToCoopState(playerId: string, result: LobbyCommandResult, updatedAt: number) {
     const state = this.coopStates.get(playerId)
     if (!state) return
+    if (!result.accepted) {
+      this.coopStates.set(playerId, { ...state, connected: true, updatedAt })
+      return
+    }
     this.coopStates.set(playerId, {
       ...state,
       connected: true,

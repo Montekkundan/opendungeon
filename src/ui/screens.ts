@@ -72,7 +72,7 @@ type PanelBounds = {
 }
 
 export type ScreenId = "start" | "character" | "mode" | "saves" | "cloud" | "settings" | "controls" | "tutorial" | "game" | "village"
-export type DialogId = "settings" | "inventory" | "state" | "book" | "quests" | "hub" | "saveManager" | "cutscene" | "help" | "log" | "map" | "pause" | "quit" | null
+export type DialogId = "settings" | "inventory" | "state" | "book" | "quests" | "hub" | "saveManager" | "cutscene" | "help" | "log" | "map" | "pause" | "quit" | "lobbyDisconnected" | null
 export type InputMode = { field: "username" | "githubUsername" | "saveName" | "characterName"; draft: string } | null
 export type InternetStatus = "checking" | "online" | "offline"
 
@@ -2632,6 +2632,7 @@ function dialogTitle(dialog: NonNullable<DialogId>) {
   if (dialog === "log") return "Run Log"
   if (dialog === "map") return "Dungeon Map"
   if (dialog === "quit") return "Unsaved Run"
+  if (dialog === "lobbyDisconnected") return "Lobby Disconnected"
   return "Paused"
 }
 
@@ -3321,7 +3322,24 @@ function drawDialog(canvas: Canvas, model: AppModel) {
     if (model.saveStatus) canvas.write(x + 4, y + height - 4, trim(model.saveStatus, width - 8), UI.muted, UI.panel)
   }
 
-  const footer = model.dialog === "pause" ? "resume" : model.dialog === "quit" ? "cancel" : "close"
+  if (model.dialog === "lobbyDisconnected") {
+    drawPixelBlock(canvas, x + 5, y + 5, animatedPixelSprite(classSprite(model.session.hero.classId, model.session.hero.appearance), "idle", model.session.turn, 14, 6), 0.9)
+    canvas.write(x + 24, y + 4, "The lobby host is offline.", UI.ink, UI.panel)
+    writeWrapped(
+      canvas,
+      x + 24,
+      y + 6,
+      width - 31,
+      ["Multiplayer commands cannot sync until the host starts again. Return to title, then rejoin the lobby URL once it is back online."],
+      2,
+      UI.soft,
+      UI.panel,
+    )
+    drawPauseAction(canvas, x + 24, y + 11, width - 31, "Enter", "Return to title", UI.focus)
+    drawPauseAction(canvas, x + 24, y + 13, width - 31, "Q", "Return to title", UI.gold)
+  }
+
+  const footer = model.dialog === "pause" ? "resume" : model.dialog === "quit" ? "cancel" : model.dialog === "lobbyDisconnected" ? "title" : "close"
   const footerText = `Esc ${footer}`
   const footerW = footerText.length + 4
   const footerX = x + Math.floor((width - footerW) / 2)

@@ -4,17 +4,21 @@ import {
   chooseConversationOption,
   createSession,
   dismissSkillCheck,
+  isHeroClass,
   interactWithWorld,
   performCombatAction,
   performInventoryAction,
+  recordTutorialAction,
   rest,
   resolveSkillCheck,
   selectSkill,
   tryMove,
   usePotion,
+  type HeroClass,
   type GameSession,
   type InventoryActionId,
   type MultiplayerMode,
+  type TutorialActionId,
 } from "../game/session.js"
 import type { LobbyCommandResult, LobbyCommandType } from "./lobbyState.js"
 
@@ -32,116 +36,154 @@ export type HostCommandRelayOptions = {
 }
 
 export class HostCommandRelay {
-  private readonly session: GameSession
+  private readonly mode: MultiplayerMode
+  private readonly seed: number
+  private readonly sessions = new Map<string, GameSession>()
 
   constructor(options: HostCommandRelayOptions) {
-    this.session = createSession(options.seed, options.mode === "race" ? "race" : "coop")
+    this.mode = options.mode === "race" ? "race" : "coop"
+    this.seed = options.seed
   }
 
   apply(command: HostRelayCommand): LobbyCommandResult {
-    const before = snapshot(this.session)
+    const session = this.sessionFor(command)
+    const before = snapshot(session)
     try {
       switch (command.type) {
         case "move":
-          this.applyMove(command)
+          this.applyMove(session, command)
           break
         case "interact":
-          this.applyInteraction(command)
+          this.applyInteraction(session, command)
           break
         case "combat":
-          this.applyCombat(command)
+          this.applyCombat(session, command)
           break
         case "inventory":
-          this.applyInventory(command)
+          this.applyInventory(session, command)
           break
         case "village":
-          return this.result(true, "Village command recorded for shared meta-progression.")
+          return this.result(session, true, "Village command recorded for shared meta-progression.")
       }
     } catch (error) {
-      restore(this.session, before)
-      return this.result(false, error instanceof Error ? error.message : "Host rejected the command.")
+      restore(session, before)
+      return this.result(session, false, error instanceof Error ? error.message : "Host rejected the command.")
     }
 
-    return this.result(true, this.session.log[0] || this.session.combat.message || "Command applied.")
+    return this.result(session, true, session.log[0] || session.combat.message || "Command applied.")
   }
 
-  private applyMove(command: HostRelayCommand) {
+  private sessionFor(command: HostRelayCommand) {
+    const existing = this.sessions.get(command.playerId)
+    if (existing) return existing
+    const session = createSession(this.seed, this.mode, classIdFromPayload(command.payload.classId), command.name, undefined, tutorialEnabledFromPayload(command.payload))
+    this.sessions.set(command.playerId, session)
+    return session
+  }
+
+  private applyMove(session: GameSession, command: HostRelayCommand) {
     const direction = directionFromCommand(command)
     if (!direction) throw new Error("Move command needs a direction.")
-    tryMove(this.session, direction.dx, direction.dy)
+    tryMove(session, direction.dx, direction.dy)
   }
 
-  private applyInteraction(command: HostRelayCommand) {
+  private applyInteraction(session: GameSession, command: HostRelayCommand) {
     const label = command.label.toLowerCase()
+    if (this.applyTutorialUiAction(session, label)) return
     if (label.includes("stepped away")) {
-      if (!cancelSkillCheck(this.session)) throw new Error("No pending talent check to cancel.")
+      if (!cancelSkillCheck(session)) throw new Error("No pending talent check to cancel.")
       return
     }
     if (label.includes("closed talent")) {
-      dismissSkillCheck(this.session)
+      dismissSkillCheck(session)
       return
     }
     if (label.includes("rolled a talent")) {
-      const roll = resolveSkillCheck(this.session)
+      const roll = resolveSkillCheck(session)
       if (!roll) throw new Error("No pending talent check to roll.")
       return
     }
     const option = conversationOptionIndex(label)
     if (option !== null) {
-      if (!this.session.conversation) throw new Error("No active NPC conversation.")
-      chooseConversationOption(this.session, option)
+      if (!session.conversation) throw new Error("No active NPC conversation.")
+      chooseConversationOption(session, option)
       return
     }
-    interactWithWorld(this.session)
+    interactWithWorld(session)
   }
 
-  private applyCombat(command: HostRelayCommand) {
+  private applyCombat(session: GameSession, command: HostRelayCommand) {
     const label = command.label.toLowerCase()
     const skillIndex = combatSkillIndex(label)
     if (skillIndex !== null) {
-      if (!this.session.combat.active) throw new Error("No active combat for skill selection.")
-      selectSkill(this.session, skillIndex)
+      if (!session.combat.active) throw new Error("No active combat for skill selection.")
+      selectSkill(session, skillIndex)
       return
     }
     if (label.includes("flee")) {
-      if (!attemptFlee(this.session)) throw new Error("No active combat to flee.")
+      if (!attemptFlee(session)) throw new Error("No active combat to flee.")
       return
     }
-    if (!this.session.combat.active) throw new Error("No active combat to resolve.")
-    performCombatAction(this.session)
+    if (!session.combat.active) throw new Error("No active combat to resolve.")
+    performCombatAction(session)
   }
 
-  private applyInventory(command: HostRelayCommand) {
+  private applyInventory(session: GameSession, command: HostRelayCommand) {
     const label = command.label.toLowerCase()
-    if (label.includes("opened inventory")) return
+    if (this.applyTutorialUiAction(session, label)) return
     if (label.includes("used potion")) {
-      usePotion(this.session)
+      usePotion(session)
       return
     }
     if (label === "rested" || label.includes("rested")) {
-      rest(this.session)
+      rest(session)
       return
     }
     const action = inventoryActionFromLabel(label)
     const index = inventorySlotFromLabel(label)
     if (action && index !== null) {
-      const result = performInventoryAction(this.session, index, action)
+      const result = performInventoryAction(session, index, action)
       if (!result.used && action !== "inspect") throw new Error(result.message)
     }
   }
 
-  private result(accepted: boolean, message: string): LobbyCommandResult {
+  private applyTutorialUiAction(session: GameSession, label: string) {
+    const action = tutorialActionFromLabel(label)
+    if (!action) return false
+    recordTutorialAction(session, action)
+    return true
+  }
+
+  private result(session: GameSession, accepted: boolean, message: string): LobbyCommandResult {
     return {
       accepted,
-      floor: this.session.floor,
-      hp: this.session.hp,
+      floor: session.floor,
+      hp: session.hp,
       message,
-      status: this.session.status,
-      turn: this.session.turn,
-      x: this.session.player.x,
-      y: this.session.player.y,
+      status: session.status,
+      turn: session.turn,
+      x: session.player.x,
+      y: session.player.y,
     }
   }
+}
+
+function tutorialEnabledFromPayload(payload: HostRelayCommand["payload"]) {
+  if (payload.tutorialEnabled === true) return true
+  if (payload.tutorialEnabled === false) return false
+  return payload.tutorialStage === "movement" || payload.tutorialStage === "npc-check" || payload.tutorialStage === "combat"
+}
+
+function classIdFromPayload(value: unknown): HeroClass {
+  const classId = typeof value === "string" ? value : undefined
+  return isHeroClass(classId) ? classId : "ranger"
+}
+
+function tutorialActionFromLabel(label: string): TutorialActionId | null {
+  if (label.includes("opened inventory")) return "inventory"
+  if (label.includes("opened book")) return "book"
+  if (label.includes("opened quest")) return "quests"
+  return null
 }
 
 function directionFromCommand(command: HostRelayCommand) {
