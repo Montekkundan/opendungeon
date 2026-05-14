@@ -1,5 +1,6 @@
 import type { Actor } from "./dungeon.js"
 import type { NpcActorId } from "./domainTypes.js"
+import { defaultFinalFloor } from "./progression.js"
 import type { ConversationOption } from "./session.js"
 
 export type StoryBeat = {
@@ -228,7 +229,7 @@ const npcStoryBase: Record<NpcActorId, { speaker: string; text: string; floorHoo
   cartographer: {
     speaker: "Cartographer Venn",
     text: "You asked me this before, though you never remember the answer.",
-    floorHook: (floor) => `I can mark the route to floor ${Math.min(5, floor + 1)} and the way back to the portal room, if it still opens for you.`,
+    floorHook: (floor) => `I can mark the route to floor ${Math.min(defaultFinalFloor, floor + 1)} and the way back to the portal room, if it still opens for you.`,
     options: (floor, beat) => [
       { id: "map", label: "Mark map", text: `Venn marks ${beat.title}. Your next objective feels less like noise.` },
       { id: "route", label: "Ask route", text: `The route bends around floor ${floor}'s loudest room, then cuts back toward the stairs.` },

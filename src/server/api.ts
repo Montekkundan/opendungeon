@@ -3,6 +3,7 @@ import { checkAiGatewayImageModel, generateSpriteImage } from "../cloud/aiGatewa
 import { storeGeneratedSpriteAsset } from "../cloud/generatedAssets.js"
 import { supabaseConfig } from "../cloud/supabase.js"
 import { createDungeon } from "../game/dungeon.js"
+import { defaultFinalFloor } from "../game/progression.js"
 import { createInitialWorldConfig, createWorldLogEntry, validateWorldConfig, worldAnchorsFromDungeonAnchors, writeWorldConfig } from "../world/worldConfig.js"
 import { createAdminGenerationRequest } from "../world/adminGenerator.js"
 import { aiAdminWorkflow, generateAdminPatchWithModel } from "./workflows/aiAdminWorkflow.js"
@@ -23,7 +24,7 @@ app.get("/health", async (c) => {
 app.post("/worlds", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { seed?: unknown; finalFloor?: unknown }
   const seed = integer(body.seed, Math.floor(Math.random() * 9_000_000) + 1_000_000)
-  const finalFloor = Math.max(1, Math.min(20, integer(body.finalFloor, 5)))
+  const finalFloor = Math.max(1, Math.min(20, integer(body.finalFloor, defaultFinalFloor)))
   const anchors = []
   for (let floor = 1; floor <= finalFloor; floor++) anchors.push(...worldAnchorsFromDungeonAnchors(createDungeon(seed, floor).anchors))
   const world = createInitialWorldConfig(seed, anchors)

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFile
 import { homedir } from "node:os"
 import { basename, dirname, join } from "node:path"
 import { normalizeSessionAfterLoad, type GameSession } from "./session.js"
+import { defaultFinalFloor } from "./progression.js"
 import { tileAt } from "./dungeon.js"
 import { actorGlyph, tileGlyph } from "./glyphs.js"
 import { readWorldConfig, writeWorldConfig, writeWorldLog } from "../world/worldConfig.js"
@@ -251,7 +252,7 @@ function normalizeSummary(summary: unknown, id: string, session?: SerializedSess
   const hero = session?.hero
   return {
     id: safeId(value.id || id),
-    name: cleanSaveName(value.name || `${value.slot === "autosave" ? "Autosave" : "Save"}: ${hero?.name ?? "Mira"} F${value.floor ?? session?.floor ?? 1}/${value.finalFloor ?? session?.finalFloor ?? 5}`),
+    name: cleanSaveName(value.name || `${value.slot === "autosave" ? "Autosave" : "Save"}: ${hero?.name ?? "Mira"} F${value.floor ?? session?.floor ?? 1}/${value.finalFloor ?? session?.finalFloor ?? defaultFinalFloor}`),
     savedAt: validDate(value.savedAt) || new Date(0).toISOString(),
     heroName: cleanSaveName(value.heroName || hero?.name || "Mira"),
     heroTitle: cleanSaveName(value.heroTitle || hero?.title || "Crawler"),
@@ -259,7 +260,7 @@ function normalizeSummary(summary: unknown, id: string, session?: SerializedSess
     mode: cleanSaveName(value.mode || session?.mode || "solo"),
     seed: integer(value.seed, session?.seed ?? 0),
     floor: integer(value.floor, session?.floor ?? 1),
-    finalFloor: integer(value.finalFloor, session?.finalFloor ?? 5),
+    finalFloor: integer(value.finalFloor, session?.finalFloor ?? defaultFinalFloor),
     turn: integer(value.turn, session?.turn ?? 0),
     level: integer(value.level, session?.level ?? 1),
     gold: integer(value.gold, session?.gold ?? 0),

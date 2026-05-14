@@ -20,7 +20,7 @@
 - [ ] Inventory hover/detail bug: the inventory detail pane should describe the hovered/highlighted item, not a stale or previously selected item.
 - [ ] Item action design bug: items that currently say "No apply action yet" need real handling. Decide and implement inspect/equip/use/sell/drop/stash paths, and make unavailable actions explain what the item is for.
 - [ ] Text truncation regression: Shrine Keeper choices such as "Take blessing" / "Ask relic..." are cut off. Audit the entire game for `...` on important instructions, choices, item text, village panels, NPC dialogue, and action prompts; wrap, scroll, or add a detail pane instead.
-- [ ] First arc pacing change: send the player to the village after Floor 3 instead of waiting until Floor 5. Update final-floor rules, story copy, tutorial handoff, headless first-clear scenario, docs, and balance expectations.
+- [x] First arc pacing change: send the player to the village after Floor 3 instead of waiting until Floor 5. Update final-floor rules, story copy, tutorial handoff, headless first-clear scenario, docs, and balance expectations.
 - [ ] Add a state/character sheet screen that shows full stats, skill tree, unlocked talents, passive/active effects, level-up rewards, equipment bonuses, and current run modifiers.
 - [ ] Redesign the inventory screen visuals: improve item sprites/icons, slot layout, selected/hover detail, action hints, comparison text, and terminal readability.
 - [ ] Rebalance post-tutorial combat for a 3-floor first arc: Floor 3 should remain approachable, but later descents need strategic battles with enemy roles, resistances/weaknesses, focus pressure, positioning, and multi-turn decisions instead of one-hit clears.
@@ -79,7 +79,7 @@
 
 ## Tutorial To Village Handoff
 
-- [x] Add a one-time post-tutorial handoff on Floor 2: "You are on your own now. Find stairs, survive to Floor 5, and open the road home."
+- [x] Add a one-time post-tutorial handoff on Floor 2: "You are on your own now. Find stairs, survive to Floor 3, and open the road home."
 - [x] Rename the active quest after the tutorial to "Find the Final Gate."
 - [x] On first dungeon clear, automatically transition to the village screen instead of only saying the portal can open.
 - [x] In village, make the first actions obvious: sell loot, build blacksmith, prepare food, and start next descent.
@@ -90,7 +90,7 @@
 ### Critical Flow Fixes
 
 - [x] Fix "start next descent" from the village so it preserves the unlocked hub, coins, stations, trust, houses, farm state, food prep, weapon upgrades, content pack, and active mutators instead of replacing the run with a fresh `createSession` hub. Relevant files: `src/main.ts`, `src/game/session.ts`, `src/game/saveStore.ts`.
-- [x] Add a first-clear acceptance path: finish tutorial, reach Floor 5, defeat or clear the final gate, auto-arrive in village, sell loot, build or inspect blacksmith, prepare food, then start the next descent with meta-progression still present.
+- [x] Add a first-clear acceptance path: finish tutorial, reach Floor 3, defeat or clear the final gate, auto-arrive in village, sell loot, build or inspect blacksmith, prepare food, then start the next descent with meta-progression still present.
 - [x] Add a headless scenario for the full loop above, plus assertions for quest title, floor transitions, hub unlock, village state persistence, and next-run modifiers.
 - [x] Make victory and death recovery explicit: after death, show whether the village/hub progress remains, what was lost, and which key starts the next descent.
 - [x] Decide whether "new descent" should use a fresh random seed, a player-chosen seed, or a village challenge seed; expose that choice in the village UI before launching.
@@ -105,7 +105,7 @@
 
 ### Core Gameplay Depth
 
-- [ ] Expand Floors 2-5 so each floor has a distinct tactical purpose, biome modifier, monster mix, NPC/event hook, and final-gate clue.
+- [ ] Expand the first three-floor arc and later descents so each floor has a distinct tactical purpose, biome modifier, monster mix, NPC/event hook, and final-gate clue.
 - [ ] Add more item and equipment decisions: weapon upgrades, armor/charms, food buffs, bombs/tools, cursed rewards, and clear inventory comparison text.
 - [ ] Add more quest chains that span floors and village outcomes: rescue, bounty, timed curse, shrine repair, escort, merchant delivery, and final-gate keys.
 - [ ] Finish combat balance around d20 difficulty, focus economy, enemy weakness/resistance notes, flee odds, death rate, and class win rates.

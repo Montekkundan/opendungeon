@@ -25,6 +25,7 @@ import {
 } from "../world/worldConfig.js"
 import { clamp, wrap } from "../shared/numeric.js"
 import { normalizeHeroAppearance, type HeroAppearance } from "./appearance.js"
+import { defaultFinalFloor } from "./progression.js"
 import { bossStoryLine, collectibleKnowledgeEntry, floorKnowledgeEntry, initialKnowledgeEntries, localNpcStoryDialog, openingStoryBranches, openingStoryText, skillCheckKnowledgeEntry, victoryStoryText, type StoryKnowledge } from "./story.js"
 
 export type MultiplayerMode = "solo" | "coop" | "race"
@@ -1468,7 +1469,7 @@ export function createSession(
   const stats = statsForClass(classId)
   const maxHp = derivedMaxHp(stats)
   const maxFocus = derivedMaxFocus(stats)
-  const finalFloor = 5
+  const finalFloor = defaultFinalFloor
   const floorModifier = floorModifierFor(seed, 1)
   const world = createWorldForSeed(seed, finalFloor)
   const session: GameSession = {
@@ -2138,7 +2139,7 @@ export function normalizeSessionAfterLoad(session: GameSession): GameSession {
   session.tutorial = normalizeTutorialState(session.tutorial)
   session.deaths = Math.max(0, Math.floor(Number(session.deaths) || 0))
   session.statusEffects = normalizeStatusEffects(session.statusEffects)
-  session.world ??= createWorldForSeed(session.seed, session.finalFloor || 5)
+  session.world ??= createWorldForSeed(session.seed, session.finalFloor || defaultFinalFloor)
   session.worldLog ??= []
   session.pendingWorldGeneration = Boolean(session.pendingWorldGeneration)
   session.knowledge = normalizeKnowledge(session.knowledge)
@@ -4018,7 +4019,7 @@ function applyMutatorPressure(session: GameSession) {
     session.hp = Math.min(session.hp, session.maxHp)
   }
   if (active.has("cursed-floors")) session.floorModifier = { ...session.floorModifier, trapDamageBonus: session.floorModifier.trapDamageBonus + 1 }
-  if (active.has("boss-rush")) session.finalFloor = Math.min(session.finalFloor, 3)
+  if (active.has("boss-rush")) session.finalFloor = Math.min(session.finalFloor, defaultFinalFloor)
 }
 
 function pushSessionMessage(session: GameSession, message: string) {

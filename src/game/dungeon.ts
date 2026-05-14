@@ -1,5 +1,6 @@
 import { createRng, type Rng } from "./rng.js"
 import { isEnemyActorId, type ActorId, type EnemyActorId, type NpcActorId, type TileId } from "./domainTypes.js"
+import { defaultFinalFloor } from "./progression.js"
 
 export type Point = {
   x: number
@@ -90,7 +91,7 @@ export function createDungeon(seed: number, floor: number, width = 96, height = 
   const secrets = placeSecretRooms(tiles, rooms, rng, floor)
 
   const actors = spawnActors(tiles, rooms, rng, floor)
-  if (floor >= 5) actors.push(finalGuardian(center(lastRoom), floor))
+  if (floor >= defaultFinalFloor) actors.push(finalGuardian(center(lastRoom), floor))
 
   return {
     width,

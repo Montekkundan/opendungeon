@@ -42,6 +42,7 @@ import {
 import type { GameSession } from "./session.js"
 import { cardinalNeighbors, createDungeon, enemyAi, setTile, tileAt } from "./dungeon.js"
 import type { ActorId } from "./domainTypes.js"
+import { defaultFinalFloor } from "./progression.js"
 import { addEnemyBesidePlayer } from "./testHelpers.test.js"
 
 describe("game session", () => {
@@ -660,6 +661,26 @@ describe("game session", () => {
 
     expect(session.status).toBe("running")
     expect(session.log[0]).toContain("sealed")
+  })
+
+  test("first clear resolves on the default floor three arc", () => {
+    const session = createSession(1234)
+    expect(session.finalFloor).toBe(defaultFinalFloor)
+
+    session.floor = session.finalFloor
+    session.dungeon = createDungeon(session.seed, session.floor)
+    expect(session.dungeon.actors.some((actor) => actor.id === "final-guardian")).toBe(true)
+
+    session.player = { ...session.dungeon.playerStart }
+    session.dungeon.actors = session.dungeon.actors.filter((actor) => actor.id !== "final-guardian")
+    const stairs = { x: session.player.x + 1, y: session.player.y }
+    setTile(session.dungeon, stairs, "stairs")
+
+    tryMove(session, 1, 0)
+
+    expect(session.status).toBe("victory")
+    expect(session.hub.unlocked).toBe(true)
+    expect(session.knowledge.find((entry) => entry.id === "ending-first-clear")?.floor).toBe(defaultFinalFloor)
   })
 
 })
