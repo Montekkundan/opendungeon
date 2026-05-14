@@ -18,7 +18,9 @@ export default function CreatePage() {
             Create a shareable Multiplayer lobby page. Multiplayer co-op keeps
             the authored story and village loop shared between players; race is
             only a same-seed challenge variant. The current live game still
-            needs an opendungeon-host process for WebSocket play.
+            needs an opendungeon-host process for WebSocket play. If you are
+            logged in, the invite metadata is also saved to your Supabase-owned
+            world rows for later GM/cloud linking.
           </p>
 
           <form action={createLobby} data-component="lobby-form">
@@ -46,6 +48,10 @@ export default function CreatePage() {
             <h2>What this handles</h2>
             <ul>
               <li>Creates a stable URL you can send to friends.</li>
+              <li>
+                Saves lobby metadata to Supabase for logged-in hosts without
+                making the website own the live gameplay process.
+              </li>
               <li>
                 Gives host and join commands for the current CLI multiplayer
                 server.

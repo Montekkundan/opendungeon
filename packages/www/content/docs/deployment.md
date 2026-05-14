@@ -22,7 +22,7 @@ Add the public Supabase URL and anonymous key in Vercel project settings. The pr
 
 ## Create and invite pages
 
-`/create` and `/create/[id]` are website helpers, not the game server. They can create a stable invite page, show the selected Multiplayer lobby variant, print the host command, and print the join command for friends.
+`/create` and `/create/[id]` are website helpers, not the game server. They can create a stable invite page, show the selected Multiplayer lobby variant, print the host command, and print the join command for friends. If the host is logged in, `/create` also stores owner-scoped lobby metadata in Supabase for later GM/cloud linking.
 
 Players still need one running `opendungeon-host` process for live WebSocket play. The invite page should make that boundary obvious: Vercel can host the instructions for free, but it does not keep the current CLI lobby process alive.
 
@@ -38,7 +38,7 @@ The supported deployment story is explicit:
 - One `opendungeon-host` process owns each live game. For internet play, run it on a VPS, Docker host, Fly.io, Render, Railway, or another service that supports long-running TCP/WebSocket processes.
 - The host should bind to `0.0.0.0`, expose the selected port, and set `--public-url` to the reachable HTTPS or HTTP URL shown to players.
 - Supabase stores profiles, cloud saves, world ownership, GM patch proposals, action-log archives, and approved asset metadata. It should not be treated as the current movement/combat authority.
-- The website invite page stores and displays setup commands. It does not keep the live lobby process running.
+- The website invite page stores owner-scoped lobby metadata and displays setup commands. It does not keep the live lobby process running.
 
 For a private internet test:
 
