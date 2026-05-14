@@ -973,7 +973,7 @@ describe("game session", () => {
     expect(session.log[0]).toContain("sealed")
   })
 
-  test("first clear resolves on the default floor three arc", () => {
+  test("first clear resolves on the default two-floor arc", () => {
     const session = createSession(1234)
     expect(session.finalFloor).toBe(defaultFinalFloor)
 

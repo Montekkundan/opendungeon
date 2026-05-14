@@ -432,7 +432,7 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
       { action: "toggle-cursed-floors" },
       { assert: { path: "session.hub.activeMutators", contains: "cursed-floors" } },
       { action: "toggle-boss-rush" },
-      { assert: { path: "session.finalFloor", max: 3 } },
+      { assert: { path: "session.finalFloor", max: 2 } },
       { command: "check-invariants" },
     ]
   }

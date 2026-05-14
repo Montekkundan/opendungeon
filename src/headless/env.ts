@@ -698,7 +698,7 @@ export class HeadlessGameEnv {
     this.session.combat = { active: false, actorIds: [], selectedTarget: 0, selectedSkill: 0, initiative: [], round: 0, message: "" }
     const stairs = { x: this.session.player.x + 1, y: this.session.player.y }
     setTile(this.session.dungeon, stairs, "stairs")
-    this.session.dungeon.actors = this.session.dungeon.actors.filter((actor) => !samePoint(actor.position, stairs))
+    this.session.dungeon.actors = this.session.dungeon.actors.filter((actor) => actor.id !== "final-guardian" && !samePoint(actor.position, stairs))
     tryMove(this.session, 1, 0)
   }
 

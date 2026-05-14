@@ -1,1 +1,1 @@
-export const defaultFinalFloor = 3
+export const defaultFinalFloor = 2

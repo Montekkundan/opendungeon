@@ -23,10 +23,10 @@
 - [x] NPC conversation choice layout: long choices such as Shrine Keeper "Take blessing" and "Ask relic lore" should render as readable stacked rows instead of narrow hidden columns.
 - [x] Village text wrapping: selected-location descriptions, market logs, and long village status lines should wrap in their panels instead of hiding important instructions behind ellipses.
 - [x] Text truncation regression: Shrine Keeper choices such as "Take blessing" / "Ask relic..." are cut off. Audit the entire game for `...` on important instructions, choices, item text, village panels, NPC dialogue, and action prompts; wrap, scroll, or add a detail pane instead.
-- [x] First arc pacing change: send the player to the village after Floor 3 instead of waiting until Floor 5. Update final-floor rules, story copy, tutorial handoff, headless first-clear scenario, docs, and balance expectations.
+- [x] First arc pacing change: send the player to the village after Floor 2 instead of waiting until Floor 5 or Floor 3. Update final-floor rules, story copy, tutorial handoff, headless first-clear scenario, docs, and balance expectations.
 - [x] Add a state/character sheet screen that shows full stats, skill tree, unlocked talents, passive/active effects, level-up rewards, equipment bonuses, current run modifiers, and what each reward changed.
 - [x] Redesign the inventory screen visuals: improve item sprites/icons, slot layout, selected/hover detail, action hints, comparison text, and terminal readability so pack items no longer look like placeholder glyphs.
-- [x] Rebalance post-tutorial combat for a 3-floor first arc: Floor 3 should remain approachable, but later descents need strategic battles with enemy roles, resistances/weaknesses, focus pressure, positioning, and multi-turn decisions instead of one-hit clears.
+- [x] Rebalance post-tutorial combat for a 2-floor first arc: Floor 2 should remain approachable, but later descents need strategic battles with enemy roles, resistances/weaknesses, focus pressure, positioning, and multi-turn decisions instead of one-hit clears.
 - [x] Replace the current mostly-text village with a real walkable sprite village: player sprite, NPC sprites, trees, walls, paths, homes, shop, farm, broken hut/ruins, restoration states, and visible upgrades as buildings improve.
 
 ## Next Gameplay Improvements To Approve
@@ -82,7 +82,7 @@
 
 ## Tutorial To Village Handoff
 
-- [x] Add a one-time post-tutorial handoff on Floor 2: "You are on your own now. Find stairs, survive to Floor 3, and open the road home."
+- [x] Add a one-time post-tutorial handoff on Floor 2: "You are on your own now. Find stairs, survive to Floor 2, and open the road home."
 - [x] Rename the active quest after the tutorial to "Find the Final Gate."
 - [x] On first dungeon clear, automatically transition to the village screen instead of only saying the portal can open.
 - [x] In village, make the first actions obvious: sell loot, build blacksmith, prepare food, and start next descent.
@@ -93,7 +93,7 @@
 ### Critical Flow Fixes
 
 - [x] Fix "start next descent" from the village so it preserves the unlocked hub, coins, stations, trust, houses, farm state, food prep, weapon upgrades, content pack, and active mutators instead of replacing the run with a fresh `createSession` hub. Relevant files: `src/main.ts`, `src/game/session.ts`, `src/game/saveStore.ts`.
-- [x] Add a first-clear acceptance path: finish tutorial, reach Floor 3, defeat or clear the final gate, auto-arrive in village, sell loot, build or inspect blacksmith, prepare food, then start the next descent with meta-progression still present.
+- [x] Add a first-clear acceptance path: finish tutorial, reach Floor 2, defeat or clear the final gate, auto-arrive in village, sell loot, build or inspect blacksmith, prepare food, then start the next descent with meta-progression still present.
 - [x] Add a headless scenario for the full loop above, plus assertions for quest title, floor transitions, hub unlock, village state persistence, and next-run modifiers.
 - [x] Make victory and death recovery explicit: after death, show whether the village/hub progress remains, what was lost, and which key starts the next descent.
 - [x] Decide whether "new descent" should use a fresh random seed, a player-chosen seed, or a village challenge seed; expose that choice in the village UI before launching.
@@ -108,7 +108,7 @@
 
 ### Core Gameplay Depth
 
-- [x] Expand the first three-floor arc and later descents so each floor has a distinct tactical purpose, biome modifier, monster mix, NPC/event hook, and final-gate clue.
+- [x] Keep the first two-floor arc focused, then make later descents carry the deeper tactical floor purposes, biome modifiers, monster mixes, NPC/event hooks, and final-gate clues.
 - [x] Add more item and equipment decisions: weapon upgrades, armor/charms, food buffs, bombs/tools, cursed rewards, and clear inventory comparison text.
 - [x] Add more quest chains that span floors and village outcomes: rescue, bounty, timed curse, shrine repair, escort, merchant delivery, and final-gate keys.
 - [x] Finish combat balance around d20 difficulty, focus economy, enemy weakness/resistance notes, flee odds, death rate, and class win rates.
