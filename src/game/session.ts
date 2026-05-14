@@ -3021,7 +3021,41 @@ function defeatActor(session: GameSession, actor: Actor) {
       kind: "note",
       floor: session.floor,
     })
+    applyBossAftermath(session, actor.kind)
   }
+}
+
+function applyBossAftermath(session: GameSession, kind: Actor["kind"]) {
+  session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  const bossName = label(kind)
+  const memory = `${bossName} memory`
+  if (!session.inventory.includes(memory)) session.inventory.unshift(memory)
+  gainNpcTrust(session, "cartographer", 2, false)
+  gainNpcTrust(session, "guildmaster", 2, false)
+  const customers = session.hub.village.customers.length ? session.hub.village.customers : createVillageCustomers()
+  session.hub.village.customers = customers.map((customer, index) => ({
+    ...customer,
+    taste: index % 2 === 0 ? "memory" : customer.taste === "food" ? "relic" : customer.taste,
+    patience: clamp(customer.patience + (index === 0 ? 2 : 1), 0, 5),
+  }))
+  const shopDemand = `Aftermath: customers want boss memories and relic loot after ${bossName} fell.`
+  session.hub.village.shopLog.unshift(shopDemand)
+  session.hub.village.shopLog = session.hub.village.shopLog.slice(0, 8)
+  session.hub.relationshipLog.unshift(`${bossName} aftermath changed village demand and cartographer routes.`)
+  trimHubLog(session.hub)
+  session.hub.village.schedules = session.hub.village.schedules.map((schedule) => {
+    if (schedule.npc === "cartographer") return { ...schedule, text: "Venn is marking the boss aftermath route near the portal." }
+    if (schedule.npc === "guildmaster") return { ...schedule, text: "Iris is collecting final-gate reports at the Guildhall." }
+    return schedule
+  })
+  rememberKnowledge(session, {
+    id: `boss-aftermath-${kind}-floor-${session.floor}`,
+    title: `${bossName} Aftermath`,
+    text: `${bossName} changed the village economy. Memory collectors pay more attention to boss memories, Cartographer trust rises, and the next market visit should test relic and memory demand.`,
+    kind: "hub",
+    floor: session.floor,
+  })
+  addToast(session, "Village aftermath", "Boss memory demand changed. Visit the market or Book.", "info")
 }
 
 function defeatMessage(kind: Actor["kind"]) {
@@ -3849,10 +3883,23 @@ function maybeAdvanceBossPhase(session: GameSession, actor: Actor) {
   ai.alerted = true
   ai.aggroRadius += 2
   ai.leashRadius += 2
-  const message = bossStoryLine(actor, session.floor, 2) || `${label(actor.kind)} enters phase 2.`
+  const telegraph = bossPhaseTelegraph(actor)
+  const message = `${bossStoryLine(actor, session.floor, 2) || `${label(actor.kind)} enters phase 2.`} ${telegraph}`
   session.log.unshift(message)
+  rememberKnowledge(session, {
+    id: `boss-phase-${actor.kind}-floor-${session.floor}-phase-${actor.phase}`,
+    title: `${label(actor.kind)} Phase ${actor.phase}`,
+    text: `${label(actor.kind)} changed tactics at half health. ${telegraph} Keep focus for weakness hits and use flee only if the odds are better than trading another round.`,
+    kind: "monster",
+    floor: session.floor,
+  })
   addToast(session, "Boss phase", message, "warning")
   return message
+}
+
+function bossPhaseTelegraph(actor: Actor) {
+  if (actor.kind === "grave-root-boss") return "Telegraph: roots glow amber before a heavier lash; Holy and Arcane hits are the safest finishers."
+  return `Telegraph: ${label(actor.kind)} gets faster and hits harder after half health.`
 }
 
 function tickStatusEffects(session: GameSession) {

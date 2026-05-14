@@ -623,6 +623,37 @@ describe("game session", () => {
     expect(fleeModifier(session)).toBeGreaterThan(before)
   })
 
+  test("boss phase telegraphs write Book notes before the fight ends", () => {
+    const session = createSession(1234)
+    session.stats.strength = 30
+    const target = addEnemyBesidePlayer(session, "phase-root", "grave-root-boss", 18, 1)
+    const boss = session.dungeon.actors.find((actor) => actor.id === "phase-root")!
+    boss.maxHp = 34
+
+    tryMove(session, target.x - session.player.x, target.y - session.player.y)
+    for (let attempt = 0; attempt < 3 && (boss.phase ?? 1) < 2; attempt += 1) performCombatAction(session)
+
+    expect(boss.phase).toBe(2)
+    expect(session.log.some((line) => line.includes("Telegraph"))).toBe(true)
+    expect(session.knowledge.some((entry) => entry.id === "boss-phase-grave-root-boss-floor-1-phase-2" && entry.text.includes("Holy and Arcane"))).toBe(true)
+    expect(session.toasts).toEqual(expect.arrayContaining([expect.objectContaining({ title: "Boss phase" })]))
+  })
+
+  test("boss defeats create village aftermath and market demand", () => {
+    const session = createSession(1234)
+    session.stats.strength = 30
+    const target = addEnemyBesidePlayer(session, "aftermath-root", "grave-root-boss", 2, 1)
+
+    tryMove(session, target.x - session.player.x, target.y - session.player.y)
+    for (let attempt = 0; attempt < 3 && session.dungeon.actors.some((actor) => actor.id === "aftermath-root"); attempt += 1) performCombatAction(session)
+
+    expect(session.dungeon.actors.some((actor) => actor.id === "aftermath-root")).toBe(false)
+    expect(session.inventory[0]).toContain("memory")
+    expect(session.hub.village.shopLog[0]).toContain("boss memories")
+    expect(session.hub.village.customers.some((customer) => customer.taste === "memory")).toBe(true)
+    expect(session.knowledge.some((entry) => entry.id === "boss-aftermath-grave-root-boss-floor-1" && entry.text.includes("village economy"))).toBe(true)
+  })
+
   test("enemies patrol until the player enters their aggro radius", () => {
     const session = createSession(1234)
     const start = { ...session.player }
