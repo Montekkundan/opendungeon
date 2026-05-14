@@ -17,6 +17,10 @@
 ### Installation
 
 ```bash
+# Curl installer for macOS and Linux
+curl -fsSL https://opendungeon.xyz/install | bash
+opendungeon
+
 # npm
 npm i -g @montekkundan/opendungeon
 opendungeon

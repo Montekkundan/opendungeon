@@ -5,13 +5,16 @@ Install the published CLI when you want to play the terminal game, or run the re
 ## Player install
 
 ```txt
+curl -fsSL https://opendungeon.xyz/install | bash
+opendungeon
+
 bun add -g @montekkundan/opendungeon
 opendungeon
 opendungeon login test
 opendungeon --login github
 ```
 
-The global package exposes `opendungeon` for the TUI and `opendungeon-host` for hosted lobby work. Login is optional for local play. Use the test login while checking account-gated flows without a real provider.
+The curl installer downloads the matching macOS or Linux release binary when GitHub release assets are available, then falls back to the published npm package. The global package exposes `opendungeon` for the TUI and `opendungeon-host` for hosted lobby work. Login is optional for local play. Use the test login while checking account-gated flows without a real provider.
 
 ## Local development
 
