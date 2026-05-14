@@ -59,6 +59,25 @@ bun --cwd packages/www lint
 bun run web:build
 ```
 
+Browser-check the website through Portless before shipping visible website
+changes. Start `bun run web`, then verify these routes at a desktop viewport and
+a mobile viewport:
+
+```txt
+https://opendungeon.localhost/
+https://opendungeon.localhost/docs
+https://opendungeon.localhost/changelog
+https://opendungeon.localhost/create
+https://opendungeon.localhost/create/coop-2423368-local?mode=coop&seed=2423368
+https://opendungeon.localhost/login
+https://opendungeon.localhost/profile
+```
+
+The pass condition is simple: the page loads meaningful content, no Next.js
+error overlay appears, key route text is visible, and no browser console errors
+appear. The create invite route should clearly say that Vercel hosts the invite
+instructions while live play still needs `opendungeon-host`.
+
 Use the headless runner for gameplay bugs where UI screenshots are slow or fragile:
 
 ```txt

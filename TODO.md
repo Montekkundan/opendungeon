@@ -140,10 +140,10 @@
 - [ ] Keep `packages/www/content/docs` in sync with new game mechanics, controls, multiplayer commands, Supabase setup, and deployment decisions.
 - [x] Add docs and website copy that clearly separates Single Player, Multiplayer, and Multiplayer with GM, including what works now and which backend pieces still need to land.
 - [ ] Finish the `/gm` logged-in shell: world selector, player list, AI chat panel, tool-call audit panel, patch preview, asset-generation queue, and Supabase-backed world ownership.
-- [ ] Add website browser verification for home, docs, changelog, create, create invite, login, and profile pages at desktop and mobile widths.
+- [x] Add website browser verification for home, docs, changelog, create, create invite, login, and profile pages at desktop and mobile widths.
 - [x] Finish `/create` and `/create/[id]` copy so it clearly says what the website can do now and what still needs a running host.
 - [x] Add a website feature section for local one-laptop multiplayer, guest sessions, and signed-in duplicate-run blocking.
-- [ ] Keep the changelog page sourced from Changesets and release notes, and add a changeset for every user-visible gameplay/website change.
+- [x] Keep the changelog page sourced from Changesets and release notes, and add a changeset for every user-visible gameplay/website change.
 
 ### Assets, Accessibility, And UI Polish
 
