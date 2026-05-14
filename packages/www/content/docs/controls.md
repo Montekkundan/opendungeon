@@ -1,6 +1,6 @@
 # Controls
 
-The terminal client keeps controls compact so the same surface works in Ghostty, standard terminal tabs, and headless script descriptions.
+The terminal client keeps controls compact so the same surface works in Ghostty and standard terminal tabs.
 
 ## Movement
 

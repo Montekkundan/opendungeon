@@ -10,7 +10,7 @@ Set the project root or build command so Vercel runs the Next.js app in `package
 bun --cwd packages/www build
 ```
 
-Add the public Supabase URL and anonymous key in Vercel project settings. The profile page needs those values at runtime.
+Connect the website account provider before enabling login and profile pages in production.
 
 ## What deploys cleanly today
 
@@ -22,7 +22,7 @@ Add the public Supabase URL and anonymous key in Vercel project settings. The pr
 
 ## Create and invite pages
 
-`/create` and `/create/[id]` are website helpers, not the game server. They can create a stable invite page, show the selected Multiplayer lobby variant, print the host command, and print the join command for friends. If the host is logged in, `/create` also stores owner-scoped lobby metadata in Supabase for later GM/cloud linking.
+`/create` and `/create/[id]` are website helpers, not the game server. They can create a stable invite page, show the selected Multiplayer lobby variant, print the host command, and print the join command for friends. If the host is logged in, `/create` can also save the invite to the host account for later GM/cloud linking.
 
 Players still need one running `opendungeon-host` process for live WebSocket play. The invite page should make that boundary obvious: it prints setup commands, but it is not the live lobby server.
 
@@ -34,10 +34,10 @@ The current multiplayer game host is a CLI WebSocket process. Internet multiplay
 
 The supported deployment story is explicit:
 
-- Vercel hosts `packages/www`: docs, account pages, `/create`, `/create/[id]`, `/gm`, changelog, and Supabase-authenticated profile flows.
+- Vercel hosts `packages/www`: docs, account pages, `/create`, `/create/[id]`, `/gm`, changelog, and profile flows.
 - One `opendungeon-host` process owns each live game. For internet play, run it on a VPS, Docker host, Fly.io, Render, Railway, or another service that supports long-running TCP/WebSocket processes.
 - The host should bind to `0.0.0.0`, expose the selected port, and set `--public-url` to the reachable HTTPS or HTTP URL shown to players.
-- Supabase stores profiles, cloud saves, world ownership, GM patch proposals, host snapshot archives, and approved asset metadata. It should not be treated as the current movement/combat authority.
+- Account-backed storage can keep profiles, cloud saves, world ownership, GM patch proposals, host snapshot archives, and approved asset metadata. It should not be treated as the current movement/combat authority.
 - The website invite page stores owner-scoped lobby metadata and displays setup commands. It does not keep the live lobby process running.
 
 For a private internet test:
@@ -51,15 +51,15 @@ The later browser-native path can replace this only when the browser client has 
 
 ## GM host archives
 
-The logged-in `/gm` page can read a running `opendungeon-host` URL and save the current host snapshot to the selected GM world. The archive event includes connected players, co-op state, the latest host authority cursor, recent command results, recent action log entries, delivered GM patches, combat state, and sync warnings. These rows stay owner-scoped through Supabase RLS and give future GM tooling a durable action history without making Supabase the live movement authority.
+The logged-in `/gm` page can read a running `opendungeon-host` URL and save the current host snapshot to the selected GM world. The archive event includes connected players, co-op state, recent command results, action log entries, delivered GM patches, combat state, and sync warnings. These records give future GM tooling a durable action history without making the website the live movement authority.
 
 ## Vercel Sandbox experiment
 
-Vercel Sandbox is a plausible future path for player-owned internet hosting, but it should be treated as an experiment before it becomes the default. `/create` now stores the planned Sandbox host shape in Supabase metadata so the invite, GM console, and future provisioning job agree on the same lifecycle. The flow would be:
+Vercel Sandbox is a plausible future path for player-owned internet hosting, but it should be treated as an experiment before it becomes the default. The flow would be:
 
 - The host player signs in to opendungeon, connects their Vercel account, and chooses a team/project that owns sandbox usage.
 - The website creates a sandbox under that host account, starts `opendungeon-host` with `runCommand({ detached: true })`, and exposes the sandbox port as the lobby URL.
-- Supabase stores the lobby id, owner id, sandbox id, host URL, mode, seed, GM world id, and cleanup status.
+- The website stores the lobby id, owner id, sandbox id, host URL, mode, seed, GM world id, and cleanup status.
 - Snapshots can warm the sandbox so dependency install and package setup do not happen for every game session.
 - The website stops the sandbox when the lobby ends or expires.
 
@@ -77,7 +77,7 @@ That means the first implementation should stay opt-in:
 - Use Sandbox only for logged-in hosts who explicitly connect Vercel.
 - Warn hosts about plan limits and session timeout before creating the sandbox.
 - Keep a reconnect path when the sandbox expires.
-- Always call cleanup and store cleanup state in Supabase.
+- Always call cleanup and store cleanup state.
 
 References:
 

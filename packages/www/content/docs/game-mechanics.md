@@ -1,13 +1,12 @@
 # Game mechanics
 
-opendungeon separates deterministic rules from presentation. Movement, combat rolls, loot, quest state, NPC interactions, and floor events all run through the game session layer so terminal UI, headless tests, and future network sync can share the same rules.
+opendungeon keeps the dungeon rules consistent across solo and co-op play. Movement, combat rolls, loot, quest state, NPC interactions, and floor events all resolve through the same game rules.
 
 ## Deterministic state
 
 - Dungeon floors are generated from a seed.
 - Legal movement can reveal fog, trigger traps, enter combat, pick up loot, or move the run to a new floor.
 - Saves preserve the active run, player stats, inventory, quest state, map discovery, and local metadata.
-- The headless runner can replay scripted actions and assert invariants without depending on terminal rendering.
 
 ## Seeds
 
@@ -18,7 +17,6 @@ Use seeds when you want to:
 - Reproduce a bug on the same dungeon.
 - Share a co-op lobby where every player starts from the same generated world.
 - Replay a challenge and compare decisions.
-- Write headless tests that assert the same map and event setup each run.
 
 In hosted multiplayer, the host command owns the seed:
 
@@ -46,7 +44,7 @@ The Book is split by category: story notes, people, and monsters. Monster entrie
 
 ## Failure and recovery
 
-The game should expose bad states clearly instead of silently losing progress. Save backups, export commands, deterministic seeds, and scripted smoke tests are all part of making failures recoverable.
+The game should expose bad states clearly instead of silently losing progress. Save backups, export commands, and replayable seeds are part of making failures recoverable.
 
 ## Planned polish
 

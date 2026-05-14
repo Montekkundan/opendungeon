@@ -21,7 +21,7 @@ export const docGroups: ReadonlyArray<{
       { slug: "controls", title: "Controls" },
       { slug: "game-modes", title: "Game modes" },
       { slug: "multiplayer", title: "Multiplayer" },
-      { slug: "supabase", title: "Supabase" },
+      { slug: "account", title: "Account" },
       { slug: "deployment", title: "Deployment" },
     ],
     title: "Sections",
