@@ -9,6 +9,7 @@ import { buildCloudSaveBrowserState } from "../cloud/cloudSaves.js"
 import {
   actorAt,
   combatAffinityLabel,
+  combatBalanceSnapshot,
   combatMatchupText,
   combatModifier,
   combatSkills,
@@ -2824,13 +2825,22 @@ function drawStateDialog(canvas: Canvas, model: AppModel, x: number, y: number, 
   if (pending.length && topH >= 13) canvas.write(talentX + 3, bodyY + topH - 2, `Pending choice: ${pending.map((talent) => talent.name).join(" / ")}`, UI.focus, UI.panel)
 
   drawPanel(canvas, bodyX, bottomY, bodyW, bottomH, "Combat And Rewards", UI.edge)
+  const balance = combatBalanceSnapshot(session)
   const equipment = Object.entries(session.equipment ?? {})
     .flatMap(([slot, item]) => (item ? [`${slot}: ${item.name}${item.bonusDamage ? ` +${item.bonusDamage} damage` : ""}`] : []))
     .join("  ")
   canvas.write(bodyX + 3, bottomY + 2, trim(equipment || "Equipment bonuses: starter gear only.", bodyW - 6), equipment ? UI.gold : UI.muted, UI.panel)
   canvas.write(bodyX + 3, bottomY + 3, trim(`Run modifier: ${session.floorModifier.name}. ${session.floorModifier.text}`, bodyW - 6), UI.soft, UI.panel)
-  combatSkills.slice(0, Math.max(0, bottomH - 5)).forEach((skill, index) => {
-    const rowY = bottomY + 5 + index
+  canvas.write(
+    bodyX + 3,
+    bottomY + 4,
+    trim(`Balance ${balance.target}: ${balance.hitChance}% hit  ${balance.fleeChance}% flee  ${balance.deathRisk}% death risk  ${balance.projectedClassWinRate}% class win`, bodyW - 6),
+    UI.focus,
+    UI.panel,
+  )
+  writeWrapped(canvas, bodyX + 3, bottomY + 5, bodyW - 6, [balance.weaknessNote, balance.focusNote], 2, UI.soft, UI.panel)
+  combatSkills.slice(0, Math.max(0, bottomH - 8)).forEach((skill, index) => {
+    const rowY = bottomY + 8 + index
     const talent = compactTalentEffectTextForSkill(session, skill)
     const line = `${index + 1} ${skill.name}  ${statAbbreviations[skill.stat]} d20 ${formatModifier(combatModifier(session, skill.stat))}  DC ${skill.dc}  ${skill.damage} dmg  focus ${focusCostForSkill(session, skill)}`
     canvas.write(bodyX + 3, rowY, trim(line, Math.floor(bodyW * 0.52)), UI.ink, UI.panel)

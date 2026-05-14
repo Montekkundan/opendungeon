@@ -111,7 +111,7 @@
 - [x] Expand the first three-floor arc and later descents so each floor has a distinct tactical purpose, biome modifier, monster mix, NPC/event hook, and final-gate clue.
 - [x] Add more item and equipment decisions: weapon upgrades, armor/charms, food buffs, bombs/tools, cursed rewards, and clear inventory comparison text.
 - [x] Add more quest chains that span floors and village outcomes: rescue, bounty, timed curse, shrine repair, escort, merchant delivery, and final-gate keys.
-- [ ] Finish combat balance around d20 difficulty, focus economy, enemy weakness/resistance notes, flee odds, death rate, and class win rates.
+- [x] Finish combat balance around d20 difficulty, focus economy, enemy weakness/resistance notes, flee odds, death rate, and class win rates.
 - [ ] Add boss phases with readable telegraphs, Book updates, and aftermath changes in village dialogue and shop demand.
 - [ ] Add daily/weekly challenge seeds, challenge mutators, and local leaderboard/replay metadata.
 

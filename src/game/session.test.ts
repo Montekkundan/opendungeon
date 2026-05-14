@@ -2,12 +2,14 @@ import { describe, expect, test } from "bun:test"
 import {
   chooseConversationOption,
   chooseLevelUpTalent,
+  combatBalanceSnapshot,
   createNextDescentSession,
   createSession,
   currentBiome,
   equipmentComparisonText,
   enemyBehaviorText,
   floorModifierFor,
+  fleeModifier,
   focusCostForSkill,
   grantXp,
   interactWithWorld,
@@ -584,6 +586,41 @@ describe("game session", () => {
     const beforeHp = session.hp
     performCombatAction(session)
     expect(session.hp).toBeLessThanOrEqual(beforeHp)
+  })
+
+  test("combat balance snapshot exposes d20 odds, focus pressure, and monster notes", () => {
+    const session = createSession(1234)
+    addEnemyBesidePlayer(session, "balance-slime", "slime", 6, 2)
+
+    tryMove(session, 1, 0)
+
+    const snapshot = combatBalanceSnapshot(session)
+    expect(snapshot.target).toContain("Slime")
+    expect(snapshot.skill).toBeTruthy()
+    expect(snapshot.hitChance).toBeGreaterThan(0)
+    expect(snapshot.fleeChance).toBeGreaterThan(0)
+    expect(snapshot.focusPressure).toBeGreaterThanOrEqual(0)
+    expect(snapshot.deathRisk).toBeGreaterThanOrEqual(0)
+    expect(snapshot.projectedClassWinRate).toBeGreaterThan(0)
+    expect(snapshot.weaknessNote).toContain("Resists")
+    expect(snapshot.focusNote).toContain("Focus pressure")
+  })
+
+  test("flee odds include equipment stat bonuses", () => {
+    const session = createSession(1234)
+    const before = fleeModifier(session)
+
+    session.equipment.armor = {
+      id: "runner-cloak",
+      name: "Runner cloak",
+      slot: "armor",
+      rarity: "uncommon",
+      bonusDamage: 0,
+      statBonuses: { dexterity: 4, luck: 2 },
+      activeText: "A light cloak for breaking from bad fights.",
+    }
+
+    expect(fleeModifier(session)).toBeGreaterThan(before)
   })
 
   test("enemies patrol until the player enters their aggro radius", () => {

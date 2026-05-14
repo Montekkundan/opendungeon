@@ -154,6 +154,18 @@ export type CombatState = {
   message: string
 }
 
+export type CombatBalanceSnapshot = {
+  target: string
+  skill: string
+  hitChance: number
+  fleeChance: number
+  focusPressure: number
+  deathRisk: number
+  projectedClassWinRate: number
+  weaknessNote: string
+  focusNote: string
+}
+
 export type SkillCheckSource = "potion" | "relic" | "chest"
 
 export type SkillCheckRoll = {
@@ -1267,6 +1279,8 @@ export function refreshBalanceDashboard(session: GameSession) {
       return [id, clamp(base, 8, 88)]
     }),
   ) as Record<HeroClass, number>
+  const combatBalance = combatBalanceSnapshot(session)
+  classWinRate[session.hero.classId] = combatBalance.projectedClassWinRate
   const mutatorDifficulty = Object.fromEntries(
     runMutatorIds.map((id, index) => {
       const activeBonus = session.hub.activeMutators.includes(id) ? 18 : 0
@@ -1279,7 +1293,8 @@ export function refreshBalanceDashboard(session: GameSession) {
   const notes = [
     `${builtStations.length}/${hubStationIds.length} village stations affect next-run pacing.`,
     session.hub.activeMutators.length ? `${session.hub.activeMutators.length} mutator(s) are raising projected difficulty.` : "No active mutators in the projected balance run.",
-    `Current class ${session.hero.classId} projects ${classWinRate[session.hero.classId]}% win rate.`,
+    `Combat balance: ${combatBalance.hitChance}% hit, ${combatBalance.fleeChance}% flee, ${combatBalance.deathRisk}% death risk.`,
+    `Current class ${session.hero.classId} projects ${combatBalance.projectedClassWinRate}% win rate.`,
   ]
   session.hub.balanceDashboard = {
     runs: 32 + session.hub.activeMutators.length * 8,
@@ -2711,9 +2726,9 @@ export function applyStatusEffect(session: GameSession, effect: StatusEffect) {
 export function fleeModifier(session: GameSession) {
   return (
     session.level +
-    statModifier(session.stats.dexterity) +
-    Math.max(0, statModifier(session.stats.luck)) +
-    Math.max(0, Math.floor(statModifier(session.stats.endurance) / 2))
+    statModifier(session.stats.dexterity + equipmentStatBonus(session, "dexterity")) +
+    Math.max(0, statModifier(session.stats.luck + equipmentStatBonus(session, "luck"))) +
+    Math.max(0, Math.floor(statModifier(session.stats.endurance + equipmentStatBonus(session, "endurance")) / 2))
   )
 }
 
@@ -2721,6 +2736,80 @@ export function fleeDc(session: GameSession) {
   const targets = combatTargets(session)
   const pressure = targets.reduce((highest, target) => Math.max(highest, enemyDefenseBonus(target.kind)), 0)
   return 11 + Math.floor(session.floor / 2) + pressure + Math.min(4, Math.max(0, targets.length - 1))
+}
+
+export function combatBalanceSnapshot(session: GameSession): CombatBalanceSnapshot {
+  const targets = combatTargets(session)
+  const visibleTargets = targets.length
+    ? targets
+    : nearbyHostiles(session).length
+      ? nearbyHostiles(session)
+      : session.dungeon.actors.filter((actor) => isEnemyActorId(actor.kind))
+  const target = visibleTargets[clamp(session.combat.selectedTarget, 0, Math.max(0, visibleTargets.length - 1))]
+  const skill = combatSkills[clamp(session.combat.selectedSkill, 0, combatSkills.length - 1)] ?? combatSkills[0]
+  const modifier = combatModifier(session, skill.stat)
+  const dc = skill.dc + (target ? enemyDefenseDcBonus(session, target) : 0)
+  const hitChance = d20SuccessChance(modifier, dc)
+  const fleeChance = d20SuccessChance(fleeModifier(session), fleeDc(session))
+  const focusCost = focusCostForSkill(session, skill)
+  const focusPressure = clamp(
+    Math.round((focusCost / Math.max(1, session.maxFocus)) * 100 + (session.focus < focusCost ? 35 : 0) + Math.max(0, visibleTargets.length - 1) * 8),
+    0,
+    100,
+  )
+  const incomingDamage = visibleTargets.reduce((total, actor) => total + Math.max(0, actor.damage), 0)
+  const deathRisk = clamp(
+    Math.round((incomingDamage / Math.max(1, session.hp)) * 45 + Math.max(0, session.floor - 1) * 6 + Math.max(0, visibleTargets.length - 1) * 10 - Math.max(0, session.focus) * 2),
+    0,
+    95,
+  )
+  const projectedClassWinRate = clamp(
+    Math.round(
+      72 +
+        statModifier(session.stats.vigor + equipmentStatBonus(session, "vigor")) * 2 +
+        statModifier(session.stats.dexterity + equipmentStatBonus(session, "dexterity")) * 2 +
+        equipmentDamageBonus(session) * 3 +
+        session.level * 3 -
+        deathRisk * 0.55 -
+        focusPressure * 0.15,
+    ),
+    5,
+    95,
+  )
+  return {
+    target: target ? label(target.kind) : "No target",
+    skill: skill.name,
+    hitChance,
+    fleeChance,
+    focusPressure,
+    deathRisk,
+    projectedClassWinRate,
+    weaknessNote: combatBalanceWeaknessNote(session, target, skill),
+    focusNote: combatBalanceFocusNote(session, skill, focusCost, focusPressure),
+  }
+}
+
+function d20SuccessChance(modifier: number, dc: number) {
+  let wins = 0
+  for (let roll = 1; roll <= 20; roll += 1) {
+    if (roll === 20 || (roll !== 1 && roll + modifier >= dc)) wins += 1
+  }
+  return Math.round((wins / 20) * 100)
+}
+
+function combatBalanceWeaknessNote(session: GameSession, actor: Actor | undefined, skill: CombatSkill) {
+  if (!actor || !isEnemyActorId(actor.kind)) return "No enemy target yet. Pick a target, then compare d20 odds and affinities."
+  const profile = monsterProfiles[actor.kind]
+  const known = knownMonsterWeaknesses(session, actor.kind)
+  const knownText = known.length ? `Known weak: ${known.map(combatAffinityLabel).join(", ")}.` : "Weakness unknown; a correct affinity hit writes it into the Book."
+  const resistText = profile.resists.length ? `Resists: ${profile.resists.map(combatAffinityLabel).join(", ")}.` : "No resistance recorded."
+  return `${label(actor.kind)} vs ${skill.name}: ${knownText} ${resistText} ${combatMatchupText(skill, actor.kind)}`
+}
+
+function combatBalanceFocusNote(session: GameSession, skill: CombatSkill, focusCost: number, pressure: number) {
+  if (session.focus < focusCost) return `${skill.name} needs ${focusCost} focus; rest, use a vial, or choose a cheaper move.`
+  if (pressure >= 55) return `Focus pressure ${pressure}%. Save high-cost skills for weakness hits or guarded turns.`
+  return `Focus pressure ${pressure}%. Current focus can support ${skill.name} safely.`
 }
 
 export function attemptFlee(session: GameSession): CombatRoll | null {
