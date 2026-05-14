@@ -4,7 +4,13 @@ import { Command } from "@/components/command";
 import { Footer, Header } from "@/components/site-chrome";
 import { Button } from "@/components/ui/button";
 import { gameModes } from "@/lib/game-modes";
-import { type GmPatchDraft, gmDifficultyLevels } from "@/lib/gm";
+import {
+  fetchGmHostSnapshot,
+  type GmHostBridgeResult,
+  type GmHostSnapshot,
+  type GmPatchDraft,
+  gmDifficultyLevels,
+} from "@/lib/gm";
 import { supabaseConfigured } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 import { approveGmPatch, createGmWorld, draftGmPatch } from "./actions";
@@ -78,6 +84,44 @@ function singleParam(
   return Array.isArray(value) ? value[0] : value;
 }
 
+function activePatchDraft(
+  events: WorldEventRow[],
+  patchId: string | undefined
+) {
+  return events.find(
+    (event) =>
+      event.event_type === "gm-patch-draft" &&
+      event.metadata?.draft &&
+      event.event_id === (patchId ?? event.event_id)
+  )?.metadata?.draft;
+}
+
+function approvedPatchIds(events: WorldEventRow[]) {
+  return new Set(
+    events
+      .filter((event) => event.event_type === "gm-patch-approved")
+      .map((event) => event.event_id)
+      .filter(Boolean)
+  );
+}
+
+function hostStatusLabel(hostBridge: GmHostBridgeResult) {
+  if (hostBridge.snapshot) {
+    return `${hostBridge.snapshot.players.length} players`;
+  }
+  if (hostBridge.url) {
+    return "unreachable";
+  }
+  return "not linked";
+}
+
+function approvalButtonLabel(approved: boolean, hostUrl: string) {
+  if (approved) {
+    return "Approved";
+  }
+  return hostUrl ? "Approve and deliver" : "Approve for host";
+}
+
 export default async function GmPage({ searchParams }: GmPageProps) {
   if (!supabaseConfigured()) {
     redirect(
@@ -96,23 +140,16 @@ export default async function GmPage({ searchParams }: GmPageProps) {
   const params = await searchParams;
   const { error, worlds } = await getWorldRows(user.id);
   const selectedWorldId = singleParam(params, "world") ?? worlds[0]?.id ?? null;
+  const hostBridge = await fetchGmHostSnapshot(
+    singleParam(params, "host") ?? ""
+  );
   const { error: eventsError, events } = await getWorldEvents(
     user.id,
     selectedWorldId
   );
   const gmMode = gameModes.find((mode) => mode.id === "multiplayer-gm");
-  const activeDraft = events.find(
-    (event) =>
-      event.event_type === "gm-patch-draft" &&
-      event.metadata?.draft &&
-      event.event_id === (singleParam(params, "patch") ?? event.event_id)
-  )?.metadata?.draft;
-  const approvedIds = new Set(
-    events
-      .filter((event) => event.event_type === "gm-patch-approved")
-      .map((event) => event.event_id)
-      .filter(Boolean)
-  );
+  const activeDraft = activePatchDraft(events, singleParam(params, "patch"));
+  const approvedIds = approvedPatchIds(events);
 
   return (
     <main data-page="opendungeon">
@@ -141,6 +178,10 @@ export default async function GmPage({ searchParams }: GmPageProps) {
               <span>GM worlds</span>
               <strong>{error ? "sync unavailable" : worlds.length}</strong>
             </div>
+            <div>
+              <span>Live host</span>
+              <strong>{hostStatusLabel(hostBridge)}</strong>
+            </div>
           </section>
 
           {singleParam(params, "error") ? (
@@ -149,6 +190,9 @@ export default async function GmPage({ searchParams }: GmPageProps) {
           {error ? <p data-slot="notice">World sync failed: {error}</p> : null}
           {eventsError ? (
             <p data-slot="notice">Patch queue failed: {eventsError}</p>
+          ) : null}
+          {hostBridge.error ? (
+            <p data-slot="notice">Host bridge failed: {hostBridge.error}</p>
           ) : null}
 
           <section data-component="gm-layout">
@@ -167,7 +211,31 @@ export default async function GmPage({ searchParams }: GmPageProps) {
                     name="seed"
                   />
                 </label>
+                <input name="hostUrl" type="hidden" value={hostBridge.url} />
                 <Button type="submit">Create GM world</Button>
+              </form>
+
+              <form action="/gm" data-component="gm-host" method="get">
+                <input
+                  name="world"
+                  type="hidden"
+                  value={selectedWorldId ?? ""}
+                />
+                <input
+                  name="patch"
+                  type="hidden"
+                  value={singleParam(params, "patch") ?? ""}
+                />
+                <label>
+                  <span>Live host URL</span>
+                  <input
+                    defaultValue={hostBridge.url || "http://127.0.0.1:3737"}
+                    name="host"
+                    placeholder="http://127.0.0.1:3737"
+                    type="url"
+                  />
+                </label>
+                <Button type="submit">Read host state</Button>
               </form>
 
               <form action={draftGmPatch} data-slot="gm-prompt">
@@ -176,6 +244,7 @@ export default async function GmPage({ searchParams }: GmPageProps) {
                   type="hidden"
                   value={selectedWorldId ?? ""}
                 />
+                <input name="hostUrl" type="hidden" value={hostBridge.url} />
                 <label>
                   <span>Difficulty</span>
                   <select defaultValue="harder" name="difficulty">
@@ -216,6 +285,7 @@ export default async function GmPage({ searchParams }: GmPageProps) {
                   <PatchPreview
                     approved={approvedIds.has(activeDraft.id)}
                     draft={activeDraft}
+                    hostUrl={hostBridge.url}
                     worldId={selectedWorldId ?? ""}
                   />
                 ) : (
@@ -238,7 +308,13 @@ export default async function GmPage({ searchParams }: GmPageProps) {
                         data-active={world.id === selectedWorldId}
                         key={world.id}
                       >
-                        <Link href={`/gm?world=${world.id}`}>
+                        <Link
+                          href={`/gm?world=${world.id}${
+                            hostBridge.url
+                              ? `&host=${encodeURIComponent(hostBridge.url)}`
+                              : ""
+                          }`}
+                        >
                           {world.id} - seed {world.seed} - gen{" "}
                           {world.generation}
                         </Link>
@@ -259,7 +335,7 @@ export default async function GmPage({ searchParams }: GmPageProps) {
                         <Link
                           href={`/gm?world=${selectedWorldId ?? ""}&patch=${
                             event.event_id ?? ""
-                          }`}
+                          }${hostBridge.url ? `&host=${encodeURIComponent(hostBridge.url)}` : ""}`}
                         >
                           {event.event_type.replace("gm-patch-", "")} -{" "}
                           {event.event_id ?? "event"}
@@ -274,10 +350,12 @@ export default async function GmPage({ searchParams }: GmPageProps) {
 
               <section>
                 <h2>Connected players</h2>
-                <ul>
-                  <li>Mira - Floor 2 - host bridge pending</li>
-                  <li>Sol - inventory sync waits for live host events</li>
-                </ul>
+                <HostPlayerList snapshot={hostBridge.snapshot} />
+              </section>
+
+              <section>
+                <h2>Delivered patches</h2>
+                <HostPatchList snapshot={hostBridge.snapshot} />
               </section>
             </aside>
           </section>
@@ -286,9 +364,9 @@ export default async function GmPage({ searchParams }: GmPageProps) {
             <h2>Host bridge</h2>
             <Command value="opendungeon-host --host 0.0.0.0 --mode coop --seed 2423368 --port 3737" />
             <p>
-              The website owns GM world rows and approved patch events. The
-              current live game still needs a reachable host process to relay
-              those approved changes to connected terminal clients.
+              The website owns GM world rows and approved patch events. Link a
+              running host URL above to see live players and push approved
+              patches into the host queue.
             </p>
           </section>
 
@@ -311,10 +389,12 @@ export default async function GmPage({ searchParams }: GmPageProps) {
 function PatchPreview({
   approved,
   draft,
+  hostUrl,
   worldId,
 }: {
   approved: boolean;
   draft: GmPatchDraft;
+  hostUrl: string;
   worldId: string;
 }) {
   return (
@@ -348,12 +428,83 @@ function PatchPreview({
         ))}
       </ul>
       <form action={approveGmPatch}>
+        <input name="hostUrl" type="hidden" value={hostUrl} />
         <input name="worldId" type="hidden" value={worldId} />
         <input name="patchId" type="hidden" value={draft.id} />
         <Button disabled={approved} type="submit">
-          {approved ? "Approved" : "Approve for host"}
+          {approvalButtonLabel(approved, hostUrl)}
         </Button>
       </form>
+    </div>
+  );
+}
+
+function HostPlayerList({ snapshot }: { snapshot: GmHostSnapshot | null }) {
+  if (!snapshot) {
+    return (
+      <p>
+        Enter the `opendungeon-host` URL to read real lobby players, floors,
+        health, tutorial readiness, and combat state.
+      </p>
+    );
+  }
+
+  const byId = new Map(
+    snapshot.coopStates.map((state) => [state.playerId, state])
+  );
+  const rows = snapshot.players.map((player) => ({
+    player,
+    state: byId.get(player.id),
+  }));
+
+  return (
+    <div data-component="gm-live-list">
+      {rows.length ? (
+        rows.map(({ player, state }) => (
+          <div key={player.id}>
+            <strong>{player.name}</strong>
+            <span>
+              {state
+                ? `Floor ${state.floor} - HP ${state.hp} - ${state.classId} - ${state.tutorialStage}${
+                    state.tutorialReady ? " ready" : " waiting"
+                  }`
+                : "connected, waiting for sync"}
+            </span>
+          </div>
+        ))
+      ) : (
+        <p>No terminal players are connected.</p>
+      )}
+      {snapshot.syncWarnings.length ? (
+        <ul>
+          {snapshot.syncWarnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function HostPatchList({ snapshot }: { snapshot: GmHostSnapshot | null }) {
+  if (!snapshot) {
+    return <p>Approved patches appear here once a host is linked.</p>;
+  }
+
+  return (
+    <div data-component="gm-live-list">
+      {snapshot.gmPatches.length ? (
+        snapshot.gmPatches.map((patch) => (
+          <div key={patch.id}>
+            <strong>{patch.title}</strong>
+            <span>
+              {patch.difficulty} - {patch.operationCount} ops - {patch.id}
+            </span>
+          </div>
+        ))
+      ) : (
+        <p>No approved patches have reached this host yet.</p>
+      )}
     </div>
   );
 }

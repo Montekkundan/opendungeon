@@ -44,9 +44,12 @@ const server = createServer((request, response) => {
   const publicUrl = requestLobbyUrl(request.headers.host, options, request.headers["x-forwarded-proto"])
 
   if (url.pathname === "/health" || url.pathname === "/healthz") return sendJson(response, healthPayload())
+  if (url.pathname === "/state") return sendJson(response, lobby.snapshot())
   if (url.pathname === "/leaderboard") return sendJson(response, lobby.leaderboard())
   if (url.pathname === "/invite") return sendJson(response, invitePayload(publicUrl))
   if (url.pathname === "/finish" && request.method === "POST") return void submitResult(request, response)
+  if (url.pathname === "/gm/patches" && request.method === "GET") return sendJson(response, lobby.snapshot().gmPatches)
+  if (url.pathname === "/gm/patches" && request.method === "POST") return void submitGmPatch(request, response)
   if (url.pathname === "/") return sendText(response, 200, renderLobbyPage(publicUrl), "text/html; charset=utf-8")
 
   sendText(response, 404, "Not found")
@@ -96,6 +99,23 @@ function submitResult(request: IncomingMessage, response: ServerResponse) {
       sendJson(response, result, 201)
     })
     .catch(() => sendJson(response, { error: "invalid result payload" }, 400))
+}
+
+function submitGmPatch(request: IncomingMessage, response: ServerResponse) {
+  readJsonBody(request)
+    .then((body) => {
+      const patch = lobby.deliverGmPatch({
+        id: body.id as string,
+        title: body.title as string,
+        difficulty: body.difficulty as "easier" | "steady" | "harder" | "deadly",
+        briefing: body.briefing as string,
+        operationCount: body.operationCount as number,
+        operations: Array.isArray(body.operations) ? body.operations : undefined,
+      })
+      broadcastState()
+      sendJson(response, patch, 201)
+    })
+    .catch(() => sendJson(response, { error: "invalid GM patch payload" }, 400))
 }
 
 function healthPayload() {
@@ -254,6 +274,10 @@ function renderLobbyPage(publicUrl: string): string {
         <p id="combat" class="muted">Combat turn coordination idle.</p>
       </section>
       <section>
+        <h2>GM Patches</h2>
+        <ul id="gm-patches"><li class="muted">No approved GM patches delivered yet.</li></ul>
+      </section>
+      <section>
         <h2>Leaderboard</h2>
         <ul id="leaderboard"><li class="muted">No results yet.</li></ul>
       </section>
@@ -277,6 +301,9 @@ function renderLobbyPage(publicUrl: string): string {
         document.querySelector("#combat").textContent = state.combat.active
           ? "Round " + state.combat.round + " · active player " + state.combat.activePlayerId
           : "Combat turn coordination idle.";
+        document.querySelector("#gm-patches").innerHTML = state.gmPatches.length
+          ? state.gmPatches.map((patch) => "<li>" + patch.title + " · " + patch.difficulty + " · " + patch.operationCount + " ops</li>").join("")
+          : '<li class="muted">No approved GM patches delivered yet.</li>';
         document.querySelector("#leaderboard").innerHTML = state.leaderboard.length
           ? state.leaderboard.map((result) => "<li>" + result.name + " · " + result.status + " · score " + result.score + " · floor " + result.floor + " · " + result.turns + " turns</li>").join("")
           : '<li class="muted">No results yet.</li>';

@@ -32,6 +32,25 @@ describe("multiplayer lobby state", () => {
     expect(lobby.snapshot().combat).toMatchObject({ activePlayerId: "p2", round: 2 })
   })
 
+  test("queues approved GM patches for host delivery snapshots", () => {
+    const lobby = new MultiplayerLobbyState({ mode: "coop", seed: 1234, now: () => 25 })
+
+    const patch = lobby.deliverGmPatch({
+      id: "gm-hard-room",
+      title: "Make the shrine fight harder",
+      difficulty: "harder",
+      briefing: "More guards arrive, but the wounded path still works.",
+      operations: [{ path: "rules.enemyHpMultiplier" }, { path: "floors.2.encounterBudget" }],
+    })
+
+    expect(patch).toMatchObject({ id: "gm-hard-room", difficulty: "harder", operationCount: 2 })
+    expect(lobby.snapshot().gmPatches[0]).toMatchObject({
+      briefing: "More guards arrive, but the wounded path still works.",
+      id: "gm-hard-room",
+      operationCount: 2,
+    })
+  })
+
   test("stress-tests larger co-op party state and combat turn order", () => {
     const lobby = new MultiplayerLobbyState({ mode: "coop", seed: 5678, now: () => 30 })
     for (const id of ["warden", "arcanist", "ranger", "cleric"]) lobby.join(id, id)

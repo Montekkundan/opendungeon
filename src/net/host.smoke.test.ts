@@ -37,6 +37,24 @@ test("host starts, accepts two players plus a spectator, syncs state, disconnect
     expect(synced.coopStates.map((state) => state.name).sort()).toEqual(["Mira", "Sol"])
     expect(synced.coopStates.find((state) => state.name === "Mira")).toMatchObject({ x: 4, y: 5, tutorialReady: true })
 
+    const state = (await fetchJson(`${baseUrl}/state`)) as LobbySnapshot
+    expect(state.coopStates.map((sync) => sync.name).sort()).toEqual(["Mira", "Sol"])
+
+    const gmPatch = await fetchJson(`${baseUrl}/gm/patches`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        id: "gm-hard-room",
+        title: "Make Floor 2 harder",
+        difficulty: "harder",
+        briefing: "The GM adds guards but leaves a clever route.",
+        operations: [{ path: "rules.enemyHpMultiplier" }, { path: "floors.2.encounterBudget" }],
+      }),
+    })
+    expect(gmPatch).toMatchObject({ id: "gm-hard-room", difficulty: "harder", operationCount: 2 })
+    const patches = (await fetchJson(`${baseUrl}/gm/patches`)) as Array<{ id: string }>
+    expect(patches[0]?.id).toBe("gm-hard-room")
+
     sol.close()
     const disconnected = await waitForSnapshot(mira, (snapshot) => snapshot.players.length === 1 && snapshot.coopStates.length === 1)
     expect(disconnected.players.map((player) => player.name)).toEqual(["Mira"])

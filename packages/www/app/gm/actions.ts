@@ -1,15 +1,35 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { buildGmPatchDraft, normalizeDifficulty } from "@/lib/gm";
+import {
+  buildGmPatchDraft,
+  deliverGmPatchToHost,
+  type GmPatchDraft,
+  normalizeDifficulty,
+  normalizeGmHostUrl,
+} from "@/lib/gm";
 import { createClient } from "@/lib/supabase/server";
 
-function gmError(message: string, worldId?: string) {
+function gmError(message: string, worldId?: string): never {
   const params = new URLSearchParams({ error: message });
   if (worldId) {
     params.set("world", worldId);
   }
   redirect(`/gm?${params.toString()}`);
+}
+
+function redirectToGm(params: Record<string, string | undefined>): never {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) {
+      search.set(key, value);
+    }
+  }
+  redirect(`/gm?${search.toString()}`);
+}
+
+function formHostUrl(formData: FormData) {
+  return normalizeGmHostUrl(String(formData.get("hostUrl") ?? ""));
 }
 
 export async function createGmWorld(formData: FormData) {
@@ -37,7 +57,7 @@ export async function createGmWorld(formData: FormData) {
   if (error) {
     gmError(`Could not create GM world: ${error.message}`);
   }
-  redirect(`/gm?world=${id}&created=1`);
+  redirectToGm({ created: "1", host: formHostUrl(formData), world: id });
 }
 
 export async function draftGmPatch(formData: FormData) {
@@ -87,7 +107,11 @@ export async function draftGmPatch(formData: FormData) {
   if (error) {
     gmError(`Could not save patch draft: ${error.message}`, worldId);
   }
-  redirect(`/gm?world=${worldId}&patch=${draft.id}`);
+  redirectToGm({
+    host: formHostUrl(formData),
+    patch: draft.id,
+    world: worldId,
+  });
 }
 
 export async function approveGmPatch(formData: FormData) {
@@ -100,8 +124,29 @@ export async function approveGmPatch(formData: FormData) {
 
   const worldId = String(formData.get("worldId") ?? "");
   const patchId = String(formData.get("patchId") ?? "");
+  const hostUrl = formHostUrl(formData);
   if (!(worldId && patchId)) {
     gmError("A world and patch are required for approval.", worldId);
+  }
+
+  const draftResult = await supabase
+    .from("opendungeon_world_events")
+    .select("metadata")
+    .eq("event_type", "gm-patch-draft")
+    .eq("event_id", patchId)
+    .eq("owner_id", user.id)
+    .eq("world_id", worldId)
+    .maybeSingle<{ metadata: { draft?: GmPatchDraft } | null }>();
+
+  if (draftResult.error) {
+    gmError(
+      `Could not load patch draft: ${draftResult.error.message}`,
+      worldId
+    );
+  }
+  const draft = draftResult.data?.metadata?.draft;
+  if (!draft) {
+    gmError("Patch draft was not found for this world.", worldId);
   }
 
   const { error } = await supabase.from("opendungeon_world_events").insert({
@@ -116,5 +161,18 @@ export async function approveGmPatch(formData: FormData) {
   if (error) {
     gmError(`Could not approve patch: ${error.message}`, worldId);
   }
-  redirect(`/gm?world=${worldId}&approved=${patchId}`);
+
+  const delivery = hostUrl
+    ? await deliverGmPatchToHost(hostUrl, draft)
+    : { delivered: false, error: null, url: "" };
+
+  redirectToGm({
+    approved: patchId,
+    delivered: delivery.delivered ? "1" : undefined,
+    error: delivery.error
+      ? `Patch approved, but host delivery failed: ${delivery.error}`
+      : undefined,
+    host: hostUrl,
+    world: worldId,
+  });
 }

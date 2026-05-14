@@ -58,6 +58,15 @@ export type RaceResult = {
   submittedAt: number
 }
 
+export type GmDeliveredPatch = {
+  id: string
+  title: string
+  difficulty: "easier" | "steady" | "harder" | "deadly"
+  briefing: string
+  operationCount: number
+  approvedAt: number
+}
+
 export type LobbySnapshot = {
   mode: LobbyMode
   seed: number
@@ -67,6 +76,7 @@ export type LobbySnapshot = {
   coopStates: CoopSyncState[]
   combat: CombatTurnState
   leaderboard: RaceResult[]
+  gmPatches: GmDeliveredPatch[]
   syncWarnings: string[]
 }
 
@@ -86,6 +96,7 @@ export class MultiplayerLobbyState {
   private readonly players = new Map<string, LobbyPlayer>()
   private readonly coopStates = new Map<string, CoopSyncState>()
   private readonly results: RaceResult[]
+  private readonly gmPatches = new Map<string, GmDeliveredPatch>()
   private combat: CombatTurnState = { active: false, round: 0, order: [] }
 
   constructor(options: LobbyStateOptions) {
@@ -179,6 +190,12 @@ export class MultiplayerLobbyState {
     return result
   }
 
+  deliverGmPatch(input: Partial<GmDeliveredPatch> & { operations?: unknown[] }) {
+    const patch = normalizeGmPatch(input, this.now())
+    this.gmPatches.set(patch.id, patch)
+    return patch
+  }
+
   leaderboard() {
     return sortLeaderboard(this.results)
   }
@@ -194,6 +211,7 @@ export class MultiplayerLobbyState {
       coopStates: [...this.coopStates.values()].sort((left, right) => left.name.localeCompare(right.name)),
       combat: { ...this.combat, order: [...this.combat.order] },
       leaderboard: this.leaderboard(),
+      gmPatches: [...this.gmPatches.values()].sort((left, right) => right.approvedAt - left.approvedAt),
       syncWarnings: coopSyncWarnings([...this.coopStates.values()]),
     }
   }
@@ -213,6 +231,18 @@ function normalizeRaceResult(input: Partial<RaceResult>, submittedAt = Date.now(
     kills: positiveInt(input.kills),
     score: positiveInt(input.score),
     submittedAt,
+  }
+}
+
+function normalizeGmPatch(input: Partial<GmDeliveredPatch> & { operations?: unknown[] }, approvedAt = Date.now()): GmDeliveredPatch {
+  const difficulty = String(input.difficulty || "steady")
+  return {
+    id: cleanPatchId(input.id),
+    title: String(input.title || "GM patch").replace(/[^\w .,:;!?'"()/-]/g, "").trim().slice(0, 80) || "GM patch",
+    difficulty: difficulty === "easier" || difficulty === "harder" || difficulty === "deadly" ? difficulty : "steady",
+    briefing: String(input.briefing || "").replace(/[^\w .,:;!?'"()/-]/g, "").trim().slice(0, 280),
+    operationCount: Array.isArray(input.operations) ? input.operations.length : positiveInt(input.operationCount),
+    approvedAt,
   }
 }
 
@@ -274,6 +304,11 @@ function publicPlayer(player: LobbyPlayer) {
 
 function cleanName(value: unknown) {
   return String(value || "Crawler").replace(/[^\w .-]/g, "").trim().slice(0, 32) || "Crawler"
+}
+
+function cleanPatchId(value: unknown) {
+  const id = String(value || "").trim()
+  return /^[A-Za-z0-9_-]{4,96}$/.test(id) ? id : createHash("sha256").update(id || String(Date.now())).digest("hex").slice(0, 16)
 }
 
 function positiveInt(value: unknown) {

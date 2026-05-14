@@ -5,6 +5,8 @@ export const gmDifficultyLevels = [
   "deadly",
 ] as const;
 
+const TRAILING_SLASH_RE = /\/$/;
+
 export type GmDifficultyLevel = (typeof gmDifficultyLevels)[number];
 
 export interface GmPatchOperation {
@@ -27,6 +29,65 @@ export interface GmPatchDraft {
   playerBriefing: string;
   title: string;
   toolCalls: GmToolCallPreview[];
+}
+
+export interface GmHostPlayer {
+  id: string;
+  joinedAt?: number;
+  name: string;
+}
+
+export interface GmHostCoopState {
+  classId: string;
+  combatActive: boolean;
+  connected: boolean;
+  floor: number;
+  gold: number;
+  hp: number;
+  inventoryCount: number;
+  level: number;
+  name: string;
+  playerId: string;
+  saveRevision: number;
+  turn: number;
+  tutorialCompleted: boolean;
+  tutorialReady: boolean;
+  tutorialStage: string;
+  updatedAt: number;
+  x: number;
+  y: number;
+}
+
+export interface GmHostDeliveredPatch {
+  approvedAt: number;
+  briefing: string;
+  difficulty: GmDifficultyLevel;
+  id: string;
+  operationCount: number;
+  title: string;
+}
+
+export interface GmHostSnapshot {
+  combat: {
+    active: boolean;
+    activePlayerId?: string;
+    order: string[];
+    round: number;
+  };
+  coopStates: GmHostCoopState[];
+  gmPatches: GmHostDeliveredPatch[];
+  inviteCode: string;
+  mode: "coop" | "race";
+  players: GmHostPlayer[];
+  seed: number;
+  spectators: GmHostPlayer[];
+  syncWarnings: string[];
+}
+
+export interface GmHostBridgeResult {
+  error: string | null;
+  snapshot: GmHostSnapshot | null;
+  url: string;
 }
 
 export function normalizeDifficulty(
@@ -152,6 +213,99 @@ function cleanPrompt(value: string) {
       .slice(0, 280) ||
     "Adjust this scene while preserving the authored opendungeon loop."
   );
+}
+
+export function normalizeGmHostUrl(value: string) {
+  const text = value.trim();
+  if (!text) {
+    return "";
+  }
+  try {
+    const url = new URL(text);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return "";
+    }
+    url.pathname = "";
+    url.search = "";
+    url.hash = "";
+    return url.toString().replace(TRAILING_SLASH_RE, "");
+  } catch {
+    return "";
+  }
+}
+
+export async function fetchGmHostSnapshot(
+  value: string
+): Promise<GmHostBridgeResult> {
+  const url = normalizeGmHostUrl(value);
+  if (!url) {
+    return { error: null, snapshot: null, url: "" };
+  }
+
+  try {
+    const response = await fetch(new URL("/state", url), {
+      cache: "no-store",
+      signal: AbortSignal.timeout(2500),
+    });
+    if (!response.ok) {
+      return {
+        error: `Host returned HTTP ${response.status}. Check that this is an opendungeon-host URL.`,
+        snapshot: null,
+        url,
+      };
+    }
+    const snapshot = (await response.json()) as GmHostSnapshot;
+    return { error: null, snapshot, url };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error
+          ? `Could not reach host: ${error.message}`
+          : "Could not reach host.",
+      snapshot: null,
+      url,
+    };
+  }
+}
+
+export async function deliverGmPatchToHost(value: string, draft: GmPatchDraft) {
+  const url = normalizeGmHostUrl(value);
+  if (!url) {
+    return { delivered: false, error: null, url: "" };
+  }
+
+  try {
+    const response = await fetch(new URL("/gm/patches", url), {
+      body: JSON.stringify({
+        briefing: draft.playerBriefing,
+        difficulty: draft.difficulty,
+        id: draft.id,
+        operations: draft.operations,
+        title: draft.title,
+      }),
+      cache: "no-store",
+      headers: { "content-type": "application/json" },
+      method: "POST",
+      signal: AbortSignal.timeout(2500),
+    });
+    if (!response.ok) {
+      return {
+        delivered: false,
+        error: `Host patch endpoint returned HTTP ${response.status}.`,
+        url,
+      };
+    }
+    return { delivered: true, error: null, url };
+  } catch (error) {
+    return {
+      delivered: false,
+      error:
+        error instanceof Error
+          ? `Could not deliver patch to host: ${error.message}`
+          : "Could not deliver patch to host.",
+      url,
+    };
+  }
 }
 
 function slug(value: string) {
