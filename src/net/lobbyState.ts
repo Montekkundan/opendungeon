@@ -332,6 +332,7 @@ export class MultiplayerLobbyState {
       result,
     }
     this.commands.unshift(entry)
+    this.applyCommandResultToCoopState(player.id, result, acceptedAt)
     this.trimCommands()
     this.recordAction({
       playerId: player.id,
@@ -374,6 +375,22 @@ export class MultiplayerLobbyState {
 
   private trimCommands(limit = 120) {
     if (this.commands.length > limit) this.commands.length = limit
+  }
+
+  private applyCommandResultToCoopState(playerId: string, result: LobbyCommandResult, updatedAt: number) {
+    const state = this.coopStates.get(playerId)
+    if (!state) return
+    this.coopStates.set(playerId, {
+      ...state,
+      connected: true,
+      floor: result.floor,
+      hp: result.hp,
+      saveRevision: Math.max(state.saveRevision, result.turn),
+      turn: Math.max(state.turn, result.turn),
+      updatedAt,
+      x: result.x,
+      y: result.y,
+    })
   }
 }
 

@@ -59,6 +59,7 @@ describe("multiplayer lobby state", () => {
     let now = 50
     const lobby = new MultiplayerLobbyState({ mode: "coop", seed: 1234, now: () => now++ })
     lobby.join("p1", "Mira")
+    lobby.updateCoopState({ playerId: "p1", floor: 1, turn: 2, hp: 19, x: 5, y: 5, combatActive: false })
 
     const command = lobby.recordCommand({
       playerId: "p1",
@@ -74,6 +75,16 @@ describe("multiplayer lobby state", () => {
         ignored: { nested: true },
         unsafe: "<script>",
       },
+      result: {
+        accepted: true,
+        floor: 1,
+        hp: 18,
+        message: "Mira moved east.",
+        status: "running",
+        turn: 3,
+        x: 6,
+        y: 5,
+      },
     })
     const snapshot = lobby.snapshot()
 
@@ -84,11 +95,12 @@ describe("multiplayer lobby state", () => {
       sequence: 1,
       type: "move",
     })
-    expect(command.result).toMatchObject({ accepted: true, message: "Command accepted." })
+    expect(command.result).toMatchObject({ accepted: true, message: "Mira moved east." })
     expect(command.payload).toMatchObject({ direction: "east", floor: 1, hp: 19, turn: 2, x: 5, y: 5 })
     expect(command.payload.unsafe).toBe("script")
     expect(snapshot.commands[0]).toMatchObject({ id: command.id, playerId: "p1" })
     expect(snapshot.actions[0]).toMatchObject({ label: "Moved east", name: "Mira", type: "move" })
+    expect(snapshot.coopStates[0]).toMatchObject({ hp: 18, saveRevision: 3, turn: 3, x: 6, y: 5 })
   })
 
   test("stress-tests larger co-op party state and combat turn order", () => {
