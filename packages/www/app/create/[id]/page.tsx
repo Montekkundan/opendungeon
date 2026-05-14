@@ -57,7 +57,7 @@ export default async function LobbyPage({ params, searchParams }: PageProps) {
               <strong>CLI WebSocket</strong>
             </div>
             <div>
-              <span>Supabase</span>
+              <span>Account</span>
               <strong>{cloudStatus.label}</strong>
             </div>
           </section>

@@ -154,7 +154,7 @@ function approvalButtonLabel(approved: boolean, hostUrl: string) {
 export default async function GmPage({ searchParams }: GmPageProps) {
   if (!supabaseConfigured()) {
     redirect(
-      "/login?next=/gm&error=Supabase%20is%20required%20for%20the%20GM%20console"
+      "/login?next=/gm&error=Account%20storage%20is%20required%20for%20the%20GM%20console"
     );
   }
 
@@ -217,7 +217,7 @@ export default async function GmPage({ searchParams }: GmPageProps) {
             <p data-slot="notice">{singleParam(params, "error")}</p>
           ) : null}
           {singleParam(params, "archived") ? (
-            <p data-slot="notice">Host snapshot archived to Supabase.</p>
+            <p data-slot="notice">Host snapshot archived.</p>
           ) : null}
           {error ? <p data-slot="notice">World sync failed: {error}</p> : null}
           {eventsError ? (
@@ -325,8 +325,8 @@ export default async function GmPage({ searchParams }: GmPageProps) {
                 ) : (
                   <p>
                     Create or select a world, then draft a difficulty patch.
-                    Drafts are stored as `gm-patch-draft` events in Supabase so
-                    the live host can later consume approved changes.
+                    Drafts are stored as `gm-patch-draft` events so the live
+                    host can later consume approved changes.
                   </p>
                 )}
               </section>
@@ -393,7 +393,7 @@ export default async function GmPage({ searchParams }: GmPageProps) {
               </section>
 
               <section>
-                <h2>Archive to Supabase</h2>
+                <h2>Archive host state</h2>
                 <HostArchiveControl
                   hostBridge={hostBridge}
                   selectedWorldId={selectedWorldId}
@@ -609,7 +609,7 @@ function HostArchiveControl({
       <input name="worldId" type="hidden" value={selectedWorldId} />
       <p>
         Save players, host-owned command results, action log entries, combat
-        state, patches, and sync warnings as an owner-scoped Supabase event.
+        state, patches, and sync warnings as an owner-scoped archive event.
       </p>
       <Button type="submit">Archive host state</Button>
     </form>

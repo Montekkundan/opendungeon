@@ -161,8 +161,8 @@ body {
   --color-border: hsl(0, 3%, 28%);
   --color-border-weak: hsl(0, 4%, 23%);
   --color-accent: #00cc7a;
-  --padding: 5rem;
-  --vertical-padding: 4rem;
+  --padding: clamp(1.5rem, 5vw, 4.5rem);
+  --vertical-padding: 3.25rem;
   display: flex;
   flex-direction: column;
   gap: var(--vertical-padding);
@@ -182,7 +182,7 @@ body {
 }
 
 [data-page="opendungeon"] p {
-  line-height: 2;
+  line-height: 1.7;
 }
 
 [data-component="container"] {
@@ -198,11 +198,11 @@ body {
   top: 0;
   z-index: 10;
   display: flex;
-  gap: 24px;
+  gap: 20px;
   align-items: center;
   justify-content: space-between;
-  min-height: 80px;
-  padding: 24px var(--padding);
+  min-height: 72px;
+  padding: 20px var(--padding);
   background: color-mix(in srgb, var(--color-background) 94%, transparent);
   border-bottom: 1px solid var(--color-border-weak);
   backdrop-filter: blur(12px);
@@ -234,7 +234,7 @@ body {
 
 [data-component="nav-desktop"],
 [data-component="footer"] nav {
-  gap: 24px;
+  gap: 20px;
 }
 
 [data-page="opendungeon"] [data-slot="wordmark"],
@@ -256,8 +256,8 @@ body {
 [data-page="opendungeon"] [data-component="footer"] a,
 [data-page="opendungeon"] [data-slot="wordmark"],
 [data-page="opendungeon"] [data-slot="button"] {
-  font-size: 0.6875rem;
-  line-height: 1.6;
+  font-size: 0.625rem;
+  line-height: 1.7;
 }
 
 [data-component="content"] {
@@ -268,10 +268,10 @@ body {
 
 [data-component="hero"] {
   display: grid;
-  gap: 32px;
+  gap: 28px;
   justify-items: center;
   min-width: 0;
-  padding: 72px var(--padding) 56px;
+  padding: 64px var(--padding) 52px;
   text-align: center;
 }
 
@@ -303,20 +303,20 @@ body {
 [data-slot="hero-copy"] {
   width: 100%;
   min-width: 0;
-  max-width: 58rem;
+  max-width: 56rem;
   margin: 0 auto;
 }
 
 [data-slot="hero-copy"] h1 {
-  font-size: 2.75rem;
+  font-size: 2.35rem;
   line-height: 1.35;
   letter-spacing: 0;
   overflow-wrap: break-word;
 }
 
 [data-slot="hero-copy"] p {
-  max-width: 48rem;
-  margin-top: 24px;
+  max-width: 52rem;
+  margin-top: 22px;
   margin-right: auto;
   margin-left: auto;
   overflow-wrap: break-word;
@@ -329,13 +329,13 @@ body {
 [data-component="install"] {
   display: grid;
   gap: 1px;
-  width: min(48rem, 100%);
+  width: min(52rem, 100%);
   background: var(--color-border-weak);
   border: 1px solid var(--color-border-weak);
 }
 
 [data-component="install-tabs"] {
-  width: min(48rem, 100%);
+  width: min(52rem, 100%);
   min-width: 0;
   margin-top: 10px;
 }
@@ -375,8 +375,10 @@ body {
   justify-content: space-between;
   width: 100%;
   min-width: 0;
-  min-height: 52px;
-  padding: 0 16px;
+  min-height: 48px;
+  padding: 0 18px;
+  font-size: 0.95rem;
+  line-height: 1.45;
   color: var(--color-text-strong);
   text-align: left;
   background: var(--color-background-weak);
@@ -495,7 +497,7 @@ body {
 
 [data-slot="section-title"],
 [data-component="preview-copy"] {
-  max-width: 48rem;
+  max-width: 52rem;
 }
 
 [data-component="what"],
@@ -508,7 +510,7 @@ body {
 
 [data-component="what"] > *,
 [data-component="preview-copy"] > * {
-  max-width: 58rem;
+  max-width: 56rem;
   margin-right: auto;
   margin-left: auto;
 }
@@ -517,6 +519,15 @@ body {
 [data-component="preview-copy"] h3 {
   font-size: 1rem;
   line-height: 1.8;
+}
+
+[data-component="preview-copy"] p {
+  max-width: 52rem;
+}
+
+[data-component="preview-copy"] > [data-component="install"] {
+  width: 100%;
+  max-width: 56rem;
 }
 
 [data-component="what"] ul,
@@ -537,11 +548,11 @@ body {
 
 [data-component="docs"] {
   display: grid;
-  gap: 40px;
+  gap: 30px;
 }
 
 [data-component="docs"] h1 {
-  font-size: 3.25rem;
+  font-size: 2.5rem;
   line-height: 1.35;
 }
 
@@ -557,8 +568,10 @@ body {
 
 [data-component="footer"] {
   display: flex;
+  gap: 18px 24px;
+  align-items: center;
   justify-content: space-between;
-  padding: 32px var(--padding);
+  padding: 24px var(--padding);
   border-top: 1px solid var(--color-border-weak);
 }
 
@@ -634,16 +647,16 @@ body {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1px;
-  margin-top: 28px;
+  margin-top: 24px;
   background: var(--color-border-weak);
   border: 1px solid var(--color-border-weak);
 }
 
 [data-component="mode-card"] {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   align-content: start;
-  min-height: 14rem;
+  min-height: 12rem;
   padding: 18px;
   background: var(--color-background-weak);
 }
@@ -864,7 +877,7 @@ body {
 @media (max-width: 60rem) {
   [data-page="opendungeon"] {
     --padding: 1.5rem;
-    --vertical-padding: 3rem;
+    --vertical-padding: 2.75rem;
     font-size: 15px;
   }
 
@@ -886,15 +899,21 @@ body {
   [data-component="footer"] nav {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, max-content));
-    gap: 14px 18px;
+    gap: 10px 14px;
     width: 100%;
   }
 
+  [data-component="top"],
+  [data-component="footer"] {
+    padding-top: 18px;
+    padding-bottom: 18px;
+  }
+
   [data-slot="hero-copy"] h1 {
-    max-width: 10ch;
+    max-width: 16ch;
     margin-right: auto;
     margin-left: auto;
-    font-size: 1.45rem;
+    font-size: 1.25rem;
   }
 
   [data-slot="hero-copy"],
@@ -906,7 +925,7 @@ body {
   }
 
   [data-component="docs"] h1 {
-    font-size: 2rem;
+    font-size: 1.7rem;
   }
 
   [data-component="install-tabs"] [data-slot="install-tab-list"] {
@@ -928,8 +947,8 @@ body {
     }
 
     [data-slot="hero-copy"] h1 {
-      max-width: 8ch;
-      font-size: 1.25rem;
+      max-width: 15ch;
+      font-size: 1rem;
     }
 
     [data-component="install-tabs"] [data-slot="install-tab-list"] {

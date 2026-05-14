@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 
 function configuredRedirect() {
   if (!supabaseConfigured()) {
-    redirect("/login?error=Supabase%20is%20not%20configured");
+    redirect("/login?error=Account%20login%20is%20not%20configured");
   }
 }
 

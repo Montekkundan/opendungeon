@@ -24,7 +24,7 @@ export const gameModes = [
     summary:
       "A Dungeon Master page where a logged-in GM watches players and uses AI-assisted tools to create world-specific lore, levels, quests, and sprites.",
     details:
-      "GM-created content is saved per world in Supabase and must stay separate from canonical single-player assets and story.",
+      "GM-created content is saved per world and must stay separate from canonical single-player assets and story.",
   },
 ] as const;
 
