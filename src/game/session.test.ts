@@ -23,6 +23,7 @@ import {
   useInventoryItemAt,
   usePotion,
   addToast,
+  applyGmPatchOperations,
   buildHubStation,
   cycleContentPack,
   cycleSharedFarmPermission,
@@ -230,6 +231,29 @@ describe("game session", () => {
     expect(["cartographer", "wound-surgeon", "shrine-keeper", "jailer"].some((kind) => kinds.has(kind as ActorId))).toBe(true)
     expect(["gallows-wisp", "rust-squire", "carrion-moth", "crypt-mimic"].some((kind) => kinds.has(kind as ActorId))).toBe(true)
     expect(dungeon.actors.every((actor) => tileAt(dungeon, actor.position) !== "wall")).toBe(true)
+  })
+
+  test("applies validated GM patch operations to live enemy pressure", () => {
+    const session = createSession(1234)
+    addEnemyBesidePlayer(session, "gm-slime", "slime", 4, 1)
+    const enemy = session.dungeon.actors.find((actor) => actor.id === "gm-slime")
+    expect(enemy).toBeDefined()
+    const hp = enemy!.hp
+    const damage = enemy!.damage
+
+    const result = applyGmPatchOperations(session, [
+      { path: "rules.enemyHpMultiplier", value: 1.5 },
+      { path: "rules.enemyDamageBonus", value: 2 },
+      { path: `floors.${session.floor}.encounterBudget`, value: 5 },
+      { path: "lore.gmBriefing", value: "The GM adds pressure without changing the canonical story." },
+    ])
+
+    expect(result.applied).toBeGreaterThan(0)
+    expect(enemy!.maxHp).toBeGreaterThan(hp)
+    expect(enemy!.damage).toBe(damage + 2)
+    expect(enemy!.ai?.alerted).toBe(true)
+    expect(session.log[0]).toContain("GM patch applied")
+    expect(session.toasts[0]?.title).toBe("GM rules applied")
   })
 
   test("bumping a friendly NPC opens conversation instead of combat", () => {

@@ -2,6 +2,7 @@ import { FrameBufferRenderable, createCliRenderer, type KeyEvent, type MouseEven
 import WebSocket from "ws"
 import {
   addToast,
+  applyGmPatchOperations,
   applyOpeningStoryBranch,
   createNextDescentSession,
   createSession,
@@ -1992,9 +1993,10 @@ function applyGmPatchesFromSnapshot(snapshot: Partial<LobbySnapshot>) {
     const title = String(patch.title || "GM patch").trim() || "GM patch"
     const briefing = String(patch.briefing || "The GM changed the table pressure.").trim()
     const difficulty = String(patch.difficulty || "steady")
-    model.session.log.unshift(`GM patch: ${title}. ${briefing}`)
+    model.session.log.unshift(`GM patch received: ${title}. ${briefing}`)
     while (model.session.log.length > 8) model.session.log.pop()
-    addToast(model.session, "GM patch", `${title}: ${briefing}`, difficulty === "easier" ? "success" : "warning")
+    const result = applyGmPatchOperations(model.session, Array.isArray(patch.operations) ? patch.operations : [])
+    if (!result.applied) addToast(model.session, "GM patch", `${title}: ${briefing}`, difficulty === "easier" ? "success" : "warning")
   }
 }
 

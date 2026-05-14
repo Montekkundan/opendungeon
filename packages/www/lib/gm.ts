@@ -64,6 +64,7 @@ export interface GmHostDeliveredPatch {
   difficulty: GmDifficultyLevel;
   id: string;
   operationCount: number;
+  operations: GmPatchOperation[];
   title: string;
 }
 

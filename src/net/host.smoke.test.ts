@@ -48,7 +48,10 @@ test("host starts, accepts two players plus a spectator, syncs state, disconnect
         title: "Make Floor 2 harder",
         difficulty: "harder",
         briefing: "The GM adds guards but leaves a clever route.",
-        operations: [{ path: "rules.enemyHpMultiplier" }, { path: "floors.2.encounterBudget" }],
+        operations: [
+          { path: "rules.enemyHpMultiplier", value: 1.25 },
+          { path: "floors.2.encounterBudget", value: 5 },
+        ],
       }),
     })
     expect(gmPatch).toMatchObject({ id: "gm-hard-room", difficulty: "harder", operationCount: 2 })

@@ -58,12 +58,19 @@ export type RaceResult = {
   submittedAt: number
 }
 
+export type GmDeliveredPatchOperation = {
+  path: string
+  reason: string
+  value: string | number | boolean
+}
+
 export type GmDeliveredPatch = {
   id: string
   title: string
   difficulty: "easier" | "steady" | "harder" | "deadly"
   briefing: string
   operationCount: number
+  operations: GmDeliveredPatchOperation[]
   approvedAt: number
 }
 
@@ -190,7 +197,7 @@ export class MultiplayerLobbyState {
     return result
   }
 
-  deliverGmPatch(input: Partial<GmDeliveredPatch> & { operations?: unknown[] }) {
+  deliverGmPatch(input: Omit<Partial<GmDeliveredPatch>, "operations"> & { operations?: unknown[] }) {
     const patch = normalizeGmPatch(input, this.now())
     this.gmPatches.set(patch.id, patch)
     return patch
@@ -234,16 +241,40 @@ function normalizeRaceResult(input: Partial<RaceResult>, submittedAt = Date.now(
   }
 }
 
-function normalizeGmPatch(input: Partial<GmDeliveredPatch> & { operations?: unknown[] }, approvedAt = Date.now()): GmDeliveredPatch {
+function normalizeGmPatch(input: Omit<Partial<GmDeliveredPatch>, "operations"> & { operations?: unknown[] }, approvedAt = Date.now()): GmDeliveredPatch {
   const difficulty = String(input.difficulty || "steady")
+  const operations = Array.isArray(input.operations) ? input.operations.flatMap(normalizeGmPatchOperation) : []
   return {
     id: cleanPatchId(input.id),
     title: String(input.title || "GM patch").replace(/[^\w .,:;!?'"()/-]/g, "").trim().slice(0, 80) || "GM patch",
     difficulty: difficulty === "easier" || difficulty === "harder" || difficulty === "deadly" ? difficulty : "steady",
     briefing: String(input.briefing || "").replace(/[^\w .,:;!?'"()/-]/g, "").trim().slice(0, 280),
-    operationCount: Array.isArray(input.operations) ? input.operations.length : positiveInt(input.operationCount),
+    operationCount: operations.length || positiveInt(input.operationCount),
+    operations,
     approvedAt,
   }
+}
+
+function normalizeGmPatchOperation(input: unknown): GmDeliveredPatchOperation[] {
+  if (!input || typeof input !== "object") return []
+  const record = input as Record<string, unknown>
+  const path = String(record.path || "").replace(/[^\w.-]/g, "").slice(0, 80)
+  const value = normalizeGmPatchValue(record.value)
+  if (!path || value === null) return []
+  return [
+    {
+      path,
+      reason: String(record.reason || "").replace(/[^\w .,:;!?'"()/-]/g, "").trim().slice(0, 160),
+      value,
+    },
+  ]
+}
+
+function normalizeGmPatchValue(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "boolean") return value
+  if (typeof value === "string") return value.replace(/[^\w .,:;!?'"()/-]/g, "").trim().slice(0, 280)
+  return null
 }
 
 function sortLeaderboard(results: RaceResult[]) {

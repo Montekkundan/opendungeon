@@ -40,7 +40,10 @@ describe("multiplayer lobby state", () => {
       title: "Make the shrine fight harder",
       difficulty: "harder",
       briefing: "More guards arrive, but the wounded path still works.",
-      operations: [{ path: "rules.enemyHpMultiplier" }, { path: "floors.2.encounterBudget" }],
+      operations: [
+        { path: "rules.enemyHpMultiplier", value: 1.25 },
+        { path: "floors.2.encounterBudget", value: 5 },
+      ],
     })
 
     expect(patch).toMatchObject({ id: "gm-hard-room", difficulty: "harder", operationCount: 2 })
@@ -49,6 +52,7 @@ describe("multiplayer lobby state", () => {
       id: "gm-hard-room",
       operationCount: 2,
     })
+    expect(lobby.snapshot().gmPatches[0]?.operations.map((operation) => operation.path)).toEqual(["rules.enemyHpMultiplier", "floors.2.encounterBudget"])
   })
 
   test("stress-tests larger co-op party state and combat turn order", () => {

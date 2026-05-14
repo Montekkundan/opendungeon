@@ -459,6 +459,17 @@ export type GameSession = {
   equipment: Partial<Record<EquipmentSlot, EquipmentItem>>
 }
 
+export type GmPatchOperationInput = {
+  path?: unknown
+  reason?: unknown
+  value?: unknown
+}
+
+export type GmPatchApplyResult = {
+  applied: number
+  message: string
+}
+
 const heroTitles: Record<HeroClass, string> = {
   warden: "Warden of Stone",
   arcanist: "Arcanist of Ash",
@@ -4300,6 +4311,95 @@ function applyStrategicDescentPressure(session: GameSession) {
   placeStrategicGuards(session, tier)
   session.log.unshift(`Strategic pressure tier ${tier}: enemies have more HP, stronger roles, and tighter guards.`)
   trimLog(session)
+}
+
+const gmFloorEncounterPath = /^floors\.(\d+)\.encounterBudget$/
+
+export function applyGmPatchOperations(session: GameSession, operations: readonly GmPatchOperationInput[]): GmPatchApplyResult {
+  if (!Array.isArray(operations) || operations.length === 0) return { applied: 0, message: "No GM operations to apply." }
+  let applied = 0
+  const notes: string[] = []
+
+  for (const operation of operations) {
+    const path = String(operation.path || "")
+    if (path === "rules.enemyHpMultiplier") {
+      const multiplier = clampNumber(operation.value, 0.5, 2)
+      applied += applyGmEnemyHpMultiplier(session, multiplier)
+      notes.push(`enemy HP x${multiplier.toFixed(2)}`)
+      continue
+    }
+    if (path === "rules.enemyDamageBonus") {
+      const bonus = Math.trunc(clampNumber(operation.value, -3, 3))
+      applied += applyGmEnemyDamageBonus(session, bonus)
+      notes.push(`enemy damage ${formatSigned(bonus)}`)
+      continue
+    }
+    const floorMatch = gmFloorEncounterPath.exec(path)
+    if (floorMatch) {
+      const floor = Number(floorMatch[1])
+      if (floor === session.floor) {
+        const budget = Math.trunc(clampNumber(operation.value, 0, 12))
+        applied += applyGmEncounterBudget(session, budget)
+        notes.push(`encounter pressure ${budget}`)
+      }
+      continue
+    }
+    if (path === "lore.gmBriefing" && typeof operation.value === "string") {
+      pushSessionMessage(session, `GM briefing: ${operation.value.slice(0, 180)}`)
+      applied += 1
+      notes.push("briefing")
+    }
+  }
+
+  if (!applied) return { applied: 0, message: "No current-floor GM operations matched this run." }
+  const message = `GM patch applied: ${notes.join(", ")}.`
+  pushSessionMessage(session, message)
+  addToast(session, "GM rules applied", message, "warning")
+  return { applied, message }
+}
+
+function applyGmEnemyHpMultiplier(session: GameSession, multiplier: number) {
+  let applied = 0
+  for (const actor of session.dungeon.actors) {
+    if (!isEnemyActorId(actor.kind)) continue
+    const maxHp = Math.max(actor.maxHp ?? actor.hp, actor.hp, 1)
+    const nextMax = Math.max(1, Math.ceil(maxHp * multiplier))
+    const delta = nextMax - maxHp
+    actor.maxHp = nextMax
+    actor.hp = clamp(actor.hp + delta, 1, nextMax)
+    applied += 1
+  }
+  return applied
+}
+
+function applyGmEnemyDamageBonus(session: GameSession, bonus: number) {
+  let applied = 0
+  for (const actor of session.dungeon.actors) {
+    if (!isEnemyActorId(actor.kind)) continue
+    actor.damage = Math.max(1, actor.damage + bonus)
+    applied += 1
+  }
+  return applied
+}
+
+function applyGmEncounterBudget(session: GameSession, budget: number) {
+  const enemies = session.dungeon.actors.filter((actor) => isEnemyActorId(actor.kind))
+  const aiBonus = Math.min(3, Math.floor(budget / 3))
+  for (const actor of enemies) {
+    if (!actor.ai) ensureEnemyAi(actor, session.dungeon.actors.indexOf(actor), session.floor)
+    if (actor.ai) {
+      actor.ai.aggroRadius += aiBonus
+      actor.ai.leashRadius += aiBonus
+      actor.ai.alerted = budget >= 5
+    }
+  }
+  if (budget >= 4) placeStrategicGuards(session, Math.min(5, Math.ceil(budget / 2)))
+  return enemies.length
+}
+
+function clampNumber(value: unknown, min: number, max: number) {
+  const number = Number(value)
+  return Number.isFinite(number) ? clamp(number, min, max) : min
 }
 
 function placeStrategicGuards(session: GameSession, tier: number) {
