@@ -110,6 +110,7 @@ Usage:
   opendungeon setup             Create local first-run directories/profile
   opendungeon doctor            Check terminal size/color and recommended tile scale
   opendungeon setup-check       Check Supabase, AI Gateway, and asset storage env
+  opendungeon smoke             Run a short headless gameplay smoke check
   opendungeon --help            Show this help
   opendungeon --version         Show the version
 
@@ -162,6 +163,30 @@ if (process.argv[2] === "setup-check") {
   const report = serverSetupReport()
   console.log(formatServerSetupReport(report))
   process.exit(report.ready ? 0 : 1)
+}
+
+if (process.argv[2] === "smoke" || process.argv.includes("--smoke")) {
+  const { builtinScenario, runScenario } = await import("./headless/scenario.js")
+  const scenario = builtinScenario("smoke")
+  if (!scenario) {
+    console.error("Could not load the built-in smoke scenario.")
+    process.exit(2)
+  }
+  const result = runScenario("install-smoke", scenario, {
+    classId: classFromEnv(),
+    heroName: defaultPlayerName(),
+    mode: modeFromEnv(),
+    seed: seedFromEnv(),
+  })
+  console.log(
+    JSON.stringify({
+      type: "smoke",
+      ok: result.ok,
+      seed: result.seed,
+      failures: result.failures,
+    })
+  )
+  process.exit(result.ok ? 0 : 1)
 }
 
 const initialSaves = listSaves()

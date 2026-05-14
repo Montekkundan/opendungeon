@@ -175,7 +175,7 @@
 ### Packaging, Release, And Cross-Platform Validation
 
 - [ ] Remove or isolate Bun-only assumptions from the globally installed `opendungeon` package so Windows/macOS/Linux users can run the published CLI reliably.
-- [ ] Add install smoke coverage for npm global install on macOS, Linux, and Windows, including `opendungeon --help`, `opendungeon doctor`, and a short run start.
+- [x] Add install smoke coverage for npm global install on macOS, Linux, and Windows, including `opendungeon --help`, `opendungeon doctor`, and a short run start.
 - [ ] Keep `bun run package:check`, `bun test`, `bun run check`, `bun pm pack --dry-run`, and Changesets status green before release.
 - [ ] Verify trusted publishing and release workflow behavior after every changeset or package metadata change.
 - [ ] Audit public repo hygiene before pushing: no `.env.local`, local saves, active-run locks, Supabase secrets, or accidental checkpoint artifacts.
