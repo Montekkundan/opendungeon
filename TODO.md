@@ -19,7 +19,7 @@
 - [x] Talent unlock bug: unlocked talents such as Pathfinder must visibly affect available combat moves, combat strategy text, or the relevant stats. If a talent is passive-only, label it as passive in the state/character screen instead of implying it should appear as a fight move.
 - [x] Inventory hover/detail bug: the inventory detail pane should describe the hovered/highlighted item, not a stale or previously selected item.
 - [x] Item action design bug: items that currently say "No apply action yet" need real handling. Decide and implement inspect/equip/use/sell/drop/stash paths, and make unavailable actions explain what the item is for.
-- [ ] Add a fuller inventory action menu after the no-op bug fix: explicit equip, drop, stash, compare, and village sell flows instead of only Enter-use plus passive explanations.
+- [x] Add a fuller inventory action menu after the no-op bug fix: explicit equip, drop, stash, compare, and village sell flows instead of only Enter-use plus passive explanations.
 - [x] NPC conversation choice layout: long choices such as Shrine Keeper "Take blessing" and "Ask relic lore" should render as readable stacked rows instead of narrow hidden columns.
 - [x] Village text wrapping: selected-location descriptions, market logs, and long village status lines should wrap in their panels instead of hiding important instructions behind ellipses.
 - [ ] Text truncation regression: Shrine Keeper choices such as "Take blessing" / "Ask relic..." are cut off. Audit the entire game for `...` on important instructions, choices, item text, village panels, NPC dialogue, and action prompts; wrap, scroll, or add a detail pane instead.

@@ -10,8 +10,10 @@ import {
   focusCostForSkill,
   grantXp,
   interactWithWorld,
+  inventoryActionsForItem,
   inventoryItemDescription,
   normalizeSessionAfterLoad,
+  performInventoryAction,
   performCombatAction,
   recordTutorialAction,
   rest,
@@ -174,7 +176,7 @@ describe("game session", () => {
     const session = createSession(1234)
     session.inventory.unshift("Bound relic")
 
-    const passive = useInventoryItemAt(session, 0)
+    const passive = performInventoryAction(session, 0, "use")
     const empty = useInventoryItemAt(session, 99)
 
     expect(passive.used).toBe(false)
@@ -182,6 +184,31 @@ describe("game session", () => {
     expect(passive.message).not.toContain("No apply action")
     expect(empty.message).toBe("Empty slot selected.")
     expect(inventoryItemDescription("Dew vial")).toContain("Consumable")
+  })
+
+  test("inventory actions support equip stash sell and drop flows", () => {
+    const session = createSession(1234)
+    const actions = inventoryActionsForItem(session, 0)
+
+    expect(actions.map((action) => action.id)).toEqual(["inspect", "use", "equip", "drop", "stash", "sell"])
+    expect(performInventoryAction(session, 0, "equip")).toMatchObject({ used: true })
+    expect(session.equipment.weapon?.name).toBe("Rusty blade")
+
+    unlockHub(session)
+    session.hub.coins = 80
+    expect(buildHubStation(session, "storage")).toBe(true)
+    session.inventory.unshift("Tool part bundle")
+    expect(performInventoryAction(session, 0, "stash")).toMatchObject({ used: true })
+    expect(session.hub.village.sharedFarm.storage[0]).toBe("Tool part bundle")
+
+    session.inventory.unshift("Bound relic")
+    const coins = session.hub.coins
+    expect(performInventoryAction(session, 0, "sell")).toMatchObject({ used: true })
+    expect(session.hub.coins).toBeGreaterThan(coins)
+
+    session.inventory.unshift("Bent lockpick")
+    expect(performInventoryAction(session, 0, "drop")).toMatchObject({ used: true })
+    expect(session.inventory).not.toContain("Bent lockpick")
   })
 
   test("tracks Book knowledge and event toasts for the amnesia story", () => {

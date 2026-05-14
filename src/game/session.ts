@@ -288,6 +288,16 @@ export type EquipmentItem = {
   activeText: string
 }
 
+export type InventoryActionId = "inspect" | "use" | "equip" | "drop" | "stash" | "sell"
+
+export type InventoryAction = {
+  id: InventoryActionId
+  key: string
+  label: string
+  enabled: boolean
+  hint: string
+}
+
 export type HubStation = {
   id: HubStationId
   name: string
@@ -1863,6 +1873,92 @@ export function useInventoryItemAt(session: GameSession, index: number) {
   return { used: false, message: `${item}: ${inventoryItemUseHint(item)}` }
 }
 
+export function inventoryActionsForItem(session: GameSession, index: number): InventoryAction[] {
+  const item = session.inventory[index]
+  if (!item) {
+    return [
+      { id: "inspect", key: "?", label: "inspect", enabled: false, hint: "Empty slot." },
+      { id: "use", key: "Enter", label: "use", enabled: false, hint: "No item selected." },
+      { id: "equip", key: "E", label: "equip", enabled: false, hint: "No gear selected." },
+      { id: "drop", key: "X", label: "drop", enabled: false, hint: "No item selected." },
+      { id: "stash", key: "S", label: "stash", enabled: false, hint: "No item selected." },
+      { id: "sell", key: "V", label: "sell", enabled: false, hint: "No item selected." },
+    ]
+  }
+
+  const slot = inventoryEquipmentSlot(item)
+  const sellableValue = sellValue(item)
+  const usable = isConsumableInventoryItem(item)
+  const storageBuilt = Boolean(session.hub.unlocked && session.hub.stations.storage.built)
+  return [
+    { id: "inspect", key: "?", label: "inspect", enabled: true, hint: inventoryItemDescription(item) },
+    { id: "use", key: "Enter", label: "use", enabled: usable, hint: usable ? "Consumes the item now." : inventoryItemUseHint(item) },
+    { id: "equip", key: "E", label: "equip", enabled: Boolean(slot), hint: slot ? `Equip as ${slot}.` : "This item is not gear." },
+    { id: "drop", key: "X", label: "drop", enabled: true, hint: "Remove this item from the pack." },
+    { id: "stash", key: "S", label: "stash", enabled: storageBuilt, hint: storageBuilt ? "Move to village storage." : "Build Storage in the village first." },
+    { id: "sell", key: "V", label: "sell", enabled: session.hub.unlocked && sellableValue > 0, hint: sellableValue > 0 ? `Sell for ${sellableValue} village coins.` : "No village sale value." },
+  ]
+}
+
+export function performInventoryAction(session: GameSession, index: number, action: InventoryActionId) {
+  if (action === "use") return useInventoryItemAt(session, index)
+  const item = session.inventory[index]
+  if (!item) return { used: false, message: "Empty slot selected." }
+
+  if (action === "inspect") return { used: false, message: `${item}: ${inventoryItemDescription(item)} ${inventoryItemUseHint(item)}` }
+  if (action === "equip") return equipInventoryItem(session, index, item)
+  if (action === "drop") return dropInventoryItem(session, index, item)
+  if (action === "stash") return stashInventoryItem(session, index, item)
+  if (action === "sell") return sellInventoryItem(session, index, item)
+  return { used: false, message: `${item}: no action mapped.` }
+}
+
+function equipInventoryItem(session: GameSession, _index: number, item: string) {
+  const slot = inventoryEquipmentSlot(item)
+  if (!slot) return { used: false, message: `${item} is not gear.` }
+  const equipped = equipmentFromInventoryItem(item, slot)
+  session.equipment[slot] = equipped
+  const message = `${item} equipped as ${slot}.`
+  pushSessionMessage(session, message)
+  addToast(session, "Equipped", `${item} is now your ${slot}.`, "success")
+  return { used: true, message }
+}
+
+function dropInventoryItem(session: GameSession, index: number, item: string) {
+  session.inventory.splice(index, 1)
+  const message = `${item} dropped from the pack.`
+  pushSessionMessage(session, message)
+  addToast(session, "Dropped", item, "info")
+  return { used: true, message }
+}
+
+function stashInventoryItem(session: GameSession, index: number, item: string) {
+  session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  if (!session.hub.unlocked) return { used: false, message: "Village storage is locked until the first clear." }
+  if (!session.hub.stations.storage.built) return { used: false, message: "Build Storage in the village before stashing pack items." }
+  session.inventory.splice(index, 1)
+  session.hub.village.sharedFarm.storage.unshift(item)
+  session.hub.village.sharedFarm.storage = session.hub.village.sharedFarm.storage.slice(0, 50)
+  const message = `${item} moved to village storage.`
+  pushSessionMessage(session, message)
+  addToast(session, "Stashed", item, "success")
+  return { used: true, message }
+}
+
+function sellInventoryItem(session: GameSession, index: number, item: string) {
+  session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  if (!session.hub.unlocked) return { used: false, message: "Village market is locked until the first clear." }
+  const value = sellValue(item)
+  if (value <= 0) return { used: false, message: `${item} has no village sale value.` }
+  session.inventory.splice(index, 1)
+  session.hub.coins += value
+  session.hub.lootSold += 1
+  const message = `${item} sold for ${value} village coins.`
+  pushSessionMessage(session, message)
+  addToast(session, "Sold", `${item} +${value} village coins.`, "success")
+  return { used: true, message }
+}
+
 function consumeInventoryItem(session: GameSession, index: number, item: string, effect: { hp: number; focus: number; title: string; text: string }) {
   const beforeHp = session.hp
   const beforeFocus = session.focus
@@ -1880,6 +1976,36 @@ function consumeInventoryItem(session: GameSession, index: number, item: string,
   if (session.combat.active) finishCombatRound(session, true)
   else trimLog(session)
   return { used: true, message }
+}
+
+function isConsumableInventoryItem(item: string) {
+  return /potion|vial|broth|food|ration/i.test(item)
+}
+
+function inventoryEquipmentSlot(item: string): EquipmentSlot | null {
+  const lower = item.toLowerCase()
+  if (/blade|sword|axe|mace|rapier|focus|spanner|knife/i.test(lower)) return "weapon"
+  if (/shield|buckler|cloak/i.test(lower)) return "armor"
+  if (/relic|charm|token|spark|shard/i.test(lower)) return "relic"
+  return null
+}
+
+function equipmentFromInventoryItem(item: string, slot: EquipmentSlot): EquipmentItem {
+  const lower = item.toLowerCase()
+  const explicitBonus = Number(item.match(/\+(\d+)/)?.[1] ?? 0)
+  const rarity: EquipmentRarity = /boss|grave|bound|shrine/i.test(item) ? "rare" : /cursed|ash|parry|oath/i.test(item) ? "uncommon" : "common"
+  const statBonuses: Partial<HeroStats> = {}
+  if (slot === "armor") statBonuses.endurance = rarity === "rare" ? 2 : 1
+  if (slot === "relic") statBonuses.luck = rarity === "rare" ? 2 : 1
+  return {
+    id: cleanId(`${slot}-${item}`),
+    name: cleanBookText(item, 48),
+    slot,
+    rarity,
+    bonusDamage: slot === "weapon" ? Math.max(explicitBonus, rarity === "rare" ? 2 : rarity === "uncommon" ? 1 : 0) : 0,
+    statBonuses,
+    activeText: `${item} equipped from the pack.`,
+  }
 }
 
 export function inventoryItemDescription(item: string) {

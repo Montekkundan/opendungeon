@@ -309,6 +309,10 @@ test("inventory presents gold and full action labels", () => {
 
   expect(text).toContain("Gold 0")
   expect(text).toContain("Enter use")
+  expect(text).toContain("E equip")
+  expect(text).toContain("X drop")
+  expect(text).toContain("S stash off")
+  expect(text).toContain("V sell off")
   expect(text).toContain("Esc close")
 })
 
@@ -319,6 +323,7 @@ test("inventory details follow the highlighted slot exactly", () => {
 
   expect(vial).toContain("Dew vial")
   expect(vial).toContain("Consumable")
+  expect(vial).toContain("Compare: utility or loot item")
   expect(vial).not.toContain("Equipped weapon: affects")
   expect(empty).toContain("Empty slot.")
 })

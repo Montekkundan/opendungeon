@@ -23,6 +23,7 @@ import {
   focusCostForSkill,
   heroClassIds,
   hubStationIds,
+  inventoryActionsForItem,
   inventoryItemDescription,
   pointKey,
   skillCheckFormulaText,
@@ -2430,14 +2431,14 @@ function inventoryLayout(model: AppModel, width: number, height: number): Invent
   const innerW = frame.width - 6
   const innerH = frame.height - 8
   const characterW = Math.min(36, Math.max(24, Math.floor(innerW * 0.32)))
-  const character: Rect = { x: innerX, y: innerY, width: characterW, height: innerH - 4 }
+  const character: Rect = { x: innerX, y: innerY, width: characterW, height: innerH - 7 }
   const pack: Rect = {
     x: innerX + characterW + 2,
     y: innerY,
     width: Math.max(28, innerW - characterW - 2),
-    height: innerH - 4,
+    height: innerH - 7,
   }
-  const details: Rect = { x: innerX, y: frame.y + frame.height - 7, width: innerW, height: 3 }
+  const details: Rect = { x: innerX, y: frame.y + frame.height - 10, width: innerW, height: 6 }
   const apply: Rect = { x: frame.x + frame.width - 34, y: frame.y + frame.height - 3, width: 14, height: 1 }
   const close: Rect = { x: frame.x + frame.width - 18, y: frame.y + frame.height - 3, width: 12, height: 1 }
   const columns = clamp(Math.floor((pack.width - 4) / 12), 3, 6)
@@ -2562,14 +2563,19 @@ function drawInventoryDialog(canvas: Canvas, model: AppModel) {
 
   drawPanel(canvas, layout.details.x, layout.details.y, layout.details.width, layout.details.height, "Selection", UI.edgeDim)
   if (selectedItem) {
+    const actions = inventoryActionsForItem(model.session, selectedIndex)
+    const enabledActions = actions.map((action) => `${action.key} ${action.label}${action.enabled ? "" : " off"}`)
     drawMiniIcon(canvas, layout.details.x + 2, layout.details.y + 1, inventorySprite(selectedItem), 6, 1)
-    canvas.write(layout.details.x + 10, layout.details.y + 1, trim(selectedItem, Math.floor(layout.details.width * 0.34)), UI.gold, UI.panel)
-    canvas.write(layout.details.x + Math.floor(layout.details.width * 0.42), layout.details.y + 1, trim(inventoryItemDescription(selectedItem), Math.floor(layout.details.width * 0.44)), UI.soft, UI.panel)
+    canvas.write(layout.details.x + 10, layout.details.y + 1, trim(selectedItem, Math.floor(layout.details.width * 0.32)), UI.gold, UI.panel)
+    writeWrapped(canvas, layout.details.x + Math.floor(layout.details.width * 0.36), layout.details.y + 1, Math.floor(layout.details.width * 0.58), [inventoryItemDescription(selectedItem)], 2, UI.soft, UI.panel)
+    const compare = inventoryCompareText(model.session, selectedItem)
+    canvas.write(layout.details.x + 10, layout.details.y + 3, trim(compare, layout.details.width - 12), UI.muted, UI.panel)
+    writeWrapped(canvas, layout.details.x + 2, layout.details.y + 4, layout.details.width - 4, [enabledActions.join("  ")], 2, UI.ink, UI.panel)
   } else {
     canvas.write(layout.details.x + 2, layout.details.y + 1, model.session.inventory.length ? "Empty slot." : "Pack is empty.", UI.soft, UI.panel)
   }
 
-  if (model.message) canvas.write(layout.details.x + 2, layout.details.y + 2, trim(model.message, layout.details.width - 4), UI.muted, UI.panel)
+  if (model.message) writeWrapped(canvas, layout.details.x + 2, layout.details.y + layout.details.height - 2, layout.details.width - 4, [model.message], 2, UI.muted, UI.panel)
   drawInventoryButton(canvas, layout.apply, "Enter use", selectedItem ? UI.focus : UI.muted)
   drawInventoryButton(canvas, layout.close, "Esc close", UI.gold)
 }
@@ -2604,6 +2610,14 @@ function findInventoryByKind(inventory: string[], kind: "weapon" | "relic" | "co
   if (kind === "weapon") return inventory.find((item) => /blade|sword|lockpick/i.test(item))
   if (kind === "relic") return inventory.find((item) => /relic|shard|scroll/i.test(item))
   return inventory.find((item) => /potion|vial/i.test(item))
+}
+
+function inventoryCompareText(session: GameSession, item: string) {
+  const lower = item.toLowerCase()
+  const slot = /blade|sword|axe|mace|rapier|focus|spanner|knife/i.test(lower) ? "weapon" : /shield|buckler|cloak/i.test(lower) ? "armor" : /relic|charm|token|spark|shard/i.test(lower) ? "relic" : null
+  if (!slot) return "Compare: utility or loot item; no equipment slot."
+  const equipped = session.equipment[slot]?.name ?? "nothing"
+  return `Compare: ${slot} now ${equipped}. E equips this item.`
 }
 
 function drawStateDialog(canvas: Canvas, model: AppModel, x: number, y: number, width: number, height: number) {

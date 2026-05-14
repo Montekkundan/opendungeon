@@ -26,6 +26,7 @@ import {
   playLocalCutscene,
   prepareFood,
   performCombatAction,
+  performInventoryAction,
   refreshBalanceDashboard,
   recordTutorialAction,
   rest,
@@ -40,7 +41,6 @@ import {
   upgradeWeapon,
   visitVillageLocation,
   usePotion,
-  useInventoryItemAt,
   type GameSession,
   type HeroClass,
   type MultiplayerMode,
@@ -486,7 +486,12 @@ function handleInventoryKey(key: KeyEvent) {
   if (isRightKey(key)) setInventoryIndex(model.inventoryIndex + 1)
   if (isUpKey(key)) setInventoryIndex(model.inventoryIndex - grid.columns)
   if (isDownKey(key)) setInventoryIndex(model.inventoryIndex + grid.columns)
-  if (isConfirmKey(key)) applySelectedInventoryItem()
+  if (isConfirmKey(key)) applySelectedInventoryAction("use")
+  if (key.name === "e") applySelectedInventoryAction("equip")
+  if (key.name === "x" || key.name === "backspace" || key.name === "delete") applySelectedInventoryAction("drop")
+  if (key.name === "s") applySelectedInventoryAction("stash")
+  if (key.name === "v") applySelectedInventoryAction("sell")
+  if (key.name === "?" || (key.shift && key.name === "/")) applySelectedInventoryAction("inspect")
 }
 
 function handleQuestsKey(key: KeyEvent) {
@@ -707,7 +712,7 @@ function handleMouseDown(event: OpenTuiMouseEvent) {
   event.stopPropagation()
 
   if (hit.kind === "close") closeInventory()
-  if (hit.kind === "apply") applySelectedInventoryItem()
+  if (hit.kind === "apply") applySelectedInventoryAction("use")
   if (hit.kind === "slot") {
     setInventoryIndex(hit.index)
     model.inventoryDragIndex = model.session.inventory[hit.index] ? hit.index : null
@@ -757,12 +762,13 @@ function setInventoryIndex(index: number) {
   model.inventoryIndex = clamp(index, 0, Math.max(0, grid.slotCount - 1))
 }
 
-function applySelectedInventoryItem() {
+function applySelectedInventoryAction(action: Parameters<typeof performInventoryAction>[2]) {
   const grid = inventoryGridInfo(model, renderer.terminalWidth, renderer.terminalHeight)
   const index = clamp(model.inventoryIndex, 0, Math.max(0, grid.slotCount - 1))
-  const result = useInventoryItemAt(model.session, index)
+  const result = performInventoryAction(model.session, index, action)
   model.message = result.message
   setInventoryIndex(index)
+  if (result.used) playAudioEvent(action === "drop" ? "menu-cancel" : "item-pickup")
 }
 
 function moveInventoryItem(source: number, target: number) {
