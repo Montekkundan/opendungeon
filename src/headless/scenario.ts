@@ -26,6 +26,8 @@ export type ScenarioLine = {
     | "add-xp"
     | "set-hero-name"
     | "damage-player"
+    | "complete-tutorial"
+    | "complete-first-clear"
     | "login-local-test"
     | "login-expired-test"
     | "render"
@@ -387,6 +389,41 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
     ]
   }
 
+  if (name === "first-clear-loop") {
+    return [
+      { command: "complete-tutorial" },
+      { assert: { path: "session.floor", equals: 2 } },
+      { assert: { path: "session.tutorial.handoffShown", equals: true } },
+      { assert: { path: "session.world.quests.0.title", equals: "Find the Final Gate" } },
+      { command: "add-item", item: "Boss memory shard" },
+      { command: "add-item", item: "Recovered fossil" },
+      { command: "add-item", item: "Bound relic" },
+      { command: "add-item", item: "Village deed" },
+      { command: "complete-first-clear" },
+      { assert: { path: "session.status", equals: "victory" } },
+      { assert: { path: "session.hub.unlocked", equals: true } },
+      { action: "open-village" },
+      { assert: { path: "panel", equals: "village" } },
+      { action: "sell-loot" },
+      { assert: { path: "session.hub.coins", min: 95 } },
+      { action: "build-blacksmith" },
+      { assert: { path: "session.hub.stations.blacksmith.built", equals: true } },
+      { action: "build-kitchen" },
+      { assert: { path: "session.hub.stations.kitchen.built", equals: true } },
+      { action: "prepare-food" },
+      { assert: { path: "session.inventory", contains: "Travel rations" } },
+      { action: "start-next-descent" },
+      { assert: { path: "session.status", equals: "running" } },
+      { assert: { path: "session.floor", equals: 1 } },
+      { assert: { path: "session.seed", min: 1 } },
+      { assert: { path: "session.hub.unlocked", equals: true } },
+      { assert: { path: "session.hub.stations.blacksmith.built", equals: true } },
+      { assert: { path: "session.hub.stations.kitchen.built", equals: true } },
+      { assert: { path: "session.inventory", contains: "Travel rations" } },
+      { command: "check-invariants" },
+    ]
+  }
+
   if (name === "run-mutators") {
     return [
       { action: "unlock-hub" },
@@ -395,7 +432,7 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
       { action: "toggle-cursed-floors" },
       { assert: { path: "session.hub.activeMutators", contains: "cursed-floors" } },
       { action: "toggle-boss-rush" },
-      { assert: { path: "session.finalFloor", max: 3 } },
+      { assert: { path: "session.finalFloor", max: 2 } },
       { command: "check-invariants" },
     ]
   }
@@ -594,6 +631,14 @@ function runScenarioLine(env: HeadlessGameEnv, line: ScenarioLine) {
   }
   if (line.command === "damage-player") {
     env.damagePlayer(number(line.damage ?? line.value))
+    return { type: "setup", command: line.command }
+  }
+  if (line.command === "complete-tutorial") {
+    env.completeTutorialAndReachFloor2()
+    return { type: "setup", command: line.command }
+  }
+  if (line.command === "complete-first-clear") {
+    env.completeFirstClear()
     return { type: "setup", command: line.command }
   }
   if (line.command === "login-local-test") {

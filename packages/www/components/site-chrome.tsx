@@ -12,6 +12,7 @@ export function Header() {
         <Link href="/docs">Docs</Link>
         <Link href="/changelog">Changelog</Link>
         <Link href="/create">Create</Link>
+        <Link href="/gm">GM</Link>
         <Link href="/profile">Profile</Link>
         <a
           aria-label="Open opendungeon on GitHub"
@@ -34,6 +35,7 @@ export function Footer() {
         <Link href="/docs">Docs</Link>
         <Link href="/changelog">Changelog</Link>
         <Link href="/create">Create</Link>
+        <Link href="/gm">GM</Link>
         <a
           aria-label="Open opendungeon on GitHub"
           href={GITHUB_REPO_URL}

@@ -51,6 +51,17 @@ bun run check
 git diff --check
 ```
 
+For a release-facing or cross-surface contribution, run the contributor pass:
+
+```txt
+bun run verify:contributor
+```
+
+That command set covers gameplay rules, terminal renderer snapshots, scripted
+headless scenarios, the Next.js website verification, TypeScript, the full Bun
+test suite, compiled JS output, global npm/Bun install smoke, and package dry
+run readiness.
+
 For website-only work:
 
 ```txt
@@ -58,6 +69,25 @@ bun run www:typecheck
 bun --cwd packages/www lint
 bun run web:build
 ```
+
+Browser-check the website through Portless before shipping visible website
+changes. Start `bun run web`, then verify these routes at a desktop viewport and
+a mobile viewport:
+
+```txt
+https://opendungeon.localhost/
+https://opendungeon.localhost/docs
+https://opendungeon.localhost/changelog
+https://opendungeon.localhost/create
+https://opendungeon.localhost/create/coop-2423368-local?mode=coop&seed=2423368
+https://opendungeon.localhost/login
+https://opendungeon.localhost/profile
+```
+
+The pass condition is simple: the page loads meaningful content, no Next.js
+error overlay appears, key route text is visible, and no browser console errors
+appear. The create invite route should clearly say that Vercel hosts the invite
+instructions while live play still needs `opendungeon-host`.
 
 Use the headless runner for gameplay bugs where UI screenshots are slow or fragile:
 
@@ -73,6 +103,8 @@ Start one local lobby host:
 ```txt
 bun run host -- --host 127.0.0.1 --mode coop --seed 2423368 --port 3737
 ```
+
+Loopback binds only accept same-laptop clients, so use `http://127.0.0.1:3737` or `http://localhost:3737` for this flow. If the host prints a LAN URL, it should only be when the host is bound to `0.0.0.0` or an explicit LAN address.
 
 Then open separate terminal windows or tabs for each player:
 
@@ -93,6 +125,8 @@ Signed-in sessions use a local active-run lock. Starting the same signed-in acco
 ```txt
 OPENDUNGEON_TERMINAL_APP=Ghostty bun run dev -- join http://127.0.0.1:3737
 ```
+
+The lobby host also guards signed-in identities over WebSocket joins. If the same account is already connected to the lobby, the second client receives an already-in-this-lobby message. Guest clients do not send an account identity and can still run side by side.
 
 For LAN testing from another device, bind the host to all interfaces and use the LAN URL printed by the host:
 

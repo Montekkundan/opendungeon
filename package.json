@@ -63,13 +63,15 @@
     "package:release": "bun run scripts/package-release.ts",
     "package:check": "bun run check && bun test && bun run build:js && bun run package:install-smoke && bun pm pack --dry-run",
     "package:install-smoke": "bun run scripts/package-install-smoke.ts",
+    "verify:gameplay": "bun test src/game/session.test.ts src/ui/screens.test.ts src/net/host.smoke.test.ts && bun run headless -- --scenario smoke --assert && bun run headless -- --scenario first-clear-loop --assert",
+    "verify:contributor": "bun run verify:gameplay && bun run www:verify && bun run package:check",
     "prepack": "bun run build:js",
     "prepublishOnly": "bun run check && bun test && bun run build:js",
     "check": "tsc --noEmit",
     "test": "bun test"
   },
   "dependencies": {
-    "@opentui/core": "^0.2.4",
+    "@opentui/core": "^0.2.8",
     "@supabase/supabase-js": "^2.105.3",
     "bun": "^1.3.13",
     "hono": "^4.12.18",

@@ -20,6 +20,11 @@ async function origin() {
   return `${proto}://${host}`;
 }
 
+function safeNext(formData: FormData) {
+  const next = String(formData.get("next") ?? "/profile");
+  return next.startsWith("/") && !next.startsWith("//") ? next : "/profile";
+}
+
 export async function login(formData: FormData) {
   configuredRedirect();
   const supabase = await createClient();
@@ -29,7 +34,7 @@ export async function login(formData: FormData) {
   if (error) {
     redirect(`/login?error=${encodeURIComponent(error.message)}`);
   }
-  redirect("/profile");
+  redirect(safeNext(formData));
 }
 
 export async function signup(formData: FormData) {
@@ -41,16 +46,17 @@ export async function signup(formData: FormData) {
   if (error) {
     redirect(`/login?error=${encodeURIComponent(error.message)}`);
   }
-  redirect("/profile");
+  redirect(safeNext(formData));
 }
 
-export async function signInWithGithub() {
+export async function signInWithGithub(formData: FormData) {
   configuredRedirect();
   const supabase = await createClient();
+  const next = safeNext(formData);
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "github",
     options: {
-      redirectTo: `${await origin()}/auth/callback`,
+      redirectTo: `${await origin()}/auth/callback?next=${encodeURIComponent(next)}`,
     },
   });
   if (error) {

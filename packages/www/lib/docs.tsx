@@ -19,6 +19,7 @@ export const docGroups: ReadonlyArray<{
       { slug: "installation", title: "Installation" },
       { slug: "game-mechanics", title: "Game mechanics" },
       { slug: "controls", title: "Controls" },
+      { slug: "game-modes", title: "Game modes" },
       { slug: "multiplayer", title: "Multiplayer" },
       { slug: "supabase", title: "Supabase" },
       { slug: "deployment", title: "Deployment" },

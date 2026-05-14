@@ -1,5 +1,6 @@
 import { createRng, type Rng } from "./rng.js"
 import { isEnemyActorId, type ActorId, type EnemyActorId, type NpcActorId, type TileId } from "./domainTypes.js"
+import { defaultFinalFloor } from "./progression.js"
 
 export type Point = {
   x: number
@@ -90,7 +91,7 @@ export function createDungeon(seed: number, floor: number, width = 96, height = 
   const secrets = placeSecretRooms(tiles, rooms, rng, floor)
 
   const actors = spawnActors(tiles, rooms, rng, floor)
-  if (floor >= 5) actors.push(finalGuardian(center(lastRoom), floor))
+  if (floor >= defaultFinalFloor) actors.push(finalGuardian(center(lastRoom), floor))
 
   return {
     width,
@@ -276,8 +277,9 @@ function freeInteriorPoint(tiles: TileId[][], room: Room, rng: Rng, actors: Acto
 
 function enemyKindsForFloor(floor: number): EnemyActorId[] {
   if (floor >= 4) return ["ghoul", "necromancer", "gallows-wisp", "rust-squire", "carrion-moth", "crypt-mimic"]
-  if (floor >= 2) return ["slime", "ghoul", "gallows-wisp", "rust-squire", "carrion-moth"]
-  return ["slime", "ghoul", "rust-squire", "gallows-wisp"]
+  if (floor >= 3) return ["ghoul", "necromancer", "rust-squire", "crypt-mimic", "gallows-wisp"]
+  if (floor === 2) return ["gallows-wisp", "rust-squire", "carrion-moth", "ghoul"]
+  return ["slime", "rust-squire", "gallows-wisp"]
 }
 
 export function enemyAi(kind: ActorId, origin: Point, index = 0, floor = 1): EnemyAi {

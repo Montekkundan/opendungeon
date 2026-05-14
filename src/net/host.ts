@@ -1,12 +1,16 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import { WebSocketServer, type RawData, type WebSocket } from "ws"
-import { advertisedLobbyUrls, lobbyEnvCommand, lobbyJoinCommand, parseLobbyHostArgs, requestLobbyUrl } from "./hostConfig.js"
+import { advertisedLobbyUrls, hostListenErrorMessage, lobbyEnvCommand, lobbyJoinCommand, parseLobbyHostArgs, preferredAdvertisedLobbyUrl, requestLobbyUrl } from "./hostConfig.js"
+import { HostCommandRelay } from "./hostCommandRelay.js"
 import { MultiplayerLobbyState, loadRaceResults, saveRaceResults, type LobbyRole } from "./lobbyState.js"
 
 type LobbySocketData = {
+  accountKey?: string
+  accountLabel?: string
   id: string
   name: string
   role: LobbyRole
+  terminalApp?: string
 }
 
 type LobbyWebSocket = WebSocket & { data: LobbySocketData }
@@ -22,7 +26,7 @@ Options:
   --host <address>       Bind address. Use 0.0.0.0 for LAN/server hosting.
   --public-url <url>     Public URL printed in invites when behind a proxy or on a VPS.
   --port <port>          TCP port. Defaults to PORT or 3737.
-  --mode <coop|race>     Lobby mode.
+  --mode <coop|race>     Multiplayer lobby variant. coop shares the authored story; race is a same-seed challenge.
   --seed <number>        Shared dungeon seed.
   --invite <code>        Optional stable invite code.
   --leaderboard <path>   Persist race leaderboard JSON.
@@ -37,6 +41,7 @@ const lobby = new MultiplayerLobbyState({
   inviteCode: options.inviteCode,
   initialResults: options.leaderboardPath ? loadRaceResults(options.leaderboardPath) : [],
 })
+const commandRelay = new HostCommandRelay({ mode: options.mode, seed: options.seed })
 const sockets = new Set<LobbyWebSocket>()
 
 const server = createServer((request, response) => {
@@ -44,9 +49,14 @@ const server = createServer((request, response) => {
   const publicUrl = requestLobbyUrl(request.headers.host, options, request.headers["x-forwarded-proto"])
 
   if (url.pathname === "/health" || url.pathname === "/healthz") return sendJson(response, healthPayload())
+  if (url.pathname === "/state") return sendJson(response, lobby.snapshot())
   if (url.pathname === "/leaderboard") return sendJson(response, lobby.leaderboard())
+  if (url.pathname === "/actions") return sendJson(response, lobby.snapshot().actions)
+  if (url.pathname === "/commands") return sendJson(response, lobby.snapshot().commands)
   if (url.pathname === "/invite") return sendJson(response, invitePayload(publicUrl))
   if (url.pathname === "/finish" && request.method === "POST") return void submitResult(request, response)
+  if (url.pathname === "/gm/patches" && request.method === "GET") return sendJson(response, lobby.snapshot().gmPatches)
+  if (url.pathname === "/gm/patches" && request.method === "POST") return void submitGmPatch(request, response)
   if (url.pathname === "/") return sendText(response, 200, renderLobbyPage(publicUrl), "text/html; charset=utf-8")
 
   sendText(response, 404, "Not found")
@@ -61,7 +71,14 @@ server.on("upgrade", (request, socket, head) => {
   }
   const role: LobbyRole = url.searchParams.get("role") === "spectator" ? "spectator" : "player"
   const name = url.searchParams.get("name")?.trim() || (role === "spectator" ? "Spectator" : "Crawler")
-  const data: LobbySocketData = { id: crypto.randomUUID(), name, role }
+  const data: LobbySocketData = {
+    accountKey: cleanQueryLabel(url.searchParams.get("accountKey"), 128),
+    accountLabel: cleanQueryLabel(url.searchParams.get("accountLabel"), 80),
+    id: cleanClientId(url.searchParams.get("clientId")) || crypto.randomUUID(),
+    name,
+    role,
+    terminalApp: cleanQueryLabel(url.searchParams.get("terminalApp"), 80),
+  }
   websocketServer.handleUpgrade(request, socket, head, (socket) => {
     const ws = socket as LobbyWebSocket
     ws.data = data
@@ -70,7 +87,22 @@ server.on("upgrade", (request, socket, head) => {
 })
 
 websocketServer.on("connection", (ws: LobbyWebSocket) => {
-  lobby.join(ws.data.id, ws.data.name, ws.data.role)
+  try {
+    lobby.join(ws.data.id, ws.data.name, ws.data.role, {
+      accountKey: ws.data.accountKey,
+      accountLabel: ws.data.accountLabel,
+      terminalApp: ws.data.terminalApp,
+    })
+  } catch (error) {
+    ws.send(
+      JSON.stringify({
+        type: "error",
+        message: error instanceof Error ? error.message : "Could not join lobby.",
+      })
+    )
+    ws.close(4008, "duplicate account")
+    return
+  }
   sockets.add(ws)
   broadcastState()
   ws.on("close", () => {
@@ -81,6 +113,10 @@ websocketServer.on("connection", (ws: LobbyWebSocket) => {
   ws.on("message", (message) => handleSocketMessage(ws, message))
 })
 
+server.on("error", (error) => {
+  console.error(hostListenErrorMessage(error, options))
+  process.exit(1)
+})
 server.listen(options.port, options.bindHost, printStartup)
 
 function submitResult(request: IncomingMessage, response: ServerResponse) {
@@ -92,6 +128,23 @@ function submitResult(request: IncomingMessage, response: ServerResponse) {
       sendJson(response, result, 201)
     })
     .catch(() => sendJson(response, { error: "invalid result payload" }, 400))
+}
+
+function submitGmPatch(request: IncomingMessage, response: ServerResponse) {
+  readJsonBody(request)
+    .then((body) => {
+      const patch = lobby.deliverGmPatch({
+        id: body.id as string,
+        title: body.title as string,
+        difficulty: body.difficulty as "easier" | "steady" | "harder" | "deadly",
+        briefing: body.briefing as string,
+        operationCount: body.operationCount as number,
+        operations: Array.isArray(body.operations) ? body.operations : undefined,
+      })
+      broadcastState()
+      sendJson(response, patch, 201)
+    })
+    .catch(() => sendJson(response, { error: "invalid GM patch payload" }, 400))
 }
 
 function healthPayload() {
@@ -134,6 +187,7 @@ function handleSocketMessage(ws: LobbyWebSocket, message: RawData) {
     const state = payload.state as Record<string, unknown>
     lobby.updateCoopState({
       playerId: ws.data.id,
+      classId: state.classId as string,
       floor: state.floor as number,
       turn: state.turn as number,
       hp: state.hp as number,
@@ -145,6 +199,53 @@ function handleSocketMessage(ws: LobbyWebSocket, message: RawData) {
       x: state.x as number,
       y: state.y as number,
       combatActive: Boolean(state.combatActive),
+      tutorialStage: state.tutorialStage as string,
+      tutorialReady: Boolean(state.tutorialReady),
+      tutorialCompleted: Boolean(state.tutorialCompleted),
+    })
+    broadcastState()
+  }
+  if (payload.type === "action") {
+    lobby.recordAction({
+      playerId: ws.data.id,
+      type: payload.actionType,
+      label: payload.label,
+      floor: payload.floor,
+      turn: payload.turn,
+      hp: payload.hp,
+      x: payload.x,
+      y: payload.y,
+    })
+    broadcastState()
+  }
+  if (payload.type === "command") {
+    const commandType = payload.commandType
+    const label = payload.label
+    const commandPayload = normalizeSocketCommandPayload(payload.payload, payload)
+    const result = commandRelay.apply({
+      label: typeof label === "string" ? label : "",
+      name: ws.data.name,
+      payload: commandPayload,
+      playerId: ws.data.id,
+      type: commandType === "move" || commandType === "combat" || commandType === "inventory" || commandType === "village" ? commandType : "interact",
+    })
+    const command = lobby.recordCommand({
+      playerId: ws.data.id,
+      type: commandType,
+      label,
+      floor: payload.floor,
+      turn: payload.turn,
+      hp: payload.hp,
+      x: payload.x,
+      y: payload.y,
+      payload: commandPayload,
+      result,
+    })
+    lobby.updateAuthoritativeState({
+      ...result,
+      commandSequence: command.sequence,
+      message: result.message,
+      playerId: ws.data.id,
     })
     broadcastState()
   }
@@ -242,8 +343,21 @@ function renderLobbyPage(publicUrl: string): string {
       </section>
       <section>
         <h2>Co-op State</h2>
+        <p id="host-state" class="muted">Host authority has not applied a player command yet.</p>
         <ul id="coop"><li class="muted">No sync packets yet.</li></ul>
         <p id="combat" class="muted">Combat turn coordination idle.</p>
+      </section>
+      <section>
+        <h2>Action Log</h2>
+        <ul id="actions"><li class="muted">No player actions yet.</li></ul>
+      </section>
+      <section>
+        <h2>Accepted Commands</h2>
+        <ul id="commands"><li class="muted">No accepted commands yet.</li></ul>
+      </section>
+      <section>
+        <h2>GM Patches</h2>
+        <ul id="gm-patches"><li class="muted">No approved GM patches delivered yet.</li></ul>
       </section>
       <section>
         <h2>Leaderboard</h2>
@@ -264,11 +378,23 @@ function renderLobbyPage(publicUrl: string): string {
           ? state.spectators.map((player) => "<li>" + player.name + "</li>").join("")
           : '<li class="muted">None</li>';
         document.querySelector("#coop").innerHTML = state.coopStates.length
-          ? state.coopStates.map((sync) => "<li>" + sync.name + " · floor " + sync.floor + " · turn " + sync.turn + " · hp " + sync.hp + " · (" + sync.x + "," + sync.y + ")</li>").join("")
+          ? state.coopStates.map((sync) => "<li>" + sync.name + " · " + sync.classId + " · floor " + sync.floor + " · turn " + sync.turn + " · hp " + sync.hp + " · (" + sync.x + "," + sync.y + ") · tutorial " + sync.tutorialStage + (sync.tutorialReady ? " ready" : " waiting") + "</li>").join("")
           : '<li class="muted">No sync packets yet.</li>';
+        document.querySelector("#host-state").textContent = state.hostState
+          ? "Host authority #" + state.hostState.commandSequence + " · " + (state.hostState.accepted ? "accepted" : "rejected") + " · " + state.hostState.name + " · floor " + state.hostState.floor + " · turn " + state.hostState.turn + " · hp " + state.hostState.hp + " · (" + state.hostState.x + "," + state.hostState.y + ") · " + state.hostState.message
+          : "Host authority has not applied a player command yet.";
         document.querySelector("#combat").textContent = state.combat.active
           ? "Round " + state.combat.round + " · active player " + state.combat.activePlayerId
           : "Combat turn coordination idle.";
+        document.querySelector("#actions").innerHTML = state.actions && state.actions.length
+          ? state.actions.slice(0, 12).map((action) => "<li>" + action.name + " · " + action.type + " · F" + action.floor + " T" + action.turn + " · " + action.label + "</li>").join("")
+          : '<li class="muted">No player actions yet.</li>';
+        document.querySelector("#commands").innerHTML = state.commands && state.commands.length
+          ? state.commands.slice(0, 12).map((command) => "<li>#" + command.sequence + " · " + command.name + " · " + command.type + " · " + command.label + " · " + command.result.message + "</li>").join("")
+          : '<li class="muted">No accepted commands yet.</li>';
+        document.querySelector("#gm-patches").innerHTML = state.gmPatches.length
+          ? state.gmPatches.map((patch) => "<li>" + patch.title + " · " + patch.difficulty + " · " + patch.operationCount + " ops</li>").join("")
+          : '<li class="muted">No approved GM patches delivered yet.</li>';
         document.querySelector("#leaderboard").innerHTML = state.leaderboard.length
           ? state.leaderboard.map((result) => "<li>" + result.name + " · " + result.status + " · score " + result.score + " · floor " + result.floor + " · " + result.turns + " turns</li>").join("")
           : '<li class="muted">No results yet.</li>';
@@ -278,13 +404,36 @@ function renderLobbyPage(publicUrl: string): string {
 </html>`
 }
 
+function cleanClientId(value: string | null) {
+  const id = value?.trim() ?? ""
+  return /^[A-Za-z0-9_-]{4,80}$/.test(id) ? id : ""
+}
+
+function cleanQueryLabel(value: string | null, maxLength: number) {
+  return String(value || "").replace(/[^\w .:@-]/g, "").trim().slice(0, maxLength)
+}
+
 function htmlEscape(value: string) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 }
 
+function normalizeSocketCommandPayload(value: unknown, fallback: Record<string, unknown>) {
+  const payload: Record<string, string | number | boolean> = {}
+  if (value && typeof value === "object") {
+    for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+      if (typeof raw === "string" || typeof raw === "number" || typeof raw === "boolean") payload[key] = raw
+    }
+  }
+  for (const key of ["floor", "hp", "turn", "x", "y"]) {
+    const raw = fallback[key]
+    if (typeof raw === "string" || typeof raw === "number" || typeof raw === "boolean") payload[key] = raw
+  }
+  return payload
+}
+
 function printStartup() {
   const urls = advertisedLobbyUrls(options)
-  const preferredUrl = options.publicUrl || urls.find((url) => !url.includes("localhost")) || urls[0]
+  const preferredUrl = preferredAdvertisedLobbyUrl(options, urls)
   console.log(`opendungeon lobby`)
   console.log(`Mode: ${options.mode}`)
   console.log(`Seed: ${options.seed}`)
@@ -295,4 +444,5 @@ function printStartup() {
   console.log(`Legacy: ${lobbyEnvCommand(preferredUrl, options)}`)
   console.log(`URLs:`)
   for (const url of urls) console.log(`  ${url}`)
+  if (options.bindHost === "127.0.0.1" || options.bindHost === "localhost") console.log(`LAN: use --host 0.0.0.0 to share from another device.`)
 }

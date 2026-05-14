@@ -8,37 +8,50 @@ import { authStatusReport, formatAuthStatus } from "../cloud/authStatus.js"
 import { buildCloudSaveBrowserState } from "../cloud/cloudSaves.js"
 import {
   actorAt,
+  combatAffinityLabel,
+  combatBalanceSnapshot,
   combatMatchupText,
   combatModifier,
   combatSkills,
   combatTargets,
+  compactTalentEffectTextForSkill,
   currentBiome,
   currentTutorialPrompt,
+  equipmentComparisonText,
   enemyBehaviorText,
   enemyStrategyText,
   fleeDc,
   fleeModifier,
   focusCostForSkill,
+  heroClassIds,
   hubStationIds,
+  inventoryActionsForItem,
+  inventoryItemDescription,
   pointKey,
   skillCheckFormulaText,
   skillCheckModifier,
   skillCheckOutcomeText,
   statusEffectsFor,
   startingLoadout,
+  talentEffectTextForSkill,
+  talentSummariesForSession,
+  talentSummaryFor,
   villageLocationIds,
   villageLocations,
   villageNpcIds,
   type GameSession,
   type HeroClass,
   type MultiplayerMode,
+  type VillageLocationId,
+  type VillageNpcId,
 } from "../game/session.js"
 import { appearanceLabel, heroSpriteForAppearance, normalizeHeroAppearance, weaponSpriteForAppearance, type HeroAppearance } from "../game/appearance.js"
+import { villageSeedModeLabel, type VillageSeedMode } from "../game/descentSeed.js"
 import { isEnemyActorId, isNpcActorId, type TileId } from "../game/domainTypes.js"
 import { actorLabel } from "../game/glyphs.js"
 import { saveDirectory, type SaveSummary } from "../game/saveStore.js"
 import { profilePath, type UserSettings } from "../game/settingsStore.js"
-import { formatModifier, statAbbreviations, statLabels, statLine, statsForClass } from "../game/stats.js"
+import { formatModifier, statAbbreviations, statLabels, statLine, statModifier, statsForClass } from "../game/stats.js"
 import { openingStoryBranches } from "../game/story.js"
 import { clamp, wrap } from "../shared/numeric.js"
 import { titleUpdateNotice, type UpdateStatus } from "../system/updateCheck.js"
@@ -59,7 +72,7 @@ type PanelBounds = {
 }
 
 export type ScreenId = "start" | "character" | "mode" | "saves" | "cloud" | "settings" | "controls" | "tutorial" | "game" | "village"
-export type DialogId = "settings" | "inventory" | "book" | "quests" | "hub" | "saveManager" | "cutscene" | "help" | "log" | "map" | "pause" | "quit" | null
+export type DialogId = "settings" | "inventory" | "state" | "book" | "quests" | "hub" | "saveManager" | "cutscene" | "help" | "log" | "map" | "pause" | "quit" | null
 export type InputMode = { field: "username" | "githubUsername" | "saveName" | "characterName"; draft: string } | null
 export type InternetStatus = "checking" | "online" | "offline"
 
@@ -86,6 +99,21 @@ export type ScreenTransition = {
   kind: "screen" | "portal" | "village"
 }
 
+export type RemotePlayerMarker = {
+  id: string
+  name: string
+  classId: HeroClass
+  floor: number
+  x: number
+  y: number
+  hp: number
+  level: number
+  connected: boolean
+  tutorialStage?: string
+  tutorialReady?: boolean
+  tutorialCompleted?: boolean
+}
+
 export type AppModel = {
   screen: ScreenId
   dialog: DialogId
@@ -93,6 +121,7 @@ export type AppModel = {
   classIndex: number
   modeIndex: number
   seed: number
+  villageSeedMode: VillageSeedMode
   session: GameSession
   message: string
   saves: SaveSummary[]
@@ -104,6 +133,9 @@ export type AppModel = {
   settingsTabIndex: number
   settingsIndex: number
   settingsReturnScreen: ScreenId
+  audioStatus: string
+  remotePlayers: RemotePlayerMarker[]
+  coopGateStatus: string
   inputMode: InputMode
   uiHidden: boolean
   inventoryIndex: number
@@ -112,6 +144,7 @@ export type AppModel = {
   bookTabIndex: number
   questIndex: number
   tutorialIndex: number
+  levelUpIndex: number | null
   internetStatus: InternetStatus
   currentVersion: string
   updateStatus: UpdateStatus
@@ -135,9 +168,9 @@ const classOptions: Array<{ id: HeroClass; name: string; text: string }> = [
   { id: "grave-knight", name: "Grave Knight", text: "Heavy oathbound crawler with durable melee stats." },
 ]
 const modeOptions: Array<{ id: MultiplayerMode; name: string; text: string }> = [
-  { id: "solo", name: "Solo", text: "One crawl, local run." },
-  { id: "coop", name: "Co-op", text: "Shared dungeon host. Friends progress together." },
-  { id: "race", name: "Race", text: "Same seed, separate runs. Fastest descent wins." },
+  { id: "solo", name: "Single Player", text: "Canonical authored story. Start from New descent." },
+  { id: "coop", name: "Multiplayer co-op", text: "Same authored story with a shared host and village." },
+  { id: "race", name: "Multiplayer race", text: "Same seed challenge with separate runs and results." },
 ]
 const multiplayerModeOptions = modeOptions.filter((option) => option.id !== "solo")
 const settingTabs = [
@@ -217,7 +250,7 @@ const tutorialTabs = [
     name: "Saves",
     description: "Manual saves, autosaves, backups, and quit flow",
     body: [
-      "Ctrl+S or F5 writes a manual local save. The title Save screen lets you load, rename, delete, and inspect thumbnails for local runs.",
+      "Ctrl+S writes a manual local save. The title Save screen lets you load, rename, delete, and inspect thumbnails for local runs.",
       "Autosave keeps one rolling slot after important run changes and on a timer while you play. It is separate from manual saves so quick recovery stays simple.",
       "If you close a run with newer changes than the last manual save, the game asks whether to Save & Close, Close Anyway, or Cancel.",
     ],
@@ -273,8 +306,12 @@ const settingsOptions = [
   { id: "tileScale", tab: "visuals", name: "Camera FOV", text: "Wide shows more rooms; close keeps sprite detail.", control: "slider" },
   { id: "diceSkin", tab: "visuals", name: "Dice skin", text: "Faceted polyhedral dice color used in combat rolls.", control: "tabs" },
   { id: "backgroundFx", tab: "visuals", name: "Background FX", text: "How much title-screen dungeon rain appears.", control: "slider" },
-  { id: "music", tab: "audio", name: "Music", text: "Stored for the future audio layer.", control: "switch" },
-  { id: "sound", tab: "audio", name: "SFX", text: "Stored for combat and loot feedback later.", control: "switch" },
+  { id: "muteAudio", tab: "audio", name: "Mute all", text: "Ctrl+O toggles all audio.", control: "switch" },
+  { id: "masterVolume", tab: "audio", name: "Master volume", text: "Overall game audio level.", control: "slider" },
+  { id: "music", tab: "audio", name: "Music", text: "Loops title/menu and dungeon tracks.", control: "switch" },
+  { id: "musicVolume", tab: "audio", name: "Music volume", text: "Separate volume for looping music.", control: "slider" },
+  { id: "sound", tab: "audio", name: "SFX", text: "Combat, UI, loot, dice, gate, village.", control: "switch" },
+  { id: "sfxVolume", tab: "audio", name: "SFX volume", text: "Separate volume for future SFX and UI cues.", control: "slider" },
 ] as const
 type SettingOption = (typeof settingsOptions)[number]
 
@@ -527,21 +564,24 @@ function drawCharacter(canvas: Canvas, model: AppModel) {
 
 function drawMode(canvas: Canvas, model: AppModel) {
   drawDungeonBackdrop(canvas, model.seed + 4, model.settings)
-  const { x, y, width, height } = centeredPanelBounds(canvas, 86, 22)
+  const { x, y, width, height } = centeredPanelBounds(canvas, 94, 26)
   drawPanel(canvas, x, y, width, height, "Multiplayer", UI.gold)
-  drawD20Sprite(canvas, x + 5, y + 4, 20, d20FrameCount() - 1, 10, 5, model.settings.diceSkin)
+  drawD20Sprite(canvas, x + 5, y + 7, 20, d20FrameCount() - 1, 10, 5, model.settings.diceSkin)
+  canvas.write(x + 18, y + 3, "Single Player uses New descent. This screen starts Multiplayer lobby variants.", UI.soft, UI.panel)
+  canvas.write(x + 18, y + 4, "Multiplayer with GM lives on the logged-in website /gm console.", UI.muted, UI.panel)
 
   multiplayerModeOptions.forEach((option, index) => {
     const selected = model.menuIndex === index
-    const row = y + 4 + index * 4
+    const row = y + 7 + index * 4
     const rowX = x + 18
     if (selected) drawSelectCard(canvas, rowX - 2, row - 1, width - 24, 3, true)
     canvas.write(rowX, row, `${selected ? ">" : " "} ${option.name}`, selected ? UI.gold : UI.ink, selected ? UI.panel3 : UI.panel)
-    canvas.write(rowX + 4, row + 1, option.text, selected ? UI.ink : UI.soft, selected ? UI.panel3 : UI.panel)
+    canvas.write(rowX + 4, row + 1, trim(option.text, width - 26), selected ? UI.ink : UI.soft, selected ? UI.panel3 : UI.panel)
   })
 
   const selectedMode = multiplayerModeForSelection(model.menuIndex)
-  canvas.write(x + 4, y + height - 5, "Solo runs start from New descent on the title screen.", UI.muted, UI.panel)
+  canvas.write(x + 4, y + height - 6, "GM worlds and AI-made content stay separate from the canonical story.", UI.muted, UI.panel)
+  canvas.write(x + 4, y + height - 5, "Single Player runs start from New descent on the title screen.", UI.muted, UI.panel)
   canvas.write(x + 4, y + height - 4, `Host local: bun run host -- --host 127.0.0.1 --mode ${selectedMode.id} --seed ${model.seed}`, UI.soft, UI.panel)
   canvas.write(x + 4, y + height - 3, "Open another terminal tab with opendungeon join http://127.0.0.1:3737.", UI.muted, UI.panel)
   drawFooter(canvas, [
@@ -570,7 +610,7 @@ function drawSaves(canvas: Canvas, model: AppModel) {
     canvas.border(listX, listY, listW, 6, UI.edgeDim)
     drawMiniIcon(canvas, listX + 3, listY + 2, "scroll", 8, 2)
     canvas.write(listX + 14, listY + 2, "No local saves yet.", UI.ink, UI.panel2)
-    canvas.write(listX + 14, listY + 3, "Start a run, then press Ctrl+S or F5.", UI.soft, UI.panel2)
+    canvas.write(listX + 14, listY + 3, "Start a run, then press Ctrl+S.", UI.soft, UI.panel2)
   } else {
     model.saves.slice(offset, offset + rows).forEach((save, visibleIndex) => {
       const index = offset + visibleIndex
@@ -721,6 +761,13 @@ function drawSettings(canvas: Canvas, model: AppModel) {
     if (detailH > 11) drawSettingRow(canvas, detailX + 3, listY + 11, detailW - 6, "Run", `${model.session.mode} floor ${model.session.floor}/${model.session.finalFloor}`)
     if (detailH > 13) drawSettingRow(canvas, detailX + 3, listY + 13, detailW - 6, "Assets", activeAssetPack.name)
     if (detailH > 15) canvas.write(detailX + 3, listY + 15, "Run facts live here now so the play HUD can stay quiet.", UI.soft, UI.panel)
+  } else if (activeTab.id === "audio") {
+    drawMiniIcon(canvas, detailX + 3, listY + 3, "focus-gem", 8, 3)
+    if (detailH > 7) drawSettingRow(canvas, detailX + 3, listY + 7, detailW - 6, "Track", model.screen === "game" ? "dungeon-loop" : "title-settings-loop")
+    if (detailH > 9) drawSettingRow(canvas, detailX + 3, listY + 9, detailW - 6, "Shortcut", "Ctrl+O mute")
+    if (detailH > 11) drawSettingRow(canvas, detailX + 3, listY + 11, detailW - 6, "Master", formatPercent(model.settings.masterVolume))
+    if (detailH > 13) drawSettingRow(canvas, detailX + 3, listY + 13, detailW - 6, "Status", model.audioStatus)
+    if (detailH > 15) canvas.write(detailX + 3, listY + 15, trim("OpenTUI audio starts when enabled.", detailW - 6), UI.soft, UI.panel)
   } else {
     drawMiniIcon(canvas, detailX + 3, listY + 3, "focus-gem", 8, 3)
     if (detailW > 28 && detailH > 7) drawD20Sprite(canvas, detailX + detailW - 15, listY + 3, 20, d20FrameCount() - 1, 10, 4, model.settings.diceSkin)
@@ -750,14 +797,14 @@ function drawControls(canvas: Canvas, model: AppModel) {
     ["Move", controlMoveText(model.settings.controlScheme)],
     ["Menus", "Arrows always work. WASD follows the selected control scheme."],
     ["Combat", "Tab selects an enemy. 1-6 selects a skill. Enter rolls d20. F flees."],
-    ["Inventory", "I opens pack. Arrows select. Enter applies. Mouse can drag slots."],
+    ["Inventory", "I opens pack. C opens the state sheet. Arrows select. Enter applies."],
     ["Book", "B opens story, people, monster, tutorial, and hub discoveries."],
     ["Quests", "J opens the quest journal. Use O instead when Vim movement is active."],
     ["Map", "M opens the full dungeon map and current run stats."],
     ["Run", "R rests outside combat. Esc pauses. Save manager is inside Pause."],
     ["Accessibility", accessibilitySummary(model.settings)],
     ["Visuals", `Camera ${model.settings.tileScale}. UI ${onOff(model.settings.showUi)}. Dice ${diceSkinName(model.settings.diceSkin)}.`],
-    ["Audio", `Music ${onOff(model.settings.music)}. SFX ${onOff(model.settings.sound)}.`],
+    ["Audio", `Ctrl+O mute. Music ${onOff(model.settings.music)}. SFX ${onOff(model.settings.sound)}. Master ${formatPercent(model.settings.masterVolume)}.`],
 ]
 
   const visibleRows = Math.max(4, Math.min(rows.length, Math.floor((height - 8) / 2)))
@@ -822,19 +869,19 @@ function drawTutorial(canvas: Canvas, model: AppModel) {
 function drawGame(canvas: Canvas, model: AppModel) {
   const session = model.session
   const moveAnimation = activePlayerMoveAnimation(model)
-  drawMap(canvas, session, model.debugView, model.settings, model.animationFrame, moveAnimation, model.cameraFocus ?? null)
+  drawMap(canvas, session, model.debugView, model.settings, model.animationFrame, moveAnimation, model.cameraFocus ?? null, model.remotePlayers)
   if (!model.uiHidden) {
-    drawHud(canvas, session)
-    if (!model.debugView && model.settings.showMinimap) drawMinimap(canvas, session)
+    drawHud(canvas, session, model.remotePlayers, model.coopGateStatus)
+    if (!model.debugView && model.settings.showMinimap) drawMinimap(canvas, session, model.remotePlayers)
     if (!model.debugView) drawQuickbar(canvas, session, model.diceRollAnimation, model.settings)
     if (session.combat.active) drawCombatPanel(canvas, session, model.diceRollAnimation, model.settings)
     if (session.conversation && !session.combat.active && !session.skillCheck) drawConversationPanel(canvas, session)
-    drawToasts(canvas, session)
   }
   if (!model.debugView) drawTutorialCoach(canvas, session)
+  if (!model.uiHidden) drawToasts(canvas, session)
   if (session.status !== "running") drawRunEnd(canvas, session)
   if (session.skillCheck) drawSkillCheckModal(canvas, session, model.diceRollAnimation, model.settings)
-  if (session.levelUp) drawLevelUpModal(canvas, session)
+  if (session.levelUp) drawLevelUpModal(canvas, session, model.levelUpIndex)
   drawUiToggleHint(canvas, model.uiHidden)
 }
 
@@ -855,14 +902,16 @@ function drawVillage(canvas: Canvas, model: AppModel) {
   const sideX = mapX + mapW + 3
   const sideW = width - (sideX - x) - 4
   const selected = villageLocations[hub.village.selectedLocation]
-  drawPanel(canvas, sideX, mapY, sideW, 9, selected.label, UI.gold)
-  canvas.write(sideX + 3, mapY + 2, trim(selected.text, sideW - 6), UI.ink, UI.panel)
-  canvas.write(sideX + 3, mapY + 4, trim(`Coins ${hub.coins}  Loot sold ${hub.lootSold}  Pack ${hub.contentPacks.active}`, sideW - 6), UI.soft, UI.panel)
-  canvas.write(sideX + 3, mapY + 5, trim(`Farm permissions ${hub.village.sharedFarm.permissions}`, sideW - 6), UI.soft, UI.panel)
-  canvas.write(sideX + 3, mapY + 6, trim("First loop: 3 sell loot, 1 blacksmith, 4 food.", sideW - 6), UI.gold, UI.panel)
-  canvas.write(sideX + 3, mapY + 7, trim("G starts the next descent when ready.", sideW - 6), UI.focus, UI.panel)
+  const locationH = 12
+  drawPanel(canvas, sideX, mapY, sideW, locationH, selected.label, UI.gold)
+  writeWrapped(canvas, sideX + 3, mapY + 2, sideW - 6, [selected.text], 3, UI.ink, UI.panel)
+  writeWrapped(canvas, sideX + 3, mapY + 6, sideW - 6, [`Coins ${hub.coins}  Loot sold ${hub.lootSold}`], 1, UI.soft, UI.panel)
+  writeWrapped(canvas, sideX + 3, mapY + 7, sideW - 6, [`Pack ${hub.contentPacks.active}  Perm ${hub.village.selectedPermission} ${hub.village.permissions[hub.village.selectedPermission]}`], 1, UI.soft, UI.panel)
+  writeWrapped(canvas, sideX + 3, mapY + 8, sideW - 6, [`Day ${hub.calendar.day} ${hub.calendar.season} ${hub.calendar.weather}. ${hub.calendar.festival}`], 1, UI.brass, UI.panel)
+  writeWrapped(canvas, sideX + 3, mapY + 9, sideW - 6, [`Seed ${villageSeedModeLabel(model.villageSeedMode)}. S cycles.`], 1, UI.gold, UI.panel)
+  writeWrapped(canvas, sideX + 3, mapY + 10, sideW - 6, ["P cycles selected-area co-op permissions."], 1, UI.focus, UI.panel)
 
-  const scheduleY = mapY + 10
+  const scheduleY = mapY + locationH + 1
   drawPanel(canvas, sideX, scheduleY, sideW, 9, "NPC Schedule", UI.edge)
   hub.village.schedules.slice(0, 5).forEach((schedule, index) => {
     const rowY = scheduleY + 2 + index
@@ -873,15 +922,31 @@ function drawVillage(canvas: Canvas, model: AppModel) {
   })
 
   const marketY = scheduleY + 10
-  drawPanel(canvas, sideX, marketY, sideW, Math.max(7, height - (marketY - y) - 5), "Market and Balance", UI.edgeDim)
+  const marketH = Math.max(7, height - (marketY - y) - 5)
+  drawPanel(canvas, sideX, marketY, sideW, marketH, "Market and Balance", UI.edgeDim)
   const shopLog = hub.village.shopLog[0] ?? "No customer price test yet."
-  canvas.write(sideX + 3, marketY + 2, trim(shopLog, sideW - 6), UI.ink, UI.panel)
+  writeWrapped(canvas, sideX + 3, marketY + 2, sideW - 6, [shopLog], 2, UI.ink, UI.panel)
   const dashboard = hub.balanceDashboard
-  canvas.write(sideX + 3, marketY + 4, trim(`Balance ${dashboard.runs} runs  ${session.hero.classId} ${dashboard.classWinRate[session.hero.classId] ?? 0}%`, sideW - 6), UI.soft, UI.panel)
-  canvas.write(sideX + 3, marketY + 5, trim(`Gold ${dashboard.averageGold}  Hub coins ${dashboard.averageHubCoins}  Pace ${dashboard.upgradePacing}%`, sideW - 6), UI.soft, UI.panel)
-  if (dashboard.notes[0]) canvas.write(sideX + 3, marketY + 6, trim(dashboard.notes[0], sideW - 6), UI.muted, UI.panel)
+  canvas.write(sideX + 3, marketY + 5, trim(`Balance ${dashboard.runs} runs  ${session.hero.classId} ${dashboard.classWinRate[session.hero.classId] ?? 0}%`, sideW - 6), UI.soft, UI.panel)
+  canvas.write(sideX + 3, marketY + 6, trim(`Gold ${dashboard.averageGold}  Hub coins ${dashboard.averageHubCoins}  Pace ${dashboard.upgradePacing}%`, sideW - 6), UI.soft, UI.panel)
+  const challenge = hub.challengeBoard.leaderboard[0]
+  if (challenge && marketH > 8) canvas.write(sideX + 3, marketY + 7, trim(`Challenge ${challenge.cadence} ${challenge.medal} ${challenge.score} ${challenge.replayKey}`, sideW - 6), UI.gold, UI.panel)
+  if (marketH > 9) {
+    const permissions = hub.village.permissions
+    writeWrapped(
+      canvas,
+      sideX + 3,
+      marketY + 8,
+      sideW - 6,
+      [`Perms homes ${permissions.houses}, farm ${permissions.farm}, storage ${permissions.storage}, shop ${permissions.shop}, upgrades ${permissions.upgrades}.`],
+      2,
+      UI.soft,
+      UI.panel,
+    )
+  }
+  if (dashboard.notes[0] && marketH > 11) writeWrapped(canvas, sideX + 3, marketY + 10, sideW - 6, [dashboard.notes[0]], marketH - 11, UI.muted, UI.panel)
 
-  if (model.saveStatus) canvas.write(x + 4, y + height - 4, trim(model.saveStatus, width - 8), UI.focus, UI.panel)
+  if (model.saveStatus) writeWrapped(canvas, x + 4, y + height - 5, width - 8, [model.saveStatus], 2, UI.focus, UI.panel)
   drawFooter(canvas, [
     ["Arrows", "walk"],
     ["Enter", "visit"],
@@ -890,7 +955,9 @@ function drawVillage(canvas: Canvas, model: AppModel) {
     ["P", "farm perms"],
     ["C", "pack"],
     ["B", "balance"],
+    ["S", "seed"],
     ["N", "cutscene"],
+    ["R", "craft"],
     ["1/3/4", "prep"],
     ["G", "descent"],
     ["Esc", "dungeon"],
@@ -899,10 +966,19 @@ function drawVillage(canvas: Canvas, model: AppModel) {
 
 function drawVillageMap(canvas: Canvas, model: AppModel, x: number, y: number, width: number, height: number) {
   const hub = model.session.hub
-  canvas.fill(x, y, width, height, " ", cleanPanel2, cleanPanel2)
-  for (let row = 1; row < height - 1; row += 2) canvas.write(x + 1, y + row, trim(".".repeat(Math.max(0, width - 2)), width - 2), UI.muted, cleanPanel2)
+  canvas.fill(x, y, width, height, " ", "#17241d", "#17241d")
+  for (let row = 0; row < height; row++) {
+    for (let col = 0; col < width; col++) {
+      const variant = (col * 7 + row * 5 + model.session.seed) % 11
+      const bg = variant < 4 ? "#213629" : variant < 8 ? "#1a2c22" : "#233b2d"
+      canvas.write(x + col, y + row, variant === 0 ? "·" : " ", variant === 0 ? "#6d8774" : bg, bg)
+    }
+  }
+
   const cellW = Math.max(2, Math.floor(width / 19))
   const cellH = Math.max(1, Math.floor(height / 10))
+  drawVillageBoundary(canvas, x, y, width, height)
+
   const roads = [
     ["portal", "blacksmith"],
     ["portal", "market"],
@@ -911,18 +987,23 @@ function drawVillageMap(canvas: Canvas, model: AppModel, x: number, y: number, w
     ["portal", "guildhall"],
   ] as const
   roads.forEach(([from, to]) => drawVillageRoad(canvas, x, y, cellW, cellH, villageLocations[from].position, villageLocations[to].position))
+
   villageLocationIds.forEach((id) => {
     const location = villageLocations[id]
-    const px = x + clamp(location.position.x * cellW, 1, width - 3)
-    const py = y + clamp(location.position.y * cellH, 1, height - 2)
+    const { px, py } = villagePointToScreen(x, y, width, height, cellW, cellH, location.position)
     const selected = hub.village.selectedLocation === id
-    const bg = selected ? cleanPanel3 : cleanPanel2
-    canvas.fill(px - 1, py, 3, 1, " ", bg, bg)
-    canvas.write(px, py, location.glyph, selected ? UI.gold : UI.focus, bg)
+    drawVillageBuilding(canvas, px, py, id, selected, villageLocationBuilt(hub, id))
   })
-  const playerX = x + clamp(hub.village.player.x * cellW, 1, width - 3)
-  const playerY = y + clamp(hub.village.player.y * cellH, 1, height - 2)
-  canvas.write(playerX, playerY, "@", UI.hp, cleanPanel3)
+
+  hub.village.schedules.forEach((schedule, index) => {
+    if (!schedule.available) return
+    const location = villageLocations[schedule.location]
+    const { px, py } = villagePointToScreen(x, y, width, height, cellW, cellH, location.position)
+    drawVillageNpc(canvas, px - 1 + (index % 2) * 3, py + 2 + Math.floor(index / 2), schedule.npc)
+  })
+
+  const player = villagePointToScreen(x, y, width, height, cellW, cellH, hub.village.player)
+  drawPixelBlock(canvas, player.px - 2, player.py - 1, animatedPixelSprite(classSprite(model.session.hero.classId, model.session.hero.appearance), "idle", model.session.turn, 6, 3), 0.85)
 }
 
 function drawVillageRoad(canvas: Canvas, x: number, y: number, cellW: number, cellH: number, from: { x: number; y: number }, to: { x: number; y: number }) {
@@ -932,8 +1013,86 @@ function drawVillageRoad(canvas: Canvas, x: number, y: number, cellW: number, ce
   const endY = y + to.y * cellH
   const stepX = Math.sign(endX - startX)
   const stepY = Math.sign(endY - startY)
-  for (let px = startX; px !== endX; px += stepX || 1) canvas.write(px, startY, "·", UI.soft, cleanPanel2)
-  for (let py = startY; py !== endY; py += stepY || 1) canvas.write(endX, py, "·", UI.soft, cleanPanel2)
+  for (let px = startX; px !== endX; px += stepX || 1) paintVillagePath(canvas, px, startY)
+  for (let py = startY; py !== endY; py += stepY || 1) paintVillagePath(canvas, endX, py)
+  paintVillagePath(canvas, endX, endY)
+}
+
+function villagePointToScreen(x: number, y: number, width: number, height: number, cellW: number, cellH: number, point: { x: number; y: number }) {
+  return {
+    px: x + clamp(point.x * cellW, 2, width - 4),
+    py: y + clamp(point.y * cellH, 2, height - 3),
+  }
+}
+
+function paintVillagePath(canvas: Canvas, x: number, y: number) {
+  canvas.fill(x - 1, y, 3, 1, " ", "#3a352b", "#3a352b")
+  canvas.write(x, y, "·", "#c2b280", "#3a352b")
+}
+
+function drawVillageBoundary(canvas: Canvas, x: number, y: number, width: number, height: number) {
+  for (let col = 1; col < width - 1; col += 4) {
+    drawVillageTree(canvas, x + col, y + 1)
+    drawVillageTree(canvas, x + col + 1, y + height - 3)
+  }
+  for (let row = 3; row < height - 3; row += 4) {
+    drawVillageTree(canvas, x + 1, y + row)
+    drawVillageTree(canvas, x + width - 4, y + row + 1)
+  }
+  canvas.write(x + 2, y + height - 2, "portal road", UI.muted, "#17241d")
+}
+
+function drawVillageTree(canvas: Canvas, x: number, y: number) {
+  canvas.fill(x, y, 3, 1, " ", "#254f35", "#254f35")
+  canvas.write(x + 1, y, "♣", "#8fd19e", "#254f35")
+  canvas.write(x + 1, y + 1, "│", "#8f5f3b", "#17241d")
+}
+
+function drawVillageBuilding(canvas: Canvas, x: number, y: number, id: VillageLocationId, selected: boolean, built: boolean) {
+  const style = villageBuildingStyle(id, built)
+  const w = id === "portal" ? 7 : 8
+  const h = id === "farm" ? 4 : 5
+  const left = x - Math.floor(w / 2)
+  const top = y - Math.floor(h / 2)
+  if (!built) {
+    canvas.fill(left, top + 2, w, 2, " ", "#2d2f31", "#2d2f31")
+    canvas.write(left + 1, top + 1, "broken", UI.muted, "#17241d")
+    canvas.write(left + Math.max(1, Math.floor(w / 2)), top + 3, villageLocations[id].glyph, UI.brass, "#2d2f31")
+  } else if (id === "portal") {
+    drawMiniIcon(canvas, left + 1, top + 1, "stairs", 5, 2)
+    canvas.border(left, top, w, h, selected ? UI.gold : UI.cyan)
+  } else if (id === "farm") {
+    for (let row = 0; row < h; row++) canvas.fill(left, top + row, w, 1, row % 2 === 0 ? "·" : " ", "#7aaa7b", "#244532")
+    canvas.write(left + Math.floor(w / 2), top + 1, villageLocations[id].glyph, selected ? UI.gold : UI.focus, "#244532")
+  } else {
+    canvas.fill(left, top + 1, w, 1, " ", style.roof, style.roof)
+    canvas.fill(left + 1, top + 2, w - 2, 2, " ", style.body, style.body)
+    canvas.write(left + Math.floor(w / 2), top + 3, villageLocations[id].glyph, selected ? "#101820" : style.accent, selected ? UI.gold : style.body)
+    canvas.border(left, top, w, h, selected ? UI.gold : style.accent)
+  }
+}
+
+function villageBuildingStyle(id: VillageLocationId, built: boolean) {
+  if (!built) return { accent: UI.muted, body: "#2d2f31", roof: "#343138" }
+  if (id === "blacksmith") return { accent: "#ff8f4a", body: "#3d332d", roof: "#6d4a37" }
+  if (id === "market") return { accent: UI.gold, body: "#3d3522", roof: "#80643a" }
+  if (id === "houses") return { accent: "#d7c39a", body: "#3a2b23", roof: "#8f5f3b" }
+  if (id === "guildhall") return { accent: UI.cyan, body: "#243748", roof: "#506b7d" }
+  return { accent: UI.focus, body: "#244532", roof: "#3f6b4d" }
+}
+
+function villageLocationBuilt(hub: GameSession["hub"], id: VillageLocationId) {
+  if (id === "portal" || id === "market" || id === "guildhall") return true
+  if (id === "blacksmith") return hub.stations.blacksmith.built
+  if (id === "farm") return hub.stations.farm.built
+  if (id === "houses") return hub.houses.some((house) => house.built)
+  return true
+}
+
+function drawVillageNpc(canvas: Canvas, x: number, y: number, npc: VillageNpcId) {
+  const sprite: PixelSpriteId =
+    npc === "blacksmith" || npc === "farmer" || npc === "cook" ? "npc-smith" : npc === "cartographer" || npc === "guildmaster" ? "npc-oracle" : "hero-ranger"
+  drawMiniIcon(canvas, x, y, sprite, 5, 2)
 }
 
 function activePlayerMoveAnimation(model: AppModel) {
@@ -949,6 +1108,7 @@ function drawMap(
   animationFrame = session.turn,
   playerMoveAnimation: PlayerMoveAnimation | null = null,
   cameraFocus: CameraFocus = null,
+  remotePlayers: RemotePlayerMarker[] = [],
 ) {
   const tileSize = mapTileSize(canvas, debugView, settings.tileScale)
   const tileWidth = tileSize.width
@@ -961,6 +1121,7 @@ function drawMap(
   const targets = combatTargets(session)
   const selectedTargetId = session.combat.active ? targets[session.combat.selectedTarget]?.id : undefined
   const previewRadius = cameraFocus ? Math.max(4, Math.floor(Math.min(viewWidth, viewHeight) * 0.3)) : 0
+  const remotes = remotePlayersOnFloor(remotePlayers, session.floor)
 
   for (let sy = 0; sy < viewHeight; sy++) {
     for (let sx = 0; sx < viewWidth; sx++) {
@@ -968,8 +1129,9 @@ function drawMap(
       const y = startY + sy
       const point = { x, y }
       const previewVisible = Boolean(cameraFocus && Math.abs(cameraFocus.x - x) + Math.abs(cameraFocus.y - y) <= previewRadius)
-      const visible = session.visible.has(pointKey(point)) || previewVisible
-      const seen = session.seen.has(pointKey(point)) || previewVisible
+      const remote = remotePlayerAt(remotes, point)
+      const visible = session.visible.has(pointKey(point)) || previewVisible || Boolean(remote)
+      const seen = session.seen.has(pointKey(point)) || previewVisible || Boolean(remote)
       const actor = visible ? actorAt(session.dungeon.actors, point) : undefined
       const screenX = sx * tileWidth
       const screenY = sy * tileHeight
@@ -994,6 +1156,11 @@ function drawMap(
           playerMoveAnimation ? animationFrame : session.turn,
           playerMoveAnimation?.direction,
         )
+        const stacked = remotePlayerAt(remotes, point)
+        if (stacked) drawRemoteStackBadge(canvas, screenX, screenY, tileWidth, tileHeight, stacked, remotes.filter((player) => player.x === x && player.y === y).length)
+      }
+      else if (remote) {
+        drawRemotePlayerSprite(canvas, screenX, screenY, tileWidth, tileHeight, remote, debugView, animationFrame)
       }
       else if (actor) {
         drawSprite(canvas, screenX, screenY, tileWidth, tileHeight, actorSpriteId(actor.kind), debugView, actorAnimation(actor.id === selectedTargetId, session), actor.id === selectedTargetId ? animationFrame : 0)
@@ -1025,7 +1192,7 @@ function mapTileSize(canvas: Canvas, debugView: boolean, preference: UserSetting
   return { width: 10, height: 5 }
 }
 
-function drawMinimap(canvas: Canvas, session: GameSession) {
+function drawMinimap(canvas: Canvas, session: GameSession, remotePlayers: RemotePlayerMarker[] = []) {
   if (canvas.width < 96 || canvas.height < 28) return
   const width = Math.min(38, Math.max(32, Math.floor(canvas.width * 0.22)))
   const availableHeight = canvas.height - gameQuickbarHeight(canvas) - gameHudHeight(canvas) - 4
@@ -1048,6 +1215,7 @@ function drawMinimap(canvas: Canvas, session: GameSession) {
   let objectiveVisible = false
   const title = objective ? `Radar  goal ${objectiveDirectionLabel(session.player, objective)}` : "Radar"
   canvas.write(x + 2, y, trim(title, width - 4), UI.gold, bg)
+  const remotes = remotePlayersOnFloor(remotePlayers, session.floor)
 
   for (let row = 0; row < innerH; row++) {
     for (let col = 0; col < innerW; col++) {
@@ -1059,8 +1227,10 @@ function drawMinimap(canvas: Canvas, session: GameSession) {
       const seen = session.seen.has(key)
       let marker = minimapTileMarker(session.dungeon.tiles[mapY]?.[mapX] ?? "void", visible, seen)
       const actor = visible ? actorAt(session.dungeon.actors, point) : undefined
+      const remote = remotePlayerAt(remotes, point)
 
       if (actor) marker = minimapActorMarker(actor.kind)
+      if (remote) marker = { ch: "&", fg: UI.cyan }
       if (objective && objective.x === mapX && objective.y === mapY) {
         marker = { ch: "◆", fg: UI.gold }
         objectiveVisible = true
@@ -1074,7 +1244,7 @@ function drawMinimap(canvas: Canvas, session: GameSession) {
   if (objective && !objectiveVisible) drawMinimapObjectivePointer(canvas, objective, startX, startY, innerX, innerY, innerW, innerH, bg)
   const detail = objective ? `Goal ${objectiveDistanceText(session.player, objective)}  floor ${session.floor}` : `Floor ${session.floor}`
   canvas.write(x + 1, y + height - 3, trim(detail, width - 2), UI.brass, bg)
-  canvas.write(x + 1, y + height - 2, trim("@you !foe nNPC $shop >exit ◆", width - 2), UI.soft, bg)
+  canvas.write(x + 1, y + height - 2, trim("@you &ally !foe nNPC $shop >exit ◆", width - 2), UI.soft, bg)
 }
 
 function drawRunMapDialog(canvas: Canvas, model: AppModel, x: number, y: number, width: number, height: number) {
@@ -1088,7 +1258,7 @@ function drawRunMapDialog(canvas: Canvas, model: AppModel, x: number, y: number,
   const statsX = mapX + mapW + 3
 
   drawPanel(canvas, mapX, mapY, mapW, mapH, "Full Map", UI.edge)
-  drawFullDungeonMap(canvas, session, mapX + 2, mapY + 2, mapW - 4, mapH - 4)
+  drawFullDungeonMap(canvas, session, model.remotePlayers, mapX + 2, mapY + 2, mapW - 4, mapH - 4)
 
   drawPanel(canvas, statsX, mapY, statsW, mapH, "Run Stats", UI.edgeDim)
   const rows: Array<[string, string, string?]> = [
@@ -1114,7 +1284,7 @@ function drawRunMapDialog(canvas: Canvas, model: AppModel, x: number, y: number,
   const objectiveText = objective ? `Goal ${objectiveDistanceText(session.player, objective)}` : "Goal none on this floor"
   const legendY = mapY + mapH - 4
   canvas.write(statsX + 2, legendY, trim(objectiveText, statsW - 4), objective ? UI.gold : UI.muted, UI.panel)
-  canvas.write(statsX + 2, legendY + 2, trim("@ you  ! enemy  n npc  ? artifact  > exit", statsW - 4), UI.soft, UI.panel)
+  canvas.write(statsX + 2, legendY + 2, trim("@ you  & ally  ! enemy  n npc  ? artifact  > exit", statsW - 4), UI.soft, UI.panel)
   canvas.write(x + 4, y + height - 4, trim("M or Esc close. Unseen artifact and secret counts stay as ?? until discovered.", width - 8), UI.muted, UI.panel)
 }
 
@@ -1124,7 +1294,7 @@ function drawMapStatRow(canvas: Canvas, x: number, y: number, width: number, lab
   canvas.write(x + 16, y, trim(value, width - 18), valueColor, UI.panel2)
 }
 
-function drawFullDungeonMap(canvas: Canvas, session: GameSession, x: number, y: number, width: number, height: number) {
+function drawFullDungeonMap(canvas: Canvas, session: GameSession, remotePlayers: RemotePlayerMarker[], x: number, y: number, width: number, height: number) {
   const bg = "#0b1218"
   canvas.fill(x, y, width, height, " ", bg, bg)
   if (width <= 0 || height <= 0) return
@@ -1154,6 +1324,7 @@ function drawFullDungeonMap(canvas: Canvas, session: GameSession, x: number, y: 
   }
   const objective = activeQuestObjectivePoint(session)
   if (objective) drawScaledMapPoint(canvas, session, objective, x, y, width, height, "◆", UI.gold, bg)
+  for (const remote of remotePlayersOnFloor(remotePlayers, session.floor)) drawScaledMapPoint(canvas, session, remote, x, y, width, height, "&", UI.cyan, bg)
   drawScaledMapPoint(canvas, session, session.player, x, y, width, height, "@", UI.focus, bg)
 }
 
@@ -1497,8 +1668,9 @@ function stoneColor(x: number, y: number) {
   return "#3b4048"
 }
 
-function drawHud(canvas: Canvas, session: GameSession) {
+function drawHud(canvas: Canvas, session: GameSession, remotePlayers: RemotePlayerMarker[] = [], coopGateStatus = "") {
   const height = gameHudHeight(canvas)
+  const partyLine = coopPartyHudLine(session, remotePlayers, coopGateStatus)
 
   if (canvas.width < 96 || height < 5) {
     canvas.fill(0, 0, canvas.width, Math.min(4, canvas.height), " ", cleanPanel, cleanPanel)
@@ -1507,7 +1679,7 @@ function drawHud(canvas: Canvas, session: GameSession) {
     canvas.write(1, 0, hero, UI.ink, cleanPanel)
     drawHudBar(canvas, 1, 1, Math.max(12, Math.floor(canvas.width * 0.32)), "HP", session.hp, session.maxHp, UI.hp, UI.hpBack)
     drawHudBar(canvas, Math.floor(canvas.width * 0.43), 1, Math.max(10, Math.floor(canvas.width * 0.25)), "FOCUS", session.focus, session.maxFocus, UI.focus, UI.focusBack)
-    canvas.write(1, 3, trim(session.log[0] ?? "The dungeon waits.", canvas.width - 2), UI.soft, cleanPanel)
+    canvas.write(1, 3, trim(partyLine || session.log[0] || "The dungeon waits.", canvas.width - 2), partyLine ? UI.cyan : UI.soft, cleanPanel)
     return
   }
 
@@ -1531,6 +1703,30 @@ function drawHud(canvas: Canvas, session: GameSession) {
   } else {
     canvas.write(infoX, 3, trim(session.log[0] ?? "The dungeon waits.", contentW), UI.soft, UI.panel)
   }
+  if (partyLine) canvas.write(infoX, 4, trim(partyLine, contentW), UI.cyan, UI.panel)
+}
+
+function coopPartyHudLine(session: GameSession, remotePlayers: RemotePlayerMarker[], coopGateStatus: string) {
+  if (session.mode !== "coop" && !remotePlayers.length && !coopGateStatus) return ""
+  const connected = remotePlayers.filter((player) => player.connected)
+  const party = connected.length
+    ? connected
+        .slice(0, 4)
+        .map((player) => `${player.name} F${player.floor} ${player.hp}hp ${directionFromTo(session.player, player)}`)
+        .join("  ")
+    : "waiting for lobby sync"
+  const overflow = connected.length > 4 ? ` +${connected.length - 4}` : ""
+  const gate = coopGateStatus ? ` | ${coopGateStatus}` : ""
+  return `Party ${party}${overflow}${gate}`
+}
+
+function directionFromTo(from: { x: number; y: number }, to: { x: number; y: number }) {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) return "near"
+  const eastWest = dx > 1 ? "E" : dx < -1 ? "W" : ""
+  const northSouth = dy > 1 ? "S" : dy < -1 ? "N" : ""
+  return `${northSouth}${eastWest}` || "near"
 }
 
 function drawQuestHudLine(
@@ -1557,24 +1753,29 @@ function drawTutorialCoach(canvas: Canvas, session: GameSession) {
   if (!prompt || canvas.width < 82 || canvas.height < 28) return
   const width = Math.min(74, Math.max(56, Math.floor(canvas.width * 0.48)))
   const x = Math.max(2, canvas.width - width - 2)
-  const y = gameHudHeight(canvas) + 1
+  const toastReserve = session.toasts.length && !session.combat.active ? Math.min(6, 3 + wrappedRows(session.toasts[0]?.text ?? "", width - 7, 3).length) : 0
+  const y = gameHudHeight(canvas) + 1 + toastReserve
   const steps = "steps" in prompt && Array.isArray(prompt.steps) ? prompt.steps : []
-  const height = Math.min(12, Math.max(8, 7 + Math.ceil(steps.length / 2)))
+  const textRows = wrappedRows(prompt.text, width - 4, 3)
+  const footerRows = "footer" in prompt && prompt.footer ? wrappedRows(prompt.footer, width - 4, 2) : []
+  const stepRows = Math.ceil(Math.min(steps.length, 8) / 2)
+  const height = Math.min(canvas.height - y - 1, Math.max(9, 5 + textRows.length + stepRows + footerRows.length))
   canvas.fill(x, y, width, height, " ", "#0b1218", "#0b1218")
   canvas.border(x, y, width, height, UI.gold)
   canvas.write(x + 2, y + 1, trim(prompt.title, width - 4), UI.gold, "#0b1218")
-  writeWrapped(canvas, x + 2, y + 2, width - 4, [prompt.text], 2, UI.ink, "#0b1218")
+  writeRows(canvas, x + 2, y + 2, width - 4, textRows, UI.ink, "#0b1218")
   const leftW = Math.floor((width - 6) / 2)
+  const stepStartY = y + 3 + textRows.length
   steps.slice(0, 8).forEach((step, index) => {
     const done = step.endsWith("done")
     const col = index % 2
     const row = Math.floor(index / 2)
     const stepX = x + 2 + col * (leftW + 2)
-    const stepY = y + 5 + row
+    const stepY = stepStartY + row
     canvas.write(stepX, stepY, done ? "[x]" : "[ ]", done ? UI.focus : UI.muted, "#0b1218")
     canvas.write(stepX + 4, stepY, trim(step.replace(/\s+(done|needed)$/u, ""), leftW - 4), done ? UI.focus : UI.soft, "#0b1218")
   })
-  if ("footer" in prompt && prompt.footer) canvas.write(x + 2, y + height - 2, trim(prompt.footer, width - 4), UI.brass, "#0b1218")
+  if (footerRows.length) writeRows(canvas, x + 2, y + height - footerRows.length - 1, width - 4, footerRows, UI.brass, "#0b1218")
 }
 
 function drawToasts(canvas: Canvas, session: GameSession) {
@@ -1616,12 +1817,26 @@ function compactToastText(text: string, width: number) {
 }
 
 function wrappedRows(text: string, width: number, maxRows: number) {
+  const safeWidth = Math.max(1, width)
   const words = text.split(/\s+/).filter(Boolean)
   const rows: string[] = []
   let current = ""
   for (const word of words) {
+    if (word.length > safeWidth) {
+      if (current) {
+        rows.push(current)
+        current = ""
+      }
+      for (let offset = 0; offset < word.length && rows.length < maxRows; offset += safeWidth) {
+        const chunk = word.slice(offset, offset + safeWidth)
+        if (chunk.length === safeWidth || offset + safeWidth < word.length) rows.push(chunk)
+        else current = chunk
+      }
+      if (rows.length >= maxRows) break
+      continue
+    }
     const next = current ? `${current} ${word}` : word
-    if (next.length <= width) {
+    if (next.length <= safeWidth) {
       current = next
       continue
     }
@@ -1681,6 +1896,7 @@ function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollA
           active: session.hp < session.maxHp,
         },
         { key: "R", label: "Rest", sprite: "food" },
+        { key: "C", label: "State", sprite: "sword", count: String(session.talents.length) },
         { key: "J", label: "Quest", sprite: "quest-marker", count: String(session.world.quests.filter((quest) => quest.status !== "locked").length) },
         { key: "B", label: "Book", sprite: "scroll", count: String(session.knowledge.length) },
         { key: "L", label: "Log", sprite: "scroll" },
@@ -1701,7 +1917,7 @@ function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollA
     if (item.custom === "d20") {
       const diceWidth = height >= 10 ? 11 : 8
       const diceHeight = height >= 10 ? 5 : 3
-      drawD20Sprite(canvas, slotX + 2, y + 2, diceResult(session, animation), diceFrame(session, animation), diceWidth, diceHeight, settings.diceSkin, item.active && !settings.reduceMotion, animation)
+      drawD20Sprite(canvas, slotX + 2, y + 2, diceResult(session, animation), diceFrame(session, animation, settings.reduceMotion), diceWidth, diceHeight, settings.diceSkin, item.active && !settings.reduceMotion, animation)
     } else if (item.sprite) {
       drawMiniIcon(canvas, slotX + 3, y + 2, item.sprite, height >= 10 ? 9 : 7, height >= 10 ? 4 : 3)
     }
@@ -1773,15 +1989,18 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
     const unavailable = session.focus < focusCost
     const modifier = combatModifier(session, skill.stat)
     const dc = skill.dc + targetDefenseBonus(targets[session.combat.selectedTarget]?.kind)
+    const talentEffect = compactTalentEffectTextForSkill(session, skill)
     const row = y + 5 + index * 2
     const bg = selected ? UI.panel3 : UI.panel2
     canvas.fill(actionX, row, actionW, 1, " ", bg, bg)
+    canvas.fill(actionX, row + 1, actionW, 1, " ", bg, bg)
     if (selected) canvas.fill(actionX, row, 1, 1, " ", UI.gold, UI.gold)
     canvas.write(actionX + 2, row, `${index + 1}`, selected ? UI.gold : UI.soft, bg)
     canvas.write(actionX + 5, row, trim(skill.name, Math.max(6, actionW - 27)), unavailable ? UI.muted : selected ? UI.focus : UI.ink, bg)
     canvas.write(actionX + Math.max(18, actionW - 22), row, `${statAbbreviations[skill.stat]} ${formatModifier(modifier)}`, unavailable ? UI.muted : UI.gold, bg)
     canvas.write(actionX + actionW - 10, row, `DC ${dc}`, unavailable ? UI.muted : UI.soft, bg)
     canvas.write(actionX + actionW - 4, row, `F${focusCost}`, unavailable ? UI.hp : focusCost < skill.cost ? UI.focus : UI.muted, bg)
+    canvas.write(actionX + 5, row + 1, trim(talentEffect || `${combatAffinityLabel(skill.affinity)}  base ${skill.damage}`, actionW - 7), talentEffect ? UI.focus : UI.muted, bg)
   })
 
   const fleeY = y + 5 + combatSkills.length * 2
@@ -1796,17 +2015,18 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
   canvas.fill(x + 2, detailY, detailW, 5, " ", UI.panel2, UI.panel2)
   canvas.border(x + 2, detailY, detailW, 5, UI.edgeDim)
   const matchup = selectedTarget ? combatMatchupText(selectedSkill, selectedTarget.kind) : ""
-  const detail = roll?.skill === "Flee" ? "Escape check uses Dexterity, Luck, Endurance, and level." : `${selectedSkill.text} ${matchup}`
+  const talentText = talentEffectTextForSkill(session, selectedSkill)
+  const detail = roll?.skill === "Flee" ? "Escape check uses Dexterity, Luck, Endurance, and level." : `${selectedSkill.text} ${matchup}`.trim()
   const strategy = enemyStrategyText(session, selectedTarget, selectedSkill)
   const statusLine = playerStatus ? `You: ${playerStatus}` : session.combat.message
-  writeWrapped(canvas, x + 4, detailY + 1, detailW - 4, [strategy, detail, statusLine], 3, UI.ink, UI.panel2)
+  writeWrapped(canvas, x + 4, detailY + 1, detailW - 4, talentText ? [talentText, strategy, detail, statusLine] : [strategy, detail, statusLine], 3, UI.ink, UI.panel2)
 
   const diceX = x + width - diceW - 3
   const diceY = detailY
   const diceAccent = roll ? (roll.hit ? UI.focus : UI.hp) : UI.gold
   canvas.fill(diceX, diceY, diceW, 5, " ", UI.panel2, UI.panel2)
   canvas.border(diceX, diceY, diceW, 5, diceAccent)
-  drawD20Sprite(canvas, diceX + 1, diceY + 1, diceResult(session, animation), diceFrame(session, animation), 8, 3, settings.diceSkin, !settings.reduceMotion, animation)
+  drawD20Sprite(canvas, diceX + 1, diceY + 1, diceResult(session, animation), diceFrame(session, animation, settings.reduceMotion), 8, 3, settings.diceSkin, !settings.reduceMotion, animation)
   canvas.write(diceX + 10, diceY + 1, roll ? String(roll.d20).padStart(2, "0") : "d20", "#ffffff", UI.panel2)
   canvas.write(diceX + 2, diceY + 3, roll ? `${roll.total}/${roll.dc}` : statAbbreviations[selectedSkill.stat], "#ffffff", UI.panel2)
 
@@ -1829,9 +2049,9 @@ function drawConversationPanel(canvas: Canvas, session: GameSession) {
   const conversation = session.conversation
   if (!conversation) return
 
-  const width = Math.min(78, canvas.width - 6)
+  const width = Math.min(84, canvas.width - 6)
   const hasChoices = conversation.options.length > 0 && conversation.status === "open"
-  const height = hasChoices ? 13 : 10
+  const height = hasChoices ? Math.min(20, Math.max(16, canvas.height - gameQuickbarHeight(canvas) - 2)) : 11
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.max(1, canvas.height - gameQuickbarHeight(canvas) - height - 2)
   const trade = conversation.trade
@@ -1843,20 +2063,26 @@ function drawConversationPanel(canvas: Canvas, session: GameSession) {
   if (portraitId) drawPixelBlock(canvas, x + 3, y + 2, portraitSprite(portraitId, 9, 4), 1)
   else drawMiniIcon(canvas, x + 3, y + 2, actorSpriteId(conversation.kind), 8, 2)
   canvas.write(x + 14, y + 2, trim(conversation.speaker, width - 18), UI.gold, UI.panel)
-  writeWrapped(canvas, x + 14, y + 4, width - 18, [conversation.text], 2, UI.ink, UI.panel)
+  writeWrapped(canvas, x + 14, y + 4, width - 18, [conversation.text], hasChoices ? 3 : 4, UI.ink, UI.panel)
   if (trade) {
     const tradeText = trade.purchased ? `${trade.item} in pack` : `${trade.item}  ${trade.price}g`
     canvas.write(x + 14, y + height - 4, trim(tradeText, width - 26), trade.purchased ? UI.focus : UI.brass, UI.panel)
   }
   if (hasChoices) {
     const optionY = y + 8
+    const optionW = width - 18
+    const rowH = height >= 20 ? 3 : 2
+    const previewMaxRows = Math.max(1, rowH - 1)
     conversation.options.slice(0, 3).forEach((option, index) => {
       const selected = index === conversation.selectedOption
-      const optionX = x + 14 + index * Math.max(14, Math.floor((width - 18) / 3))
-      canvas.write(optionX, optionY, `${index + 1}`, selected ? UI.gold : UI.muted, UI.panel)
-      canvas.write(optionX + 2, optionY, trim(option.label, 12), selected ? UI.focus : UI.soft, UI.panel)
+      const rowY = optionY + index * rowH
+      if (selected) canvas.fill(x + 13, rowY, optionW + 1, rowH, " ", UI.panel2, UI.panel2)
+      canvas.write(x + 14, rowY, `${index + 1}`, selected ? UI.gold : UI.muted, selected ? UI.panel2 : UI.panel)
+      canvas.write(x + 17, rowY, option.label, selected ? UI.focus : UI.soft, selected ? UI.panel2 : UI.panel)
+      const previewRows = wrappedRows(option.text, optionW - 3, previewMaxRows)
+      writeRows(canvas, x + 17, rowY + 1, optionW - 3, previewRows, selected ? UI.ink : UI.muted, selected ? UI.panel2 : UI.panel)
     })
-    canvas.write(x + 14, y + height - 2, trim("1-3 choose  Enter confirm  Esc leave", width - 18), UI.muted, UI.panel)
+    canvas.write(x + 14, y + height - 2, trim("1-3 choose  Up/Down move  Enter confirm  Esc leave", width - 18), UI.muted, UI.panel)
   } else {
     canvas.write(x + 14, y + height - 2, trim("Enter close  Esc leave", width - 18), UI.muted, UI.panel)
   }
@@ -1866,15 +2092,15 @@ function drawSkillCheckModal(canvas: Canvas, session: GameSession, animation: Di
   const check = session.skillCheck
   if (!check) return
 
-  const width = Math.min(92, canvas.width - 8)
-  const height = Math.min(22, canvas.height - 6)
+  const width = Math.min(104, canvas.width - 8)
+  const height = Math.min(26, canvas.height - 6)
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.floor((canvas.height - height) / 2)
   const roll = check.roll
   const modifier = roll?.modifier ?? skillCheckModifier(session, check.stat)
   const total = roll?.total
   const result = roll?.d20 ?? animation?.result ?? 20
-  const frame = animation ? diceFrame(session, animation) : roll ? d20FrameCount() - 1 : 0
+  const frame = animation ? diceFrame(session, animation, settings.reduceMotion) : roll ? d20FrameCount() - 1 : 0
   const resolved = check.status === "resolved" && roll
 
   drawPanel(canvas, x, y, width, height, "Talent Check", resolved ? (roll.success ? UI.focus : UI.hp) : UI.gold)
@@ -1887,7 +2113,7 @@ function drawSkillCheckModal(canvas: Canvas, session: GameSession, animation: Di
   const diceY = y + 7
   canvas.fill(diceX, diceY, dicePanelW, dicePanelH, " ", UI.panel2, UI.panel2)
   canvas.border(diceX, diceY, dicePanelW, dicePanelH, UI.edge)
-  drawD20Sprite(canvas, diceX + 4, diceY + 1, result, frame, 12, 5, settings.diceSkin, check.status === "pending" || Boolean(animation), animation)
+  drawD20Sprite(canvas, diceX + 4, diceY + 1, result, frame, 12, 5, settings.diceSkin, !settings.reduceMotion && (check.status === "pending" || Boolean(animation)), animation)
   canvas.write(diceX + 20, diceY + 2, `${statLabels[check.stat]} ${session.stats[check.stat]}`, UI.gold, UI.panel2)
   canvas.write(diceX + 20, diceY + 3, `Modifier ${formatModifier(modifier)}`, UI.ink, UI.panel2)
   canvas.write(diceX + 20, diceY + 4, roll ? `Roll ${roll.d20}` : "Press Enter to roll", roll ? UI.soft : UI.focus, UI.panel2)
@@ -1902,20 +2128,27 @@ function drawSkillCheckModal(canvas: Canvas, session: GameSession, animation: Di
   drawPixelBlock(canvas, infoX + infoW - 10, diceY + 4, pixelSprite(classSprite(session.hero.classId, session.hero.appearance), 8, 3), 0.85)
   canvas.write(infoX + 2, diceY + 5, trim(check.actor, infoW - 14), UI.gold, UI.panel2)
 
-  writeWrapped(canvas, x + 4, y + height - 7, width - 8, [check.prompt], 2, UI.soft, UI.panel)
-  writeWrapped(canvas, x + 4, y + height - 5, width - 8, [skillCheckFormulaText(session, check)], 2, UI.ink, UI.panel)
+  const bodyW = width - 8
+  const promptRows = wrappedRows(check.prompt, bodyW, 2)
+  const formulaRows = wrappedRows(skillCheckFormulaText(session, check), bodyW, 3)
+  const promptY = y + height - 10
+  const formulaY = promptY + promptRows.length + 1
+  writeRows(canvas, x + 4, promptY, bodyW, promptRows, UI.soft, UI.panel)
+  writeRows(canvas, x + 4, formulaY, bodyW, formulaRows, UI.ink, UI.panel)
   if (resolved) {
     const color = roll.success ? UI.focus : UI.hp
-    canvas.fill(x + Math.floor(width / 2) - 12, y + height - 3, 24, 1, " ", UI.panel3, UI.panel3)
-    writeCentered(canvas, x, y + height - 3, width, roll.success ? "SUCCESS" : "FAILURE", color, UI.panel3)
-    canvas.center(y + height - 2, trim(skillCheckOutcomeText(check, roll.success), width - 8), UI.ink, UI.panel)
+    const outcomeRows = wrappedRows(skillCheckOutcomeText(check, roll.success), bodyW, 2)
+    canvas.fill(x + Math.floor(width / 2) - 12, y + height - 4, 24, 1, " ", UI.panel3, UI.panel3)
+    writeCentered(canvas, x, y + height - 4, width, roll.success ? "SUCCESS" : "FAILURE", color, UI.panel3)
+    outcomeRows.forEach((row, index) => writeCentered(canvas, x, y + height - 3 + index, width, row, UI.ink, UI.panel))
   } else {
-    canvas.center(y + height - 3, "Enter roll d20   Esc step away", UI.focus, UI.panel)
-    canvas.center(y + height - 2, "A d20 is a twenty-sided die; stats, luck, level, and relics add to it.", UI.muted, UI.panel)
+    const guideRows = wrappedRows("A d20 is a twenty-sided die. Add stats, luck, level, and relics to the roll.", bodyW, 2)
+    canvas.center(y + height - 4, "Enter roll d20   Esc step away", UI.focus, UI.panel)
+    guideRows.forEach((row, index) => writeCentered(canvas, x, y + height - 3 + index, width, row, UI.muted, UI.panel))
   }
 }
 
-function drawLevelUpModal(canvas: Canvas, session: GameSession) {
+function drawLevelUpModal(canvas: Canvas, session: GameSession, selectedIndex: number | null = null) {
   const levelUp = session.levelUp
   if (!levelUp) return
   const width = Math.min(86, canvas.width - 8)
@@ -1932,13 +2165,18 @@ function drawLevelUpModal(canvas: Canvas, session: GameSession) {
     const rowY = y + 7 + index * 3
     const rowW = width - 24
     const rowX = x + 19
-    canvas.fill(rowX, rowY, rowW, 2, " ", cleanPanel2, cleanPanel2)
-    canvas.write(rowX + 2, rowY, `${index + 1}`, UI.gold, cleanPanel2)
-    canvas.write(rowX + 5, rowY, trim(choice.name, rowW - 7), UI.focus, cleanPanel2)
-    canvas.write(rowX + 5, rowY + 1, trim(choice.text, rowW - 7), UI.soft, cleanPanel2)
+    const selected = index === selectedIndex
+    const bg = selected ? UI.panel3 : cleanPanel2
+    canvas.fill(rowX, rowY, rowW, 2, " ", bg, bg)
+    if (selected) canvas.write(rowX, rowY, ">", UI.gold, bg)
+    canvas.write(rowX + 2, rowY, `${index + 1}`, UI.gold, bg)
+    canvas.write(rowX + 5, rowY, trim(choice.name, rowW - 7), UI.focus, bg)
+    canvas.write(rowX + 5, rowY + 1, trim(choice.text, rowW - 7), UI.soft, bg)
   })
 
-  canvas.center(y + height - 2, "Press 1-3 to choose. Enter chooses the first talent.", UI.muted, UI.panel)
+  const maxChoice = Math.min(9, levelUp.choices.length)
+  const footer = selectedIndex === null ? `Press 1-${maxChoice} to select a talent. Enter waits.` : `Talent ${selectedIndex + 1} selected. Press Enter to learn it.`
+  canvas.center(y + height - 2, footer, selectedIndex === null ? UI.muted : UI.focus, UI.panel)
 }
 
 function drawCheckBar(canvas: Canvas, x: number, y: number, width: number, labelText: string, valueText: string, value: number, max: number, color: string) {
@@ -1958,6 +2196,10 @@ function writeCentered(canvas: Canvas, x: number, y: number, width: number, text
 
 function writeWrapped(canvas: Canvas, x: number, y: number, width: number, paragraphs: readonly string[], maxRows: number, fg: string, bg?: string) {
   const rows = wrappedRows(paragraphs.join(" "), width, maxRows)
+  writeRows(canvas, x, y, width, rows, fg, bg)
+}
+
+function writeRows(canvas: Canvas, x: number, y: number, width: number, rows: readonly string[], fg: string, bg?: string) {
   rows.forEach((row, index) => canvas.write(x, y + index, trim(row, width), fg, bg))
 }
 
@@ -2234,8 +2476,8 @@ function diceResult(session: GameSession, animation?: DiceRollAnimation | null) 
   return animation?.result ?? session.combat.lastRoll?.d20 ?? 20
 }
 
-function diceFrame(_session: GameSession, animation?: DiceRollAnimation | null) {
-  if (!animation) return d20FrameCount() - 1
+function diceFrame(_session: GameSession, animation?: DiceRollAnimation | null, reduceMotion = false) {
+  if (!animation || reduceMotion) return d20FrameCount() - 1
   const elapsed = Date.now() - animation.startedAt
   const progress = clamp(elapsed / animation.durationMs, 0, 1)
   return clamp(Math.floor(progress * d20FrameCount()), 0, d20FrameCount() - 1)
@@ -2325,10 +2567,10 @@ function dialogMetrics(dialog: NonNullable<DialogId>, canvasWidth: number, canva
     }
   }
 
-  const wide = dialog === "log" || dialog === "settings" || dialog === "quests" || dialog === "book" || dialog === "hub" || dialog === "saveManager" || dialog === "cutscene"
-  const wideMax = dialog === "quests" || dialog === "book" || dialog === "hub" || dialog === "saveManager" ? 118 : dialog === "settings" || dialog === "cutscene" ? 104 : 96
+  const wide = dialog === "log" || dialog === "settings" || dialog === "state" || dialog === "quests" || dialog === "book" || dialog === "hub" || dialog === "saveManager" || dialog === "cutscene"
+  const wideMax = dialog === "quests" || dialog === "book" || dialog === "state" || dialog === "hub" || dialog === "saveManager" ? 118 : dialog === "settings" || dialog === "cutscene" ? 104 : 96
   const width = Math.min(wide ? wideMax : 74, Math.max(20, canvasWidth - 10))
-  const height = Math.min(Math.max(10, canvasHeight - 2), dialog === "log" ? 18 : dialog === "quests" || dialog === "book" ? 26 : dialog === "hub" || dialog === "saveManager" ? 24 : dialog === "cutscene" ? 18 : dialog === "settings" ? 20 : dialog === "help" ? 21 : dialog === "pause" ? 18 : dialog === "quit" ? 18 : 14)
+  const height = Math.min(Math.max(10, canvasHeight - 2), dialog === "log" ? 18 : dialog === "state" ? 30 : dialog === "quests" || dialog === "book" ? 26 : dialog === "hub" || dialog === "saveManager" ? 24 : dialog === "cutscene" ? 18 : dialog === "settings" ? 20 : dialog === "help" ? 21 : dialog === "pause" ? 18 : dialog === "quit" ? 18 : 14)
   return {
     x: Math.floor((canvasWidth - width) / 2),
     y: Math.floor((canvasHeight - height) / 2),
@@ -2340,22 +2582,22 @@ function dialogMetrics(dialog: NonNullable<DialogId>, canvasWidth: number, canva
 function inventoryLayout(model: AppModel, width: number, height: number): InventoryLayout {
   const frame = dialogMetrics("inventory", width, height)
   const innerX = frame.x + 3
-  const innerY = frame.y + 4
+  const innerY = frame.y + 3
   const innerW = frame.width - 6
-  const innerH = frame.height - 8
+  const innerH = frame.height - 7
   const characterW = Math.min(36, Math.max(24, Math.floor(innerW * 0.32)))
-  const character: Rect = { x: innerX, y: innerY, width: characterW, height: innerH - 4 }
+  const character: Rect = { x: innerX, y: innerY, width: characterW, height: innerH - 9 }
   const pack: Rect = {
     x: innerX + characterW + 2,
     y: innerY,
     width: Math.max(28, innerW - characterW - 2),
-    height: innerH - 4,
+    height: innerH - 9,
   }
-  const details: Rect = { x: innerX, y: frame.y + frame.height - 7, width: innerW, height: 3 }
+  const details: Rect = { x: innerX, y: frame.y + frame.height - 11, width: innerW, height: 7 }
   const apply: Rect = { x: frame.x + frame.width - 34, y: frame.y + frame.height - 3, width: 14, height: 1 }
   const close: Rect = { x: frame.x + frame.width - 18, y: frame.y + frame.height - 3, width: 12, height: 1 }
   const columns = clamp(Math.floor((pack.width - 4) / 12), 3, 6)
-  const slotW = Math.max(9, Math.floor((pack.width - 4 - (columns - 1)) / columns))
+  const slotW = Math.max(10, Math.floor((pack.width - 4 - (columns - 1)) / columns))
   const slotH = 5
   const rows = Math.max(2, Math.floor((pack.height - 5) / slotH))
   const slots: Rect[] = []
@@ -2365,7 +2607,7 @@ function inventoryLayout(model: AppModel, width: number, height: number): Invent
         x: pack.x + 2 + col * (slotW + 1),
         y: pack.y + 3 + row * slotH,
         width: slotW,
-        height: 4,
+        height: 5,
       })
     }
   }
@@ -2380,6 +2622,7 @@ function insideRect(rect: Rect, x: number, y: number) {
 function dialogTitle(dialog: NonNullable<DialogId>) {
   if (dialog === "settings") return "Settings"
   if (dialog === "inventory") return "Inventory"
+  if (dialog === "state") return "Crawler State"
   if (dialog === "book") return "Book"
   if (dialog === "quests") return "Quests"
   if (dialog === "hub") return "Portal Village"
@@ -2395,6 +2638,7 @@ function dialogTitle(dialog: NonNullable<DialogId>) {
 function dialogIcon(dialog: NonNullable<DialogId>): PixelSpriteId | "d20" {
   if (dialog === "settings") return "focus-gem"
   if (dialog === "inventory") return "scroll"
+  if (dialog === "state") return "sword"
   if (dialog === "book") return "scroll"
   if (dialog === "quests") return "map"
   if (dialog === "hub") return "stairs"
@@ -2437,17 +2681,39 @@ function inventorySprite(name: string): PixelSpriteId {
   return "chest"
 }
 
+type InventoryVisualKind = "weapon" | "relic" | "consumable" | "record" | "village" | "loot"
+
+function inventoryVisual(name: string): { accent: string; bg: string; chip: string; kind: InventoryVisualKind; sprite: PixelSpriteId } {
+  const lower = name.toLowerCase()
+  if (/blade|sword|axe|mace|rapier|bow|arrow|spanner|knife|dagger/.test(lower)) {
+    return { accent: "#d8dee9", bg: "#17202a", chip: "W", kind: "weapon", sprite: inventorySprite(name) }
+  }
+  if (/relic|shard|charm|token|spark|idol|env/.test(lower)) {
+    return { accent: UI.gold, bg: "#211f18", chip: "R", kind: "relic", sprite: inventorySprite(name) }
+  }
+  if (/potion|vial|food|ration|salve/.test(lower)) {
+    return { accent: UI.focus, bg: "#14241d", chip: "C", kind: "consumable", sprite: inventorySprite(name) }
+  }
+  if (/scroll|map|ledger|note|book/.test(lower)) {
+    return { accent: UI.cyan, bg: "#13252b", chip: "B", kind: "record", sprite: inventorySprite(name) }
+  }
+  if (/deed|recipe|tool|keepsake/.test(lower)) {
+    return { accent: UI.brass, bg: "#241f15", chip: "V", kind: "village", sprite: inventorySprite(name) }
+  }
+  return { accent: UI.soft, bg: "#161d24", chip: "$", kind: "loot", sprite: inventorySprite(name) }
+}
+
 function countInventory(session: GameSession, name: string) {
   return session.inventory.filter((item) => item === name).length
 }
 
 function selectedInventoryItem(model: AppModel) {
-  return model.session.inventory[clamp(model.inventoryIndex, 0, Math.max(0, model.session.inventory.length - 1))]
+  return model.session.inventory[model.inventoryIndex]
 }
 
 function drawInventoryDialog(canvas: Canvas, model: AppModel) {
   const layout = inventoryLayout(model, canvas.width, canvas.height)
-  const selectedIndex = clamp(model.inventoryIndex, 0, Math.max(0, model.session.inventory.length - 1))
+  const selectedIndex = clamp(model.inventoryIndex, 0, Math.max(0, layout.slots.length - 1))
   const selectedItem = selectedInventoryItem(model)
 
   drawPanel(canvas, layout.character.x, layout.character.y, layout.character.width, layout.character.height, "Crawler", UI.edge)
@@ -2474,14 +2740,21 @@ function drawInventoryDialog(canvas: Canvas, model: AppModel) {
 
   drawPanel(canvas, layout.details.x, layout.details.y, layout.details.width, layout.details.height, "Selection", UI.edgeDim)
   if (selectedItem) {
-    drawMiniIcon(canvas, layout.details.x + 2, layout.details.y + 1, inventorySprite(selectedItem), 6, 1)
-    canvas.write(layout.details.x + 10, layout.details.y + 1, trim(selectedItem, Math.floor(layout.details.width * 0.34)), UI.gold, UI.panel)
-    canvas.write(layout.details.x + Math.floor(layout.details.width * 0.42), layout.details.y + 1, trim(inventoryItemDescription(selectedItem), Math.floor(layout.details.width * 0.44)), UI.soft, UI.panel)
+    const actions = inventoryActionsForItem(model.session, selectedIndex)
+    const enabledActions = actions.map((action) => `${action.key} ${action.label}${action.enabled ? "" : " off"}`)
+    const visual = inventoryVisual(selectedItem)
+    drawItemCard(canvas, { x: layout.details.x + 2, y: layout.details.y + 1, width: 10, height: 5 }, selectedItem, true, false, true)
+    canvas.write(layout.details.x + 14, layout.details.y + 1, visual.kind.toUpperCase(), visual.accent, UI.panel)
+    writeWrapped(canvas, layout.details.x + 14, layout.details.y + 2, Math.floor(layout.details.width * 0.24), [selectedItem], 2, UI.gold, UI.panel)
+    writeWrapped(canvas, layout.details.x + Math.floor(layout.details.width * 0.42), layout.details.y + 1, Math.floor(layout.details.width * 0.54), [inventoryItemDescription(selectedItem)], 3, UI.soft, UI.panel)
+    const compare = equipmentComparisonText(model.session, selectedItem)
+    writeWrapped(canvas, layout.details.x + 14, layout.details.y + 4, layout.details.width - 16, [compare], 1, UI.muted, UI.panel)
+    writeWrapped(canvas, layout.details.x + 2, layout.details.y + 5, layout.details.width - 4, [enabledActions.join("  ")], 2, UI.ink, UI.panel)
   } else {
-    canvas.write(layout.details.x + 2, layout.details.y + 1, "Pack is empty.", UI.soft, UI.panel)
+    canvas.write(layout.details.x + 2, layout.details.y + 1, model.session.inventory.length ? "Empty slot." : "Pack is empty.", UI.soft, UI.panel)
   }
 
-  if (model.message) canvas.write(layout.details.x + 2, layout.details.y + 2, trim(model.message, layout.details.width - 4), UI.muted, UI.panel)
+  if (model.message) writeWrapped(canvas, layout.details.x + 2, layout.details.y + layout.details.height - 2, layout.details.width - 4, [model.message], 2, UI.muted, UI.panel)
   drawInventoryButton(canvas, layout.apply, "Enter use", selectedItem ? UI.focus : UI.muted)
   drawInventoryButton(canvas, layout.close, "Esc close", UI.gold)
 }
@@ -2492,16 +2765,40 @@ function drawEquipmentLine(canvas: Canvas, x: number, y: number, width: number, 
 }
 
 function drawInventorySlot(canvas: Canvas, rect: Rect, item: string | undefined, selected: boolean, dragging: boolean) {
-  const bg = selected ? cleanPanel3 : cleanPanel2
+  drawItemCard(canvas, rect, item, selected, dragging)
+}
+
+function drawItemCard(canvas: Canvas, rect: Rect, item: string | undefined, selected: boolean, dragging: boolean, detail = false) {
+  const emptyBg = selected ? cleanPanel3 : cleanPanel2
+  if (!item) {
+    canvas.fill(rect.x, rect.y, rect.width, rect.height, " ", emptyBg, emptyBg)
+    drawCleanBox(canvas, rect.x, rect.y, rect.width, rect.height, selected ? UI.edge : cleanLine, emptyBg)
+    const midY = rect.y + Math.max(1, Math.floor(rect.height / 2))
+    if (rect.width >= 8) canvas.write(rect.x + 2, midY, "empty", UI.muted, emptyBg)
+    return
+  }
+
+  const visual = inventoryVisual(item)
+  const bg = selected ? "#22303c" : visual.bg
   canvas.fill(rect.x, rect.y, rect.width, rect.height, " ", bg, bg)
-  drawCleanBox(canvas, rect.x, rect.y, rect.width, rect.height, selected ? UI.gold : cleanLine, bg)
+  drawCleanBox(canvas, rect.x, rect.y, rect.width, rect.height, selected ? UI.gold : visual.accent, bg)
   if (selected || dragging) canvas.fill(rect.x, rect.y, 1, rect.height, " ", dragging ? UI.cyan : UI.gold, dragging ? UI.cyan : UI.gold)
-  if (!item) return
-  drawMiniIcon(canvas, rect.x + 2, rect.y + 1, inventorySprite(item), Math.min(5, Math.max(4, rect.width - 4)), 1, dragging ? 0.65 : 1)
+
+  const iconW = detail ? Math.min(8, rect.width - 2) : Math.min(8, Math.max(5, rect.width - 4))
+  const iconH = detail ? Math.min(3, rect.height - 2) : Math.min(3, Math.max(2, rect.height - 3))
+  const iconX = rect.x + Math.max(1, Math.floor((rect.width - iconW) / 2))
+  drawMiniIcon(canvas, iconX, rect.y + 1, visual.sprite, iconW, iconH, dragging ? 0.65 : 1)
+
+  if (rect.width >= 6) {
+    const chipBg = selected ? UI.gold : cleanPanel3
+    canvas.fill(rect.x + rect.width - 4, rect.y + 1, 3, 1, " ", chipBg, chipBg)
+    canvas.write(rect.x + rect.width - 3, rect.y + 1, visual.chip, selected ? "#101820" : visual.accent, chipBg)
+  }
+
   const labelWidth = Math.max(0, rect.width - 2)
-  if (labelWidth >= 5) {
+  if (labelWidth >= 5 && rect.height >= 4) {
     const labelY = rect.y + rect.height - 2
-    const labelBg = selected ? "#22303c" : "#111c25"
+    const labelBg = selected ? "#18242e" : "#101821"
     canvas.fill(rect.x + 1, labelY, rect.width - 2, 1, " ", labelBg, labelBg)
     canvas.write(rect.x + 1, labelY, trimInventoryLabel(item, labelWidth), selected ? UI.gold : UI.ink, labelBg)
   }
@@ -2518,14 +2815,79 @@ function findInventoryByKind(inventory: string[], kind: "weapon" | "relic" | "co
   return inventory.find((item) => /potion|vial/i.test(item))
 }
 
-function inventoryItemDescription(item: string) {
-  const lower = item.toLowerCase()
-  if (lower.includes("potion")) return "Restores health when applied."
-  if (lower.includes("vial")) return "Small healing vial. Click or Enter to apply."
-  if (lower.includes("scroll")) return "Run-scoped utility item."
-  if (lower.includes("relic") || lower.includes("shard")) return "Quest and lore item."
-  if (lower.includes("blade") || lower.includes("sword")) return "Equipped as a basic weapon."
-  return "Stored in this world save."
+function drawStateDialog(canvas: Canvas, model: AppModel, x: number, y: number, width: number, height: number) {
+  const session = model.session
+  const bodyX = x + 4
+  const bodyY = y + 4
+  const bodyW = width - 8
+  const bodyH = height - 8
+  const gap = 2
+  const topH = Math.min(13, Math.max(10, Math.floor(bodyH * 0.52)))
+  const bottomY = bodyY + topH + 1
+  const bottomH = Math.max(7, y + height - 4 - bottomY)
+  const leftW = Math.min(30, Math.max(24, Math.floor(bodyW * 0.28)))
+  const statsW = Math.min(30, Math.max(22, Math.floor(bodyW * 0.26)))
+  const talentW = Math.max(22, bodyW - leftW - statsW - gap * 2)
+  const statsX = bodyX + leftW + gap
+  const talentX = statsX + statsW + gap
+
+  drawPanel(canvas, bodyX, bodyY, leftW, topH, "Crawler", UI.edge)
+  drawPixelBlock(canvas, bodyX + 2, bodyY + 2, animatedPixelSprite(classSprite(session.hero.classId, session.hero.appearance), "idle", session.turn, 10, 5), 1)
+  canvas.write(bodyX + 14, bodyY + 2, trim(session.hero.name, leftW - 17), UI.ink, UI.panel)
+  canvas.write(bodyX + 14, bodyY + 3, trim(session.hero.title, leftW - 17), UI.soft, UI.panel)
+  canvas.write(bodyX + 3, bodyY + 7, trim(`Level ${session.level}  XP ${session.xp}/${session.level * 10}  Deaths ${session.deaths}`, leftW - 6), UI.gold, UI.panel)
+  canvas.write(bodyX + 3, bodyY + 8, trim(`HP ${session.hp}/${session.maxHp}  Focus ${session.focus}/${session.maxFocus}`, leftW - 6), UI.focus, UI.panel)
+  canvas.write(bodyX + 3, bodyY + 9, trim(`Gold ${session.gold}  Floor ${session.floor}/${session.finalFloor}`, leftW - 6), UI.brass, UI.panel)
+  canvas.write(bodyX + 3, bodyY + 10, trim(`Mode ${session.mode}  Biome ${currentBiome(session)}`, leftW - 6), UI.muted, UI.panel)
+
+  drawPanel(canvas, statsX, bodyY, statsW, topH, "Stats", UI.edge)
+  const statOrder = Object.keys(statLabels) as Array<keyof typeof statLabels>
+  statOrder.slice(0, Math.max(0, topH - 3)).forEach((stat, index) => {
+    const value = session.stats[stat]
+    const rowY = bodyY + 2 + index
+    canvas.write(statsX + 3, rowY, statAbbreviations[stat], UI.gold, UI.panel)
+    canvas.write(statsX + 8, rowY, String(value).padStart(2, " "), UI.ink, UI.panel)
+    canvas.write(statsX + 12, rowY, formatModifier(statModifier(value)), UI.soft, UI.panel)
+    canvas.write(statsX + 18, rowY, trim(statLabels[stat], statsW - 21), UI.muted, UI.panel)
+  })
+
+  drawPanel(canvas, talentX, bodyY, talentW, topH, "Talents", UI.edge)
+  const learned = talentSummariesForSession(session)
+  const pending = session.levelUp?.choices.map((choice) => talentSummaryFor(choice.id)) ?? []
+  if (!learned.length) {
+    canvas.write(talentX + 3, bodyY + 2, "No talents learned yet.", UI.muted, UI.panel)
+    canvas.write(talentX + 3, bodyY + 4, "Level up to choose the first branch.", UI.soft, UI.panel)
+  }
+  learned.slice(0, 3).forEach((talent, index) => {
+    const rowY = bodyY + 2 + index * 3
+    canvas.write(talentX + 3, rowY, trim(talent.name, talentW - 6), UI.gold, UI.panel)
+    writeWrapped(canvas, talentX + 3, rowY + 1, talentW - 6, [talent.effect, talent.text], 2, UI.ink, UI.panel)
+  })
+  if (learned.length > 3) canvas.write(talentX + 3, bodyY + topH - 2, `+${learned.length - 3} more learned talents`, UI.muted, UI.panel)
+  if (pending.length && topH >= 13) canvas.write(talentX + 3, bodyY + topH - 2, `Pending choice: ${pending.map((talent) => talent.name).join(" / ")}`, UI.focus, UI.panel)
+
+  drawPanel(canvas, bodyX, bottomY, bodyW, bottomH, "Combat And Rewards", UI.edge)
+  const balance = combatBalanceSnapshot(session)
+  const equipment = Object.entries(session.equipment ?? {})
+    .flatMap(([slot, item]) => (item ? [`${slot}: ${item.name}${item.bonusDamage ? ` +${item.bonusDamage} damage` : ""}`] : []))
+    .join("  ")
+  canvas.write(bodyX + 3, bottomY + 2, trim(equipment || "Equipment bonuses: starter gear only.", bodyW - 6), equipment ? UI.gold : UI.muted, UI.panel)
+  canvas.write(bodyX + 3, bottomY + 3, trim(`Run modifier: ${session.floorModifier.name}. ${session.floorModifier.text}`, bodyW - 6), UI.soft, UI.panel)
+  canvas.write(
+    bodyX + 3,
+    bottomY + 4,
+    trim(`Balance ${balance.target}: ${balance.hitChance}% hit  ${balance.fleeChance}% flee  ${balance.deathRisk}% death risk  ${balance.projectedClassWinRate}% class win`, bodyW - 6),
+    UI.focus,
+    UI.panel,
+  )
+  writeWrapped(canvas, bodyX + 3, bottomY + 5, bodyW - 6, [balance.weaknessNote, balance.focusNote], 2, UI.soft, UI.panel)
+  combatSkills.slice(0, Math.max(0, bottomH - 8)).forEach((skill, index) => {
+    const rowY = bottomY + 8 + index
+    const talent = compactTalentEffectTextForSkill(session, skill)
+    const line = `${index + 1} ${skill.name}  ${statAbbreviations[skill.stat]} d20 ${formatModifier(combatModifier(session, skill.stat))}  DC ${skill.dc}  ${skill.damage} dmg  focus ${focusCostForSkill(session, skill)}`
+    canvas.write(bodyX + 3, rowY, trim(line, Math.floor(bodyW * 0.52)), UI.ink, UI.panel)
+    canvas.write(bodyX + Math.floor(bodyW * 0.57), rowY, trim(talent || combatAffinityLabel(skill.affinity), Math.floor(bodyW * 0.38)), talent ? UI.focus : UI.muted, UI.panel)
+  })
 }
 
 function questProgress(session: GameSession, eventIds: string[]) {
@@ -2697,9 +3059,11 @@ function drawHubDialog(canvas: Canvas, model: AppModel, x: number, y: number, wi
   const food = hub.preparedFood[0] ?? "none"
   const weapon = model.session.equipment.weapon
   const mutators = hub.activeMutators.length ? hub.activeMutators.map(runMutatorShortLabel).join(", ") : "none"
+  const challenge = hub.challengeBoard.activeRun ?? hub.challengeBoard.leaderboard[0]
   canvas.write(rightX + 2, trustY + 8, trim(`Food ${food}`, rightW - 4), UI.ink, UI.panel)
   canvas.write(rightX + 2, trustY + 9, trim(`Weapon ${weapon?.name ?? "none"}  dmg +${weapon?.bonusDamage ?? 0}`, rightW - 4), UI.ink, UI.panel)
   canvas.write(rightX + 2, trustY + 10, trim(`Mutators ${mutators}`, rightW - 4), UI.soft, UI.panel)
+  if (challenge) canvas.write(rightX + 2, trustY + 11, trim(`Challenge ${challenge.cadence} seed ${challenge.seed}`, rightW - 4), UI.gold, UI.panel)
   if (!hub.unlocked) canvas.write(rightX + 2, trustY + 12, trim("Clear the dungeon or recover a deed to open village building.", rightW - 4), UI.gold, UI.panel)
   else canvas.write(rightX + 2, trustY + 12, trim("Keys: 1 smith, 2 kitchen, 3 sell, 4 food, 5 farm, 6 weapon, 7 quest, 8 hard.", rightW - 4), UI.gold, UI.panel)
 }
@@ -2787,6 +3151,38 @@ function actorAnimation(selected: boolean, session: GameSession): SpriteAnimatio
   return "idle"
 }
 
+function remotePlayersOnFloor(remotePlayers: RemotePlayerMarker[], floor: number) {
+  return remotePlayers.filter((player) => player.connected && player.floor === floor)
+}
+
+function remotePlayerAt(remotePlayers: RemotePlayerMarker[], point: { x: number; y: number }) {
+  return remotePlayers.find((player) => player.x === point.x && player.y === point.y)
+}
+
+function drawRemotePlayerSprite(canvas: Canvas, x: number, y: number, width: number, height: number, remote: RemotePlayerMarker, debugView: boolean, frameSeed: number) {
+  if (debugView) {
+    canvas.write(x, y, remoteInitial(remote.name).repeat(2), UI.cyan)
+    return
+  }
+
+  drawSprite(canvas, x, y, width, height, classSprite(remoteHeroClass(remote.classId)), debugView, "idle", frameSeed + remote.name.length)
+  if (width >= 8 && height >= 5) canvas.write(x + 1, y + height - 1, trim(remote.name, width - 2), UI.cyan)
+  else canvas.write(x + Math.max(0, width - 2), y, remoteInitial(remote.name), UI.cyan)
+}
+
+function drawRemoteStackBadge(canvas: Canvas, x: number, y: number, width: number, _height: number, remote: RemotePlayerMarker, count: number) {
+  const label = count > 1 ? `+${count}` : `+${remoteInitial(remote.name)}`
+  canvas.write(x + Math.max(0, width - label.length - 1), y, label, UI.cyan)
+}
+
+function remoteInitial(name: string) {
+  return (name.trim()[0] || "&").toUpperCase()
+}
+
+function remoteHeroClass(classId: string): HeroClass {
+  return (heroClassIds as readonly string[]).includes(classId) ? (classId as HeroClass) : "ranger"
+}
+
 function classSprite(classId: HeroClass, appearance?: HeroAppearance): PixelSpriteId {
   return heroSpriteForAppearance(classId, appearance) as PixelSpriteId
 }
@@ -2841,6 +3237,10 @@ function drawDialog(canvas: Canvas, model: AppModel) {
     return
   }
 
+  if (model.dialog === "state") {
+    drawStateDialog(canvas, model, x, y, width, height)
+  }
+
   if (model.dialog === "book") {
     drawBookDialog(canvas, model, x, y, width, height)
   }
@@ -2878,12 +3278,13 @@ function drawDialog(canvas: Canvas, model: AppModel) {
     const rows = [
       ["Move", "Arrows / WASD"],
       ["Confirm", "Enter / Space"],
-      ["Save", "Ctrl+S or F5 saves locally; Esc then M opens run saves"],
-      ["Pack", "I inventory, B book, M map, V village, J quests, O quests in Vim mode, H potion, L log"],
+      ["Save", "Ctrl+S saves locally; Esc then M opens run saves"],
+      ["Pack", "I inventory, C state, B book, M map, V village, J quests, O quests in Vim mode, H potion, L log"],
       ["Combat", "Tab target, 1-6 skill, F flee, Enter rolls d20"],
       ["Camera", "- wider FOV, = closer view"],
       ["Overlay", "U hides or shows the UI for this run"],
       ["Run", "R rest, Esc pause, Q quit prompt"],
+      ["Audio", "Ctrl+O mutes or unmutes music and SFX. Audio volume lives in Settings."],
     ]
     rows.forEach((row, index) => {
       const rowY = y + 4 + index * 2
@@ -2938,7 +3339,7 @@ function drawPauseAction(canvas: Canvas, x: number, y: number, width: number, ke
 
 function drawRunEnd(canvas: Canvas, session: GameSession) {
   const width = Math.min(68, canvas.width - 8)
-  const height = 13
+  const height = 14
   const x = Math.floor((canvas.width - width) / 2)
   const y = Math.floor((canvas.height - height) / 2)
   canvas.fill(x, y, width, height, " ", "#05070a", "#05070a")
@@ -2949,12 +3350,19 @@ function drawRunEnd(canvas: Canvas, session: GameSession) {
     session.status === "victory"
       ? "The final gate opens. The dungeon releases its claim."
       : "The dungeon closes around your unfinished oath."
+  const recovery = session.hub.unlocked
+    ? session.status === "victory"
+      ? "Village road is open: sell loot, build, cook, and descend again."
+      : "Village progress remains; this run's floor progress is lost."
+    : "No village route yet. Retry this seed or return to title."
+  const footer = session.hub.unlocked ? "Enter next descent    V village    Esc title    q quit" : "Enter rerun this seed    Esc title    q quit"
 
   canvas.center(y + 2, title, session.status === "victory" ? "#f4d06f" : "#d56b8c")
   canvas.center(y + 4, body, "#d8dee9")
   canvas.center(y + 6, `Score ${runScore(session)}  Floor ${session.floor}/${session.finalFloor}  Turns ${session.turn}`, "#f4d06f")
   canvas.center(y + 7, `Kills ${session.kills}  Gold ${session.gold}  Level ${session.level}`, "#8f9ba8")
-  canvas.center(y + 9, "Enter rerun this seed    Esc title    q quit", "#66717d")
+  canvas.center(y + 9, recovery, session.hub.unlocked ? UI.focus : "#8f9ba8")
+  canvas.center(y + 11, footer, "#66717d")
 }
 
 function drawDungeonBackdrop(canvas: Canvas, seed: number, settings?: UserSettings) {
@@ -3048,6 +3456,10 @@ function settingValue(model: AppModel, id: (typeof settingsOptions)[number]["id"
   if (id === "diceSkin") return diceSkinName(settings.diceSkin)
   if (id === "backgroundFx") return settings.backgroundFx
   if (id === "tileScale") return settings.tileScale
+  if (id === "muteAudio") return onOff(settings.muteAudio)
+  if (id === "masterVolume") return formatPercent(settings.masterVolume)
+  if (id === "musicVolume") return formatPercent(settings.musicVolume)
+  if (id === "sfxVolume") return formatPercent(settings.sfxVolume)
   if (id === "music") return onOff(settings.music)
   return onOff(settings.sound)
 }
@@ -3055,6 +3467,7 @@ function settingValue(model: AppModel, id: (typeof settingsOptions)[number]["id"
 function settingSliderValues(id: SettingOption["id"]) {
   if (id === "tileScale") return ["overview", "wide", "medium", "close"]
   if (id === "backgroundFx") return ["low", "normal", "dense"]
+  if (id === "masterVolume" || id === "musicVolume" || id === "sfxVolume") return ["0%", "25%", "50%", "75%", "100%"]
   return ["off", "on"]
 }
 
@@ -3074,6 +3487,10 @@ function accessibilitySummary(settings: UserSettings) {
   return `High contrast ${onOff(settings.highContrast)}. Reduce motion ${onOff(settings.reduceMotion)}.`
 }
 
+function formatPercent(value: number) {
+  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`
+}
+
 function onOff(value: boolean) {
   return value ? "on" : "off"
 }
@@ -3081,8 +3498,7 @@ function onOff(value: boolean) {
 function trim(text: string, width: number) {
   if (width <= 0) return ""
   if (text.length <= width) return text
-  if (width === 1) return "…"
-  return `${text.slice(0, Math.max(0, width - 1))}…`
+  return text.slice(0, width)
 }
 
 function trimInventoryLabel(text: string, width: number) {

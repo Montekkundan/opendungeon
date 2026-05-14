@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { applyOpeningStoryBranch, createSession, playLocalCutscene, selectSkill, tryMove, unlockHub } from "../game/session.js"
+import { applyOpeningStoryBranch, chooseLevelUpTalent, createSession, grantXp, playLocalCutscene, selectSkill, tryMove, unlockHub } from "../game/session.js"
 import { setTile } from "../game/dungeon.js"
 import { defaultSettings } from "../game/settingsStore.js"
+import { localNpcStoryDialog } from "../game/story.js"
 import { hashText } from "../shared/hash.js"
 import { checkingUpdateStatus } from "../system/updateCheck.js"
 import { currentStartItemDisabled, draw, type AppModel, type ScreenId } from "./screens.js"
@@ -38,7 +39,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: skillCheckModel(),
-      expectedHash: "2e5440e5",
+      expectedHash: "2da5b129",
       requiredText: ["Talent Check", "Whispering Relic", "Total >= difficulty", "Enter roll d20", "Esc step away"],
     },
     {
@@ -46,7 +47,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: combatModel(),
-      expectedHash: "fe9181b2",
+      expectedHash: "35750a46",
       requiredText: ["Turn Combat", "Order", "Shado", "Necroman", "Weakness"],
     },
     {
@@ -54,7 +55,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("settings", createSession(4321), { settingsTabIndex: 3 }),
-      expectedHash: "fcac0598",
+      expectedHash: "fa8553aa",
       requiredText: ["Settings", "Visuals", "Camera FOV"],
     },
     {
@@ -62,7 +63,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("tutorial", createSession(1234), { tutorialIndex: 1, menuIndex: 1 }),
-      expectedHash: "ec3501a6",
+      expectedHash: "b710fab2",
       requiredText: ["Tutorial", "Combat", "Initiative", "d20"],
     },
     {
@@ -70,7 +71,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("game", createSession(1234), { dialog: "book" }),
-      expectedHash: "caac3e41",
+      expectedHash: "4ef0166b",
       requiredText: ["BOOK", "All entries", "Story", "Monsters", "Waking Cell", "Portal Room"],
     },
     {
@@ -78,8 +79,8 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: villageModel(),
-      expectedHash: "c762e204",
-      requiredText: ["Village", "Walkable Village", "NPC Schedule", "Market and Balance", "First loop", "G starts"],
+      expectedHash: "e6f26f11",
+      requiredText: ["Village", "Walkable Village", "NPC Schedule", "Market and Balance", "broken", "Seed Fresh", "S seed", "R craft"],
     },
   ]
 
@@ -112,11 +113,43 @@ test("multiplayer picker only shows multiplayer modes", () => {
   const text = screenText(output.chunks)
 
   expect(text).toContain("Multiplayer")
-  expect(text).toContain("Co-op")
-  expect(text).toContain("Race")
-  expect(text).toContain("Solo runs start from New descent")
+  expect(text).toContain("Multiplayer co-op")
+  expect(text).toContain("Multiplayer race")
+  expect(text).toContain("Single Player uses New descent")
+  expect(text).toContain("Multiplayer with GM lives")
   expect(text).toContain("opendungeon join http://127.0.0.1:3737")
   expect(text).not.toContain("One crawl, local run.")
+})
+
+test("co-op game screen renders remote party members on the map and radar", () => {
+  const session = createSession(1234, "coop", "ranger", "Mira")
+  const output = draw(
+    modelFor("game", session, {
+      remotePlayers: [
+        {
+          id: "remote-sol",
+          name: "Sol",
+          classId: "cleric",
+          floor: session.floor,
+          x: session.player.x + 1,
+          y: session.player.y,
+          hp: 19,
+          level: 1,
+          connected: true,
+          tutorialStage: "movement",
+          tutorialReady: false,
+          tutorialCompleted: false,
+        },
+      ],
+    }),
+    120,
+    40,
+  )
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Sol")
+  expect(text).toContain("&ally")
+  expect(text).toContain("Party Sol F1 19hp near")
 })
 
 test("normal screen changes do not draw transition banners", () => {
@@ -208,6 +241,20 @@ test("cloud profile screen draws account once and names local-only action clearl
   expect(text).not.toContain("Use local profile")
 })
 
+test("audio settings use portable shortcuts and keep panel copy bounded", () => {
+  const output = draw(modelFor("settings", createSession(1234), { settingsTabIndex: 4, settingsIndex: 0 }), 136, 44)
+  const text = screenText(output.chunks)
+  const rows = text.split("\n")
+
+  expect(rows).toHaveLength(44)
+  expect(rows.every((row) => row.length === 136)).toBe(true)
+  expect(text).toContain("Ctrl+O toggles all audio.")
+  expect(text).toContain("Ctrl+O mute")
+  expect(text).toContain("OpenTUI audio starts when enabled.")
+  expect(text).not.toContain(["F", "8"].join(""))
+  expect(text).not.toContain("function")
+})
+
 test("new descent story scene shows branch choices and cutscene controls", () => {
   const session = createSession(1234)
   playLocalCutscene(session, "waking-cell")
@@ -217,6 +264,16 @@ test("new descent story scene shows branch choices and cutscene controls", () =>
   expect(text).toContain("I have been here before")
   expect(text).toContain("Follow the voice")
   expect(text).toContain("Enter answer")
+})
+
+test("opening story outcome is visible in the run even when tutorial coach is open", () => {
+  const session = createSession(1234, "solo", "ranger", "Mira", undefined, true)
+  applyOpeningStoryBranch(session, "read-ledger")
+  const output = draw(modelFor("game", session), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Opening choice")
+  expect(text).toContain("ledger page lists")
 })
 
 test("opening story branches change run state", () => {
@@ -231,6 +288,7 @@ test("opening story branches change run state", () => {
   expect(session.inventory[0]).toBe("Ledger scrap")
   expect(session.focus).toBeGreaterThanOrEqual(beforeFocus)
   expect(session.knowledge.map((entry) => entry.title)).toContain("Ledger Scrap")
+  expect(session.toasts[0]?.text).toContain("The wound is old")
 })
 
 test("quest journal only lists discovered chains at the start", () => {
@@ -239,7 +297,7 @@ test("quest journal only lists discovered chains at the start", () => {
   const output = draw(modelFor("game", session, { dialog: "quests" }), 120, 40)
   const text = screenText(output.chunks)
 
-  expect(text).toContain("Escort: crypt")
+  expect(text).toContain("Escort: Floors 1-2")
   expect(text).toContain("locked quest chains hidden")
   const firstObjective = session.world.events.find((event) => event.id === session.world.quests.find((quest) => quest.status === "active")?.objectiveEventIds[0])?.title
   if (firstObjective) expect(text).toContain(firstObjective)
@@ -251,8 +309,55 @@ test("inventory presents gold and full action labels", () => {
   const text = screenText(output.chunks)
 
   expect(text).toContain("Gold 0")
+  expect(text).toContain("WEAPON")
   expect(text).toContain("Enter use")
+  expect(text).toContain("E equip")
+  expect(text).toContain("X drop")
+  expect(text).toContain("S stash off")
+  expect(text).toContain("V sell off")
   expect(text).toContain("Esc close")
+})
+
+test("inventory details follow the highlighted slot exactly", () => {
+  const session = createSession(1234)
+  const vial = screenText(draw(modelFor("game", session, { dialog: "inventory", inventoryIndex: 1 }), 120, 40).chunks)
+  const empty = screenText(draw(modelFor("game", session, { dialog: "inventory", inventoryIndex: 12 }), 120, 40).chunks)
+
+  expect(vial).toContain("Dew vial")
+  expect(vial).toContain("CONSUMABLE")
+  expect(vial).toContain("Consumable")
+  expect(vial).toContain("Compare: utility or loot item")
+  expect(vial).not.toContain("Equipped weapon: affects")
+  expect(empty).toContain("Empty slot.")
+})
+
+test("state sheet shows stats talents and combat rewards", () => {
+  const session = createSession(1234, "solo", "ranger", "Mira")
+  session.talents.push("pathfinder")
+  const output = draw(modelFor("game", session, { dialog: "state" }), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("CRAWLER STATE")
+  expect(text).toContain("Stats")
+  expect(text).toContain("Talents")
+  expect(text).toContain("Pathfinder")
+  expect(text).toContain("Aimed Shot +1 damage")
+  expect(text).toContain("Combat And Rewards")
+  expect(text).toContain("DEX")
+})
+
+test("village panels wrap long location and market copy", () => {
+  const session = createSession(1234, "coop", "ranger", "Mira")
+  unlockHub(session)
+  session.hub.village.selectedLocation = "market"
+  session.hub.village.shopLog.unshift("Customers test prices for dungeon loot before dawn because the market remembers scarcity.")
+  const output = draw(modelFor("village", session, { saveStatus: "Next descent seed: fresh random seed with loot, build, and food preparation complete." }), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Customers test prices for dungeon")
+  expect(text).toContain("loot before dawn")
+  expect(text).toContain("Next descent seed: fresh random seed")
+  expect(text).not.toContain("Customers test prices for dungeon lo…")
 })
 
 test("quickbar does not expose gold as a dead G action", () => {
@@ -267,9 +372,9 @@ test("minimap renders a local radar with objective direction", () => {
   const output = draw(modelFor("game", createSession(1234)), 120, 40)
   const text = screenText(output.chunks)
 
-  expect(text).toContain("Radar  goal E15")
-  expect(text).toContain("Goal E15 (15 steps)")
-  expect(text).toContain("@you !foe nNPC $shop >exit")
+  expect(text).toContain("Radar  goal E43")
+  expect(text).toContain("Goal E43 (43 steps)")
+  expect(text).toContain("@you &ally")
   expect(text).not.toContain("Mini map")
 })
 
@@ -313,6 +418,28 @@ test("merchant response footer does not offer close-run from conversation", () =
   expect(text).not.toContain("Q close run")
 })
 
+test("npc conversation choices keep full labels readable", () => {
+  const session = createSession(1234)
+  const dialog = localNpcStoryDialog("shrine-keeper", 2)
+  session.conversation = {
+    id: "shrine-test",
+    actorId: "shrine-test",
+    kind: "shrine-keeper",
+    speaker: dialog.speaker,
+    text: dialog.text,
+    status: "open",
+    options: dialog.options,
+    selectedOption: 1,
+  }
+  const output = draw(modelFor("game", session), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Take blessing")
+  expect(text).toContain("Ask relic lore")
+  expect(text).toContain("1-3 choose")
+  expect(text).not.toContain("Ask relic lo…")
+})
+
 test("active tutorial coach remains visible when run UI is hidden", () => {
   const session = createSession(1234, "solo", "ranger", "Mira", undefined, true)
   const output = draw(modelFor("game", session, { uiHidden: true }), 120, 40)
@@ -322,6 +449,99 @@ test("active tutorial coach remains visible when run UI is hidden", () => {
   expect(text).toContain("Up")
   expect(text).toContain("Pack I")
   expect(text).toContain("The gate opens")
+})
+
+test("tutorial coach wraps co-op checkpoint instructions", () => {
+  const output = draw(modelFor("game", createSession(1234, "coop", "ranger", "Mira", undefined, true)), 136, 44)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Area I - Movement")
+  expect(text).toContain("In co-op")
+  expect(text).toContain("every connected crawler")
+  expect(text).toContain("must finish this checkpoint")
+  expect(text).toContain("The gate opens")
+})
+
+test("talent check modal shows the full D20 rule and result copy", () => {
+  const model = skillCheckModel()
+  const check = model.session.skillCheck
+  if (!check) throw new Error("expected skill check")
+  check.status = "resolved"
+  check.roll = { d20: 15, modifier: -1, total: 14, dc: check.dc, success: true, critical: false, fumble: false, stat: check.stat, consequence: check.successText }
+  const output = draw(model, 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Total >= difficulty wins; 20 always succeeds and 1 fails.")
+  expect(text).toContain("You got a Bound relic, focus, gold, and XP.")
+  expect(text).toContain("Press I to inspect inventory.")
+  expect(text).not.toContain("1 fa…")
+})
+
+test("important playtest surfaces do not hide instructions behind ellipses", () => {
+  const session = createSession(1234, "solo", "ranger", "Mira")
+  const dialog = localNpcStoryDialog("shrine-keeper", 2)
+  session.conversation = {
+    id: "shrine-test",
+    actorId: "shrine-test",
+    kind: "shrine-keeper",
+    speaker: dialog.speaker,
+    text: dialog.text,
+    status: "open",
+    options: dialog.options,
+    selectedOption: 1,
+  }
+
+  const village = createSession(4321, "coop", "ranger", "Mira")
+  unlockHub(village)
+  village.hub.village.selectedLocation = "market"
+  village.hub.village.shopLog.unshift("Customers test prices for dungeon loot before dawn because the market remembers scarcity.")
+
+  const outputs = [
+    draw(modelFor("game", session), 120, 40),
+    draw(skillCheckModel(), 120, 40),
+    draw(modelFor("game", createSession(2345), { dialog: "inventory", inventoryIndex: 1 }), 120, 40),
+    draw(modelFor("village", village), 120, 40),
+  ]
+
+  for (const output of outputs) {
+    expect(screenText(output.chunks)).not.toContain("…")
+  }
+})
+
+test("level-up modal requires an explicit talent selection before enter", () => {
+  const session = createSession(1234, "solo", "arcanist")
+  grantXp(session, 10)
+  const waiting = screenText(draw(modelFor("game", session), 100, 32).chunks)
+  expect(waiting).toContain("Press 1-3 to select a talent")
+  expect(waiting).toContain("Enter waits")
+  expect(waiting).not.toContain("Enter chooses")
+
+  const selected = screenText(draw(modelFor("game", session, { levelUpIndex: 1 }), 100, 32).chunks)
+  expect(selected).toContain("Talent 2 selected")
+  expect(selected).toContain("Press Enter to learn it")
+})
+
+test("combat panel labels matching talent effects", () => {
+  const session = createSession(1234, "solo", "ranger")
+  grantXp(session, 10)
+  chooseLevelUpTalent(session, 0)
+  const target = { x: session.player.x + 1, y: session.player.y }
+  setTile(session.dungeon, target, "floor")
+  session.dungeon.actors.push({
+    id: "talent-slime",
+    kind: "slime",
+    position: target,
+    hp: 20,
+    damage: 2,
+  })
+  tryMove(session, 1, 0)
+  selectSkill(session, 1)
+
+  const output = draw(modelFor("game", session), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Pathfinder +1 dmg")
+  expect(text).toContain("Talent: Pathfinder +1 damage.")
 })
 
 test("book dialog separates monster entries into the monster tab", () => {
@@ -338,6 +558,32 @@ test("book dialog separates monster entries into the monster tab", () => {
   expect(text).toContain("Slime Monstrary")
   expect(text).toContain("Known weakness")
   expect(text).not.toContain("Waking Cell")
+})
+
+test("run end explains village recovery after death", () => {
+  const session = createSession(1234)
+  unlockHub(session)
+  session.status = "dead"
+  session.hp = 0
+  const output = draw(modelFor("game", session), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("YOU FELL")
+  expect(text).toContain("Village progress remains")
+  expect(text).toContain("Enter next descent")
+  expect(text).toContain("V village")
+})
+
+test("run end explains village preparation after victory", () => {
+  const session = createSession(1234)
+  unlockHub(session)
+  session.status = "victory"
+  const output = draw(modelFor("game", session), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("VICTORY")
+  expect(text).toContain("sell loot, build, cook")
+  expect(text).toContain("Enter next descent")
 })
 
 function skillCheckModel() {
@@ -400,6 +646,7 @@ function modelFor(screen: ScreenId, session = createSession(1234), overrides: Pa
     classIndex: 2,
     modeIndex: 0,
     seed: session.seed,
+    villageSeedMode: "fresh",
     session,
     message: "",
     saves: [],
@@ -411,6 +658,9 @@ function modelFor(screen: ScreenId, session = createSession(1234), overrides: Pa
     settingsTabIndex: 0,
     settingsIndex: 0,
     settingsReturnScreen: "start",
+    audioStatus: "Audio ready.",
+    remotePlayers: [],
+    coopGateStatus: "",
     inputMode: null,
     uiHidden: false,
     inventoryIndex: 0,
@@ -419,6 +669,7 @@ function modelFor(screen: ScreenId, session = createSession(1234), overrides: Pa
     bookTabIndex: 0,
     questIndex: 0,
     tutorialIndex: 0,
+    levelUpIndex: null,
     internetStatus: "online",
     currentVersion: "0.1.0",
     updateStatus: checkingUpdateStatus("0.1.0"),

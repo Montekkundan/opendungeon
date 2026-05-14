@@ -1,5 +1,6 @@
 import type { Actor } from "./dungeon.js"
 import type { NpcActorId } from "./domainTypes.js"
+import { defaultFinalFloor } from "./progression.js"
 import type { ConversationOption } from "./session.js"
 
 export type StoryBeat = {
@@ -20,6 +21,16 @@ export type StoryKnowledge = {
   text: string
   kind: "memory" | "note" | "npc" | "tutorial" | "hub" | "monster"
   floor?: number
+}
+
+export type FloorTacticalPlan = {
+  floor: number
+  title: string
+  purpose: string
+  biomeHook: string
+  monsterMix: string
+  npcHook: string
+  finalGateClue: string
 }
 
 export const localStoryBeats: StoryBeat[] = [
@@ -49,6 +60,58 @@ export const localStoryBeats: StoryBeat[] = [
     text: "The grave-root has worn too many endings. At the last gate it chooses one voice and claims it wrote your past.",
   },
 ]
+
+export const floorTacticalPlans: FloorTacticalPlan[] = [
+  {
+    floor: 1,
+    title: "Area I - First Steps",
+    purpose: "Learn movement, inventory, quests, and Book reading before the first gate opens.",
+    biomeHook: "The room is steady enough to read; the danger is missing the controls that keep you alive later.",
+    monsterMix: "Slimes teach bump combat, rust squires teach guard pressure, and gallows wisps teach ranged threat lines.",
+    npcHook: "The first helper or merchant frames the dungeon as a place that remembers choices better than the crawler does.",
+    finalGateClue: "Every later gate asks for proof that you learned the room before it.",
+  },
+  {
+    floor: 2,
+    title: "Area II - People and Artifacts",
+    purpose: "Practice NPC choices, healing, relic checks, and d20 risk before combat pressure rises.",
+    biomeHook: "Quiet wards reward reading the prompt, stepping away from bad checks, and spending focus deliberately.",
+    monsterMix: "Wisps and rust squires force positioning while carrion moths punish slow routing and ghouls test recovery.",
+    npcHook: "Wounded couriers, shrine keepers, and merchants can heal, bless, trade, or reveal why relics ask for stats.",
+    finalGateClue: "The road home wants proof from people and artifacts, not only from kills.",
+  },
+  {
+    floor: 3,
+    title: "Area III - Fighting for the Gate",
+    purpose: "Resolve the first arc with focused fights, weakness reading, and the final guardian.",
+    biomeHook: "The salted shrine makes poor focus spending visible because the exit is now the final gate.",
+    monsterMix: "Ghouls pressure health, necromancers pressure range, rust squires protect threats, and mimics punish greed.",
+    npcHook: "Shrine and jailer dialogue should point toward fighting strategy, final-gate keys, and when to flee.",
+    finalGateClue: "Clear the guardian and the dungeon releases the first road to the village.",
+  },
+  {
+    floor: 4,
+    title: "Later Descent - Broken Gaol",
+    purpose: "Escalate second-run strategy with guarded casters, cursed rooms, and route decisions.",
+    biomeHook: "The gaol turns every shortcut into a resource question: health, focus, gold, or time.",
+    monsterMix: "Necromancers, wisps, rust squires, moths, mimics, and ghouls appear together to break one-note builds.",
+    npcHook: "Jailer and cartographer branches should connect optional keys, rescue routes, and village consequences.",
+    finalGateClue: "Later gates should ask what the village changed before the crawler returned.",
+  },
+  {
+    floor: 5,
+    title: "Later Descent - Root Throne",
+    purpose: "Use boss phases, readable telegraphs, and Book discoveries as the long-form endgame pattern.",
+    biomeHook: "The root throne should remix previous lessons instead of just adding raw numbers.",
+    monsterMix: "The grave-root boss anchors mixed escorts whose weaknesses reward the player's learned build.",
+    npcHook: "Aftermath dialogue should remember which NPCs, stations, and trust paths helped the clear.",
+    finalGateClue: "The final gate is not only an exit; it is the receipt for the whole village plan.",
+  },
+]
+
+export function floorTacticalPlan(floor: number) {
+  return floorTacticalPlans.find((plan) => plan.floor === floor) ?? floorTacticalPlans[floorTacticalPlans.length - 1]
+}
 
 export function openingStoryText() {
   return "You wake in the dungeon with no memory. The first lesson is simple: survive long enough to learn why the doors know you."
@@ -106,10 +169,11 @@ export function storyBeatForFloor(floor: number) {
 
 export function floorKnowledgeEntry(floor: number): StoryKnowledge {
   const beat = storyBeatForFloor(floor)
+  const plan = floorTacticalPlan(floor)
   return {
     id: `floor-${beat.floor}-${slug(beat.title)}`,
     title: beat.title,
-    text: beat.text,
+    text: `${beat.text} Tactical purpose: ${plan.purpose} Biome modifier hook: ${plan.biomeHook} Monster mix: ${plan.monsterMix} NPC/event hook: ${plan.npcHook} Final-gate clue: ${plan.finalGateClue}`,
     kind: floor === 1 ? "memory" : "note",
     floor: beat.floor,
   }
@@ -228,7 +292,7 @@ const npcStoryBase: Record<NpcActorId, { speaker: string; text: string; floorHoo
   cartographer: {
     speaker: "Cartographer Venn",
     text: "You asked me this before, though you never remember the answer.",
-    floorHook: (floor) => `I can mark the route to floor ${Math.min(5, floor + 1)} and the way back to the portal room, if it still opens for you.`,
+    floorHook: (floor) => `I can mark the route to floor ${Math.min(defaultFinalFloor, floor + 1)} and the way back to the portal room, if it still opens for you.`,
     options: (floor, beat) => [
       { id: "map", label: "Mark map", text: `Venn marks ${beat.title}. Your next objective feels less like noise.` },
       { id: "route", label: "Ask route", text: `The route bends around floor ${floor}'s loudest room, then cuts back toward the stairs.` },

@@ -140,6 +140,32 @@ describe("save store", () => {
       expect(loaded.controlScheme).toBe("vim")
     })
   })
+
+  test("migrates pre-audio profiles without leaving music silently disabled", () => {
+    withProfileDir(() => {
+      writeFileSync(
+        profilePath(),
+        `${JSON.stringify({
+          game: "opendungeon",
+          version: 1,
+          settings: {
+            username: "legacy-crawler",
+            music: false,
+            sound: true,
+          },
+        })}\n`,
+        "utf8",
+      )
+
+      const loaded = loadSettings()
+
+      expect(loaded.username).toBe("legacy-crawler")
+      expect(loaded.music).toBe(true)
+      expect(loaded.sound).toBe(true)
+      expect(loaded.muteAudio).toBe(false)
+      expect(loaded.masterVolume).toBe(defaultSettings.masterVolume)
+    })
+  })
 })
 
 function withSaveDirs(run: () => void) {

@@ -18,7 +18,7 @@ export function parseLobbyHostArgs(args: string[], env: Env = process.env): Lobb
     port: positivePort(env.OPENDUNGEON_PORT ?? env.PORT, 3737),
     bindHost: env.OPENDUNGEON_BIND_HOST || env.OPENDUNGEON_HOST || env.HOST || "0.0.0.0",
     seed: positiveInt(env.OPENDUNGEON_SEED, Math.floor(Math.random() * 9_000_000) + 1_000_000),
-    mode: env.OPENDUNGEON_MODE === "coop" || env.OPENDUNGEON_MODE === "race" ? env.OPENDUNGEON_MODE : "race",
+    mode: env.OPENDUNGEON_MODE === "coop" || env.OPENDUNGEON_MODE === "race" ? env.OPENDUNGEON_MODE : "coop",
     inviteCode: "",
     leaderboardPath: env.OPENDUNGEON_LOBBY_LEADERBOARD || "",
     publicUrl: normalizeLobbyBaseUrl(env.OPENDUNGEON_PUBLIC_URL || env.OPENDUNGEON_LOBBY_PUBLIC_URL || ""),
@@ -70,6 +70,36 @@ export function normalizeLobbyBaseUrl(raw: string) {
   }
 }
 
+export function lobbyJoinUsageMessage(raw: string) {
+  const suffix = raw.trim() ? `\nCould not parse lobby URL: ${raw}` : ""
+  return `Usage: opendungeon join <lobby-url>\nExample: opendungeon join http://127.0.0.1:3737${suffix}`
+}
+
+export function lobbyInviteErrorMessage(lobbyUrl: string, error: unknown) {
+  const reason = errorReason(error)
+  if (reason === "timeout") return `Could not reach lobby ${lobbyUrl}. The request timed out; check the host IP, port, and firewall.`
+  if (reason === "refused") return `Could not reach lobby ${lobbyUrl}. No host is listening there; start opendungeon-host or use the printed LAN URL.`
+  if (reason.startsWith("HTTP ")) return `Lobby ${lobbyUrl} responded with ${reason}. Check that this is an opendungeon-host URL, not the website invite page.`
+  return `Could not read lobby invite at ${lobbyUrl}. Check the server URL, port, and whether the host is still running.`
+}
+
+export function lobbyInviteMismatchNotice(mode: LobbyMode | undefined, seed: number | undefined, env: Env = process.env) {
+  const notices: string[] = []
+  const envMode = env.OPENDUNGEON_MODE ?? env.DUNGEON_MODE
+  const envSeed = positiveInt(env.OPENDUNGEON_SEED ?? env.DUNGEON_SEED, 0)
+  if (mode && envMode && envMode !== mode) notices.push(`mode ${mode} overrides ${envMode}`)
+  if (seed && envSeed && envSeed !== seed) notices.push(`seed ${seed} overrides ${envSeed}`)
+  return notices.length ? ` Lobby ${notices.join(" and ")}.` : ""
+}
+
+export function hostListenErrorMessage(error: unknown, options: Pick<LobbyHostOptions, "bindHost" | "port">) {
+  const code = errorCode(error)
+  if (code === "EADDRINUSE") return `Could not start opendungeon-host: ${options.bindHost}:${options.port} is already in use. Stop the old host or choose --port <free-port>.`
+  if (code === "EADDRNOTAVAIL") return `Could not start opendungeon-host: ${options.bindHost} is not available on this machine. Use --host 127.0.0.1 for same-laptop play or --host 0.0.0.0 for LAN.`
+  if (code === "EACCES") return `Could not start opendungeon-host: port ${options.port} needs extra permissions. Choose a port above 1024, such as --port 3737.`
+  return `Could not start opendungeon-host on ${options.bindHost}:${options.port}. ${error instanceof Error ? error.message : "Unknown listen error."}`
+}
+
 export function requestLobbyUrl(hostHeader: string | undefined, options: LobbyHostOptions, forwardedProtocol?: string | string[]) {
   if (options.publicUrl) return options.publicUrl
   const host = hostHeader || `localhost:${options.port}`
@@ -78,15 +108,33 @@ export function requestLobbyUrl(hostHeader: string | undefined, options: LobbyHo
 }
 
 export function advertisedLobbyUrls(options: LobbyHostOptions, interfaces = networkInterfaces()) {
-  const urls = [`http://localhost:${options.port}`]
-  for (const entries of Object.values(interfaces)) {
-    for (const entry of entries ?? []) {
-      if (entry.family !== "IPv4" || entry.internal) continue
-      urls.push(`http://${entry.address}:${options.port}`)
-    }
-  }
+  const urls: string[] = []
   if (options.publicUrl) urls.push(options.publicUrl)
+
+  if (isWildcardBindHost(options.bindHost)) {
+    urls.push(`http://localhost:${options.port}`)
+    for (const entries of Object.values(interfaces)) {
+      for (const entry of entries ?? []) {
+        if (entry.family !== "IPv4" || entry.internal) continue
+        urls.push(`http://${entry.address}:${options.port}`)
+      }
+    }
+  } else if (isLoopbackBindHost(options.bindHost)) {
+    const loopbackUrl = bindHostUrl(options.bindHost, options.port)
+    urls.push(loopbackUrl)
+    if (!loopbackUrl.includes("localhost")) urls.push(`http://localhost:${options.port}`)
+    if (!loopbackUrl.includes("127.0.0.1") && options.bindHost === "localhost") urls.push(`http://127.0.0.1:${options.port}`)
+  } else {
+    urls.push(bindHostUrl(options.bindHost, options.port))
+  }
+
   return [...new Set(urls)]
+}
+
+export function preferredAdvertisedLobbyUrl(options: LobbyHostOptions, urls = advertisedLobbyUrls(options)) {
+  if (options.publicUrl) return options.publicUrl
+  if (isWildcardBindHost(options.bindHost)) return urls.find((url) => !isLocalLobbyUrl(url)) || urls[0]
+  return urls[0]
 }
 
 export function lobbyJoinCommand(lobbyUrl: string) {
@@ -105,4 +153,42 @@ function positivePort(value: string | undefined, fallback: number) {
 function positiveInt(value: string | number | undefined, fallback: number) {
   const number = Number(value)
   return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback
+}
+
+function isWildcardBindHost(host: string) {
+  return host === "0.0.0.0" || host === "::" || host === "[::]"
+}
+
+function isLoopbackBindHost(host: string) {
+  return host === "localhost" || host === "::1" || host === "[::1]" || host.startsWith("127.")
+}
+
+function bindHostUrl(host: string, port: number) {
+  if (host === "[::1]") return `http://[::1]:${port}`
+  if (host === "::1") return `http://[::1]:${port}`
+  return `http://${host}:${port}`
+}
+
+function isLocalLobbyUrl(raw: string) {
+  try {
+    const host = new URL(raw).hostname
+    return host === "localhost" || host === "::1" || host.startsWith("127.")
+  } catch {
+    return false
+  }
+}
+
+function errorReason(error: unknown) {
+  if (typeof error === "object" && error && "name" in error && String(error.name) === "AbortError") return "timeout"
+  const message = error instanceof Error ? error.message : String(error)
+  if (/HTTP \d+/.test(message)) return message.match(/HTTP \d+/)?.[0] ?? "HTTP error"
+  const code = errorCode(error)
+  if (code === "ECONNREFUSED" || code === "ECONNRESET" || code === "ENOTFOUND" || code === "EHOSTUNREACH") return "refused"
+  return message
+}
+
+function errorCode(error: unknown): string {
+  if (typeof error === "object" && error && "code" in error) return String(error.code)
+  if (error instanceof Error && typeof error.cause === "object" && error.cause && "code" in error.cause) return String(error.cause.code)
+  return ""
 }

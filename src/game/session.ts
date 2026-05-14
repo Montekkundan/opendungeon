@@ -22,10 +22,25 @@ import {
   type WorldEvent,
   type WorldEventType,
   type WorldLogEntry,
+  type WorldQuest,
 } from "../world/worldConfig.js"
 import { clamp, wrap } from "../shared/numeric.js"
 import { normalizeHeroAppearance, type HeroAppearance } from "./appearance.js"
-import { bossStoryLine, collectibleKnowledgeEntry, floorKnowledgeEntry, initialKnowledgeEntries, localNpcStoryDialog, openingStoryBranches, openingStoryText, skillCheckKnowledgeEntry, victoryStoryText, type StoryKnowledge } from "./story.js"
+import type { ChallengeCadence } from "./descentSeed.js"
+import { defaultFinalFloor } from "./progression.js"
+import {
+  bossStoryLine,
+  collectibleKnowledgeEntry,
+  floorKnowledgeEntry,
+  floorTacticalPlan,
+  initialKnowledgeEntries,
+  localNpcStoryDialog,
+  openingStoryBranches,
+  openingStoryText,
+  skillCheckKnowledgeEntry,
+  victoryStoryText,
+  type StoryKnowledge,
+} from "./story.js"
 
 export type MultiplayerMode = "solo" | "coop" | "race"
 export const heroClassIds = ["warden", "arcanist", "ranger", "duelist", "cleric", "engineer", "witch", "grave-knight"] as const
@@ -140,6 +155,18 @@ export type CombatState = {
   message: string
 }
 
+export type CombatBalanceSnapshot = {
+  target: string
+  skill: string
+  hitChance: number
+  fleeChance: number
+  focusPressure: number
+  deathRisk: number
+  projectedClassWinRate: number
+  weaknessNote: string
+  focusNote: string
+}
+
 export type SkillCheckSource = "potion" | "relic" | "chest"
 
 export type SkillCheckRoll = {
@@ -234,11 +261,16 @@ export type RunToast = {
 
 export type TutorialStageId = "movement" | "npc-check" | "combat" | "complete"
 export type TutorialActionId = "move" | "move-up" | "move-down" | "move-left" | "move-right" | "inventory" | "quests" | "book" | "npc" | "talent-check" | "combat-start" | "combat-end"
+export type TutorialCoopGateHold = {
+  stage: Exclude<TutorialStageId, "complete">
+  waitingNames: string[]
+}
 
 export type RunTutorialState = {
   enabled: boolean
   completed: boolean
   stage: TutorialStageId
+  coopGateHold: TutorialCoopGateHold | null
   gatePoints: Point[]
   movementSteps: number
   movedUp: boolean
@@ -266,9 +298,17 @@ export const villageLocationIds = ["portal", "blacksmith", "market", "farm", "ho
 export type VillageLocationId = (typeof villageLocationIds)[number]
 export type VillageCustomerTaste = "relic" | "tool" | "food" | "material" | "memory"
 export type FarmPermission = "owner-only" | "friends" | "everyone"
+export const villagePermissionAreas = ["houses", "farm", "storage", "shop", "upgrades"] as const
+export type VillagePermissionArea = (typeof villagePermissionAreas)[number]
+export type VillagePermissionState = Record<VillagePermissionArea, FarmPermission>
 export type CutsceneId = "waking-cell" | "first-clear" | "village-unlock" | "ending-rooted" | "ending-remixed"
 export const contentPackIds = ["opendungeon", "high-contrast", "mono-terminal"] as const
 export type ContentPackId = (typeof contentPackIds)[number]
+export const villageSeasonIds = ["spring", "summer", "autumn", "winter"] as const
+export type VillageSeasonId = (typeof villageSeasonIds)[number]
+export const villageWeatherIds = ["clear", "rain", "fog", "storm", "emberfall"] as const
+export type VillageWeatherId = (typeof villageWeatherIds)[number]
+export type VillageFestivalId = "none" | "market-day" | "forge-fair" | "harvest-night" | "final-gate-vigil"
 export type EquipmentSlot = "weapon" | "armor" | "relic"
 export type EquipmentRarity = "common" | "uncommon" | "rare" | "legendary"
 
@@ -280,6 +320,16 @@ export type EquipmentItem = {
   bonusDamage: number
   statBonuses: Partial<HeroStats>
   activeText: string
+}
+
+export type InventoryActionId = "inspect" | "use" | "equip" | "drop" | "stash" | "sell"
+
+export type InventoryAction = {
+  id: InventoryActionId
+  key: string
+  label: string
+  enabled: boolean
+  hint: string
 }
 
 export type HubStation = {
@@ -337,13 +387,24 @@ export type VillageLocation = {
 export type VillageMapState = {
   player: Point
   selectedLocation: VillageLocationId
+  selectedPermission: VillagePermissionArea
   schedules: VillageNpcSchedule[]
   customers: VillageCustomer[]
   shopLog: string[]
+  permissions: VillagePermissionState
   sharedFarm: {
     permissions: FarmPermission
     storage: string[]
   }
+}
+
+export type VillageCalendarState = {
+  day: number
+  season: VillageSeasonId
+  weather: VillageWeatherId
+  festival: VillageFestivalId
+  dungeonModifier: string
+  note: string
 }
 
 export type CutsceneState = {
@@ -370,11 +431,54 @@ export type BalanceDashboardState = {
   notes: string[]
 }
 
+export type ChallengeMedal = "none" | "bronze" | "silver" | "gold"
+
+export type ChallengeRunMetadata = {
+  id: string
+  cadence: ChallengeCadence
+  seed: number
+  classId: HeroClass
+  mutators: RunMutatorId[]
+  startedAtTurn: number
+  replayKey: string
+}
+
+export type ChallengeLeaderboardEntry = ChallengeRunMetadata & {
+  name: string
+  status: "running" | "dead" | "victory"
+  floor: number
+  turns: number
+  kills: number
+  gold: number
+  score: number
+  medal: ChallengeMedal
+}
+
+export type ChallengeBoardState = {
+  activeRun: ChallengeRunMetadata | null
+  leaderboard: ChallengeLeaderboardEntry[]
+}
+
 export type VillageShopSale = {
   customer: VillageCustomer
   item: string
   value: number
   reaction: string
+}
+
+export type VillageCraftKind = "food" | "tool" | "charm"
+
+export type VillageCraftResult = {
+  kind: VillageCraftKind
+  item: string
+  consumed: string[]
+  message: string
+}
+
+export type VillagePermissionResult = {
+  area: VillagePermissionArea
+  permission: FarmPermission
+  message: string
 }
 
 export type HubState = {
@@ -395,10 +499,12 @@ export type HubState = {
   activeMutators: RunMutatorId[]
   relationshipLog: string[]
   village: VillageMapState
+  calendar: VillageCalendarState
   cutscenes: CutsceneState[]
   lastCutsceneId: CutsceneId | null
   contentPacks: ContentPackState
   balanceDashboard: BalanceDashboardState
+  challengeBoard: ChallengeBoardState
 }
 
 export type GameSession = {
@@ -441,6 +547,17 @@ export type GameSession = {
   toasts: RunToast[]
   hub: HubState
   equipment: Partial<Record<EquipmentSlot, EquipmentItem>>
+}
+
+export type GmPatchOperationInput = {
+  path?: unknown
+  reason?: unknown
+  value?: unknown
+}
+
+export type GmPatchApplyResult = {
+  applied: number
+  message: string
 }
 
 const heroTitles: Record<HeroClass, string> = {
@@ -515,6 +632,13 @@ type TalentDefinition = {
   damageBonus?: number
   focusDiscount?: number
   restFocusBonus?: number
+}
+
+export type TalentSummary = {
+  id: TalentId
+  name: string
+  text: string
+  effect: string
 }
 
 const talentDefinitions: Record<TalentId, TalentDefinition> = {
@@ -799,10 +923,12 @@ export function createHubState(mode: MultiplayerMode = "solo", heroName = "Mira"
     activeMutators: [],
     relationshipLog: [],
     village: createVillageMapState(mode),
+    calendar: createVillageCalendarState(1, 0),
     cutscenes: createCutscenes(heroName),
     lastCutsceneId: null,
     contentPacks: createContentPackState(),
     balanceDashboard: createBalanceDashboardState(),
+    challengeBoard: createChallengeBoardState(),
   }
 }
 
@@ -946,6 +1072,84 @@ export function prepareFood(session: GameSession) {
   return food
 }
 
+export function craftVillageRecipe(session: GameSession): VillageCraftResult | null {
+  session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  if (!session.hub.unlocked) {
+    pushSessionMessage(session, "The village must be unlocked before crafting recipes.")
+    return null
+  }
+  const recipe = nextVillageCraftRecipe(session)
+  if (!recipe) {
+    pushSessionMessage(session, "No ready recipe. Bring tool parts, relics, crops, or build the kitchen/upgrade bench.")
+    addToast(session, "Crafting waiting", "Recipes need station access and ingredients.", "warning")
+    return null
+  }
+  if (session.hub.coins < recipe.cost) {
+    pushSessionMessage(session, `${recipe.item} needs ${recipe.cost} village coins.`)
+    return null
+  }
+  session.hub.coins -= recipe.cost
+  const consumed = consumeCraftIngredients(session, recipe)
+  session.inventory.unshift(recipe.item)
+  if (recipe.kind === "food") session.hub.preparedFood.unshift(recipe.item)
+  if (recipe.kind === "charm") session.hub.unlockedGear.unshift(recipe.item)
+  gainNpcTrust(session, recipe.trustNpc, recipe.trust, false)
+  const message = `${recipe.item} crafted from ${consumed.join(", ") || "village stock"}.`
+  pushSessionMessage(session, message)
+  rememberKnowledge(session, {
+    id: `craft-${slug(recipe.item)}`,
+    title: `${recipe.item} Recipe`,
+    text: `${recipe.item} is a ${recipe.kind} craft. Ingredients: ${consumed.join(", ") || "village stock"}. It carries into the next descent through the village preparation loop.`,
+    kind: "hub",
+    floor: session.floor,
+  })
+  addToast(session, "Recipe crafted", message, "success")
+  return { kind: recipe.kind, item: recipe.item, consumed, message }
+}
+
+type VillageCraftRecipe = {
+  kind: VillageCraftKind
+  item: string
+  cost: number
+  trustNpc: VillageNpcId
+  trust: number
+  consumeItem?: RegExp
+  consumeCrop?: boolean
+}
+
+function nextVillageCraftRecipe(session: GameSession): VillageCraftRecipe | null {
+  if (session.hub.stations["upgrade-bench"].built && findInventoryIndex(session, /tool|lockpick|scrap|bundle/i) >= 0) {
+    return { kind: "tool", item: "Gate bomb", cost: 8, trustNpc: "blacksmith", trust: 2, consumeItem: /tool|lockpick|scrap|bundle/i }
+  }
+  if (session.hub.stations.kitchen.built && findInventoryIndex(session, /keepsake|relic|shard/i) >= 0 && session.hub.trust.cook.level >= 1) {
+    return { kind: "charm", item: "Hearth charm", cost: 10, trustNpc: "cook", trust: 2, consumeItem: /keepsake|relic|shard/i }
+  }
+  if (session.hub.stations.kitchen.built && (session.hub.farm.ready > 0 || session.inventory.some((item) => /recipe/i.test(item)))) {
+    return { kind: "food", item: session.hub.stations.kitchen.level >= 2 ? "Focus broth" : "Travel rations", cost: 5, trustNpc: "farmer", trust: 1, consumeCrop: session.hub.farm.ready > 0 }
+  }
+  return null
+}
+
+function consumeCraftIngredients(session: GameSession, recipe: VillageCraftRecipe) {
+  const consumed: string[] = []
+  if (recipe.consumeCrop && session.hub.farm.ready > 0) {
+    session.hub.farm.ready -= 1
+    consumed.push("village crop")
+  }
+  if (recipe.consumeItem) {
+    const index = findInventoryIndex(session, recipe.consumeItem)
+    if (index >= 0) {
+      const [item] = session.inventory.splice(index, 1)
+      consumed.push(item)
+    }
+  }
+  return consumed
+}
+
+function findInventoryIndex(session: GameSession, pattern: RegExp) {
+  return session.inventory.findIndex((item) => pattern.test(item))
+}
+
 export function upgradeWeapon(session: GameSession) {
   session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
   const blacksmith = session.hub.stations.blacksmith
@@ -1039,8 +1243,91 @@ export function toggleRunMutator(session: GameSession, id: RunMutatorId) {
   return active.has(id)
 }
 
+export function challengeMutatorsFor(seed: number, cadence: ChallengeCadence): RunMutatorId[] {
+  const pool: RunMutatorId[] = ["hard-mode", "cursed-floors", "class-challenge", "boss-rush"]
+  const first = pool[Math.abs(seed) % pool.length] ?? "hard-mode"
+  if (cadence === "daily") return ["daily-seed", first]
+  const second = pool[Math.abs(Math.floor(seed / 7) + 2) % pool.length] ?? "cursed-floors"
+  const mutators: RunMutatorId[] = ["daily-seed", first, second]
+  return mutators.filter((id, index, list) => list.indexOf(id) === index)
+}
+
+export function applyChallengeRun(session: GameSession, cadence: ChallengeCadence) {
+  session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  const mutators = challengeMutatorsFor(session.seed, cadence)
+  const active = new Set(session.hub.activeMutators)
+  for (const mutator of mutators) active.add(mutator)
+  session.hub.activeMutators = runMutatorIds.filter((candidate) => active.has(candidate))
+  const id = `${cadence}-${session.seed}`
+  const replayKey = `${id}-${session.hero.classId}-${session.mode}`
+  session.hub.challengeBoard.activeRun = {
+    id,
+    cadence,
+    seed: session.seed,
+    classId: session.hero.classId,
+    mutators,
+    startedAtTurn: session.turn,
+    replayKey,
+  }
+  applyMutatorPressure(session)
+  applyStrategicDescentPressure(session)
+  rememberKnowledge(session, {
+    id: `challenge-${id}`,
+    title: `${cadence === "weekly" ? "Weekly" : "Daily"} Challenge`,
+    text: `Fixed seed ${session.seed}. Mutators: ${mutators.map(runMutatorLabel).join(", ")}. Replay key ${replayKey}. Results are stored locally in the village leaderboard.`,
+    kind: "hub",
+    floor: session.floor,
+  })
+  addToast(session, "Challenge run", `${cadence} seed ${session.seed} with ${mutators.length} mutators.`, "warning")
+  pushSessionMessage(session, `${cadence} challenge started. Replay key ${replayKey}.`)
+  return session.hub.challengeBoard.activeRun
+}
+
+export function recordChallengeResult(session: GameSession) {
+  session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  const active = session.hub.challengeBoard.activeRun
+  if (!active) return null
+  const score = challengeScore(session, active)
+  const entry: ChallengeLeaderboardEntry = {
+    ...active,
+    name: session.hero.name,
+    status: session.status,
+    floor: session.floor,
+    turns: session.turn,
+    kills: session.kills,
+    gold: session.gold,
+    score,
+    medal: challengeMedal(score),
+  }
+  const existingIndex = session.hub.challengeBoard.leaderboard.findIndex((candidate) => candidate.replayKey === entry.replayKey && candidate.name === entry.name)
+  if (existingIndex >= 0) session.hub.challengeBoard.leaderboard.splice(existingIndex, 1, entry)
+  else session.hub.challengeBoard.leaderboard.unshift(entry)
+  session.hub.challengeBoard.leaderboard = session.hub.challengeBoard.leaderboard.sort((left, right) => right.score - left.score || left.turns - right.turns).slice(0, 12)
+  session.hub.relationshipLog.unshift(`${entry.cadence} challenge ${entry.medal} medal: ${entry.score} score.`)
+  trimHubLog(session.hub)
+  addToast(session, "Challenge recorded", `${entry.medal} medal, score ${entry.score}.`, entry.medal === "gold" ? "success" : "info")
+  session.hub.challengeBoard.activeRun = null
+  return entry
+}
+
+function challengeScore(session: GameSession, active: ChallengeRunMetadata) {
+  const clearBonus = session.status === "victory" ? 1_000 : 0
+  const survival = session.floor * 250 + session.kills * 35 + session.gold * 3
+  const mutatorBonus = active.mutators.length * 120
+  const turnPenalty = Math.min(500, session.turn * 2)
+  return Math.max(0, clearBonus + survival + mutatorBonus - turnPenalty)
+}
+
+function challengeMedal(score: number): ChallengeMedal {
+  if (score >= 1_700) return "gold"
+  if (score >= 1_100) return "silver"
+  if (score >= 650) return "bronze"
+  return "none"
+}
+
 export function refreshVillageSchedules(session: GameSession) {
   session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  refreshVillageCalendar(session)
   const phase = Math.floor(session.turn / 12) % 3
   const routes: Record<VillageNpcId, VillageLocationId[]> = {
     blacksmith: ["blacksmith", "market", "guildhall"],
@@ -1062,6 +1349,12 @@ export function refreshVillageSchedules(session: GameSession) {
     }
   })
   return session.hub.village.schedules
+}
+
+export function refreshVillageCalendar(session: GameSession) {
+  session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  session.hub.calendar = createVillageCalendarState(session.seed, session.turn)
+  return session.hub.calendar
 }
 
 export function moveVillagePlayer(session: GameSession, dx: number, dy: number) {
@@ -1177,16 +1470,43 @@ export function customizeVillageHouse(session: GameSession, playerId = "player-1
 }
 
 export function cycleSharedFarmPermission(session: GameSession) {
+  return cycleCoopVillagePermission(session, "farm").permission
+}
+
+export function cycleCoopVillagePermission(session: GameSession, area?: VillagePermissionArea): VillagePermissionResult {
   session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  const selectedArea = area ?? permissionAreaForLocation(session.hub.village.selectedLocation)
   const order: FarmPermission[] = ["owner-only", "friends", "everyone"]
-  const current = order.indexOf(session.hub.village.sharedFarm.permissions)
-  const next = order[wrap(current + 1, order.length)] ?? "friends"
-  session.hub.village.sharedFarm.permissions = next
-  session.hub.relationshipLog.unshift(`Shared farm permissions set to ${next}.`)
+  const current = order.indexOf(session.hub.village.permissions[selectedArea])
+  const permission = order[wrap(current + 1, order.length)] ?? "friends"
+  session.hub.village.permissions[selectedArea] = permission
+  session.hub.village.selectedPermission = selectedArea
+  if (selectedArea === "farm") session.hub.village.sharedFarm.permissions = permission
+  const message = `${villagePermissionLabel(selectedArea)} permissions set to ${permission}.`
+  session.hub.relationshipLog.unshift(message)
   trimHubLog(session.hub)
-  pushSessionMessage(session, `Shared farm permissions set to ${next}.`)
-  addToast(session, "Farm permissions", `Shared farm is now ${next}.`, "info")
-  return next
+  pushSessionMessage(session, message)
+  addToast(session, "Village permissions", message, "info")
+  return { area: selectedArea, permission, message }
+}
+
+function permissionAreaForLocation(location: VillageLocationId): VillagePermissionArea {
+  if (location === "houses") return "houses"
+  if (location === "farm") return "farm"
+  if (location === "market") return "shop"
+  if (location === "blacksmith" || location === "guildhall") return "upgrades"
+  return "storage"
+}
+
+function villagePermissionLabel(area: VillagePermissionArea) {
+  const labels: Record<VillagePermissionArea, string> = {
+    houses: "House",
+    farm: "Farm",
+    storage: "Storage",
+    shop: "Shop shelf",
+    upgrades: "Upgrade spending",
+  }
+  return labels[area]
 }
 
 export function selectContentPack(session: GameSession, id: ContentPackId) {
@@ -1220,6 +1540,8 @@ export function refreshBalanceDashboard(session: GameSession) {
       return [id, clamp(base, 8, 88)]
     }),
   ) as Record<HeroClass, number>
+  const combatBalance = combatBalanceSnapshot(session)
+  classWinRate[session.hero.classId] = combatBalance.projectedClassWinRate
   const mutatorDifficulty = Object.fromEntries(
     runMutatorIds.map((id, index) => {
       const activeBonus = session.hub.activeMutators.includes(id) ? 18 : 0
@@ -1232,7 +1554,8 @@ export function refreshBalanceDashboard(session: GameSession) {
   const notes = [
     `${builtStations.length}/${hubStationIds.length} village stations affect next-run pacing.`,
     session.hub.activeMutators.length ? `${session.hub.activeMutators.length} mutator(s) are raising projected difficulty.` : "No active mutators in the projected balance run.",
-    `Current class ${session.hero.classId} projects ${classWinRate[session.hero.classId]}% win rate.`,
+    `Combat balance: ${combatBalance.hitChance}% hit, ${combatBalance.fleeChance}% flee, ${combatBalance.deathRisk}% death risk.`,
+    `Current class ${session.hero.classId} projects ${combatBalance.projectedClassWinRate}% win rate.`,
   ]
   session.hub.balanceDashboard = {
     runs: 32 + session.hub.activeMutators.length * 8,
@@ -1374,6 +1697,34 @@ export const combatSkills: CombatSkill[] = [
   },
 ]
 
+export function talentSummaryFor(id: TalentId): TalentSummary {
+  const talent = talentDefinitions[id]
+  return {
+    id,
+    name: talent.name,
+    text: talent.text,
+    effect: talentEffectSummary(talent),
+  }
+}
+
+export function talentSummariesForSession(session: GameSession): TalentSummary[] {
+  return session.talents.map((id) => talentSummaryFor(id))
+}
+
+function talentEffectSummary(talent: TalentDefinition) {
+  const parts: string[] = []
+  for (const [stat, value] of Object.entries(talent.statBonuses ?? {}) as Array<[StatId, number]>) {
+    if (value) parts.push(`${formatSigned(value)} ${statLabels[stat]}`)
+  }
+  if (talent.skillId) {
+    const skillName = combatSkills.find((skill) => skill.id === talent.skillId)?.name ?? talent.skillId
+    if (talent.damageBonus) parts.push(`${skillName} ${formatSigned(talent.damageBonus)} damage`)
+    if (talent.focusDiscount) parts.push(`${skillName} -${talent.focusDiscount} focus cost`)
+  }
+  if (talent.restFocusBonus) parts.push(`Rest ${formatSigned(talent.restFocusBonus)} focus`)
+  return parts.join("; ") || "Passive unlock"
+}
+
 type MonsterProfile = {
   family: string
   behavior: string
@@ -1450,12 +1801,20 @@ const monsterProfiles: Record<EnemyActorId, MonsterProfile> = {
   },
 }
 
-export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", classId: HeroClass = "ranger", heroName = "Mira", appearance?: Partial<HeroAppearance> | null, startWithTutorial = false): GameSession {
+export function createSession(
+  seed = 2423368,
+  mode: MultiplayerMode = "solo",
+  classId: HeroClass = "ranger",
+  heroName = "Mira",
+  appearance?: Partial<HeroAppearance> | null,
+  startWithTutorial = false,
+  showTutorialOffStart = false,
+): GameSession {
   const dungeon = createDungeon(seed, 1)
   const stats = statsForClass(classId)
   const maxHp = derivedMaxHp(stats)
   const maxFocus = derivedMaxFocus(stats)
-  const finalFloor = 5
+  const finalFloor = defaultFinalFloor
   const floorModifier = floorModifierFor(seed, 1)
   const world = createWorldForSeed(seed, finalFloor)
   const session: GameSession = {
@@ -1519,9 +1878,44 @@ export function createSession(seed = 2423368, mode: MultiplayerMode = "solo", cl
   }
   if (session.tutorial.enabled) prepareTutorialArea(session)
   for (const entry of initialKnowledgeEntries()) rememberKnowledge(session, entry)
+  rememberKnowledge(session, floorKnowledgeEntry(1))
   addToast(session, "Awake", "No memory, one weapon, and a dungeon that knows your steps.", "info")
+  if (!session.tutorial.enabled && showTutorialOffStart) applyTutorialOffStart(session)
   revealAroundPlayer(session)
   return session
+}
+
+export function createNextDescentSession(previous: GameSession, seed: number): GameSession {
+  const next = createSession(seed, previous.mode, previous.hero.classId, previous.hero.name, previous.hero.appearance, false)
+  next.hub = normalizeHubState(previous.hub, previous.mode, previous.hero.name)
+  next.hub.calendar = createVillageCalendarState(previous.seed, previous.turn)
+  next.hub.lastCutsceneId = null
+  next.hub.relationshipLog.unshift(`New descent opened from the village with seed ${seed}.`)
+  trimHubLog(next.hub)
+  next.equipment = normalizeEquipment(previous.equipment, previous.hero.classId)
+
+  const preparedFood = next.hub.preparedFood.filter((item) => !item.startsWith("Recipe:")).slice(0, 2)
+  for (const food of preparedFood.reverse()) {
+    if (!next.inventory.includes(food)) next.inventory.unshift(food)
+    if (food === "Focus broth") next.maxFocus += 1
+  }
+  next.focus = next.maxFocus
+  applyVillageCalendarModifier(next)
+  applyMutatorPressure(next)
+  applyStrategicDescentPressure(next)
+  refreshBalanceDashboard(next)
+  focusFinalGateQuest(next)
+  rememberKnowledge(next, {
+    id: "village-next-descent",
+    title: "Prepared Descent",
+    text: "The village can preserve coins, stations, trust, houses, farm state, food, weapons, content packs, and active mutators between runs.",
+    kind: "hub",
+    floor: next.floor,
+  })
+  addToast(next, "Next descent", "Village progress carried forward. Find the Final Gate.", "success")
+  if (strategicPressureTier(next)) addToast(next, "Sharper descent", "Enemies now guard, pressure range, and punish one-note attacks.", "warning")
+  pushSessionMessage(next, "Village preparations carried into the next descent.")
+  return next
 }
 
 function createTutorialState(enabled = false): RunTutorialState {
@@ -1529,6 +1923,7 @@ function createTutorialState(enabled = false): RunTutorialState {
     enabled,
     completed: !enabled,
     stage: enabled ? "movement" : "complete",
+    coopGateHold: null,
     gatePoints: [],
     movementSteps: 0,
     movedUp: false,
@@ -1761,12 +2156,319 @@ export function usePotion(session: GameSession) {
     return
   }
 
+  useInventoryItemAt(session, index)
+}
+
+export function useInventoryItemAt(session: GameSession, index: number) {
+  const item = session.inventory[index]
+  if (!item) return { used: false, message: "Empty slot selected." }
+  const lower = item.toLowerCase()
+
+  if (session.status !== "running") return { used: false, message: `${item}: use, sell, or prepare items during an active descent or in the village.` }
+  if (session.levelUp) return { used: false, message: "Choose a level-up talent before using items." }
+  if (session.skillCheck && !lower.includes("rollback scroll")) return { used: false, message: "Hands are busy with the talent check. Press Esc to step away first." }
+  if (lower.includes("rollback scroll")) return useRollbackScroll(session, index, item)
+  if (lower.includes("tripwire") || lower.includes("bomb")) return useCombatTool(session, index, item)
+  if (lower.includes("rope arrow") || lower.includes("lockpick")) return useTraversalTool(session, index, item)
+  if (lower.includes("cursed shard")) return useCursedReward(session, index, item)
+
+  if (lower.includes("deploy nerve potion")) return consumeInventoryItem(session, index, item, { hp: 5, focus: 0, title: "Potion used", text: "Health returns and the pulse settles." })
+  if (lower.includes("vial") || lower.includes("potion")) return consumeInventoryItem(session, index, item, { hp: 5, focus: 0, title: "Item used", text: `${item} restored health.` })
+  if (lower.includes("focus broth")) return consumeInventoryItem(session, index, item, { hp: 1, focus: 5, maxFocus: 1, title: "Food used", text: `${item} restored focus and raised max focus for this descent.` })
+  if (lower.includes("ration") || lower.includes("food")) return consumeInventoryItem(session, index, item, { hp: 3, focus: 1, maxHp: 1, title: "Food used", text: `${item} restored HP and raised max HP for this descent.` })
+
+  return { used: false, message: `${item}: ${inventoryItemUseHint(item)}` }
+}
+
+export function inventoryActionsForItem(session: GameSession, index: number): InventoryAction[] {
+  const item = session.inventory[index]
+  if (!item) {
+    return [
+      { id: "inspect", key: "?", label: "inspect", enabled: false, hint: "Empty slot." },
+      { id: "use", key: "Enter", label: "use", enabled: false, hint: "No item selected." },
+      { id: "equip", key: "E", label: "equip", enabled: false, hint: "No gear selected." },
+      { id: "drop", key: "X", label: "drop", enabled: false, hint: "No item selected." },
+      { id: "stash", key: "S", label: "stash", enabled: false, hint: "No item selected." },
+      { id: "sell", key: "V", label: "sell", enabled: false, hint: "No item selected." },
+    ]
+  }
+
+  const slot = inventoryEquipmentSlot(item)
+  const sellableValue = sellValue(item)
+  const usable = isConsumableInventoryItem(item)
+  const storageBuilt = Boolean(session.hub.unlocked && session.hub.stations.storage.built)
+  return [
+    { id: "inspect", key: "?", label: "inspect", enabled: true, hint: inventoryItemDescription(item) },
+    { id: "use", key: "Enter", label: "use", enabled: usable, hint: usable ? "Consumes the item now." : inventoryItemUseHint(item) },
+    { id: "equip", key: "E", label: "equip", enabled: Boolean(slot), hint: slot ? `Equip as ${slot}.` : "This item is not gear." },
+    { id: "drop", key: "X", label: "drop", enabled: true, hint: "Remove this item from the pack." },
+    { id: "stash", key: "S", label: "stash", enabled: storageBuilt, hint: storageBuilt ? "Move to village storage." : "Build Storage in the village first." },
+    { id: "sell", key: "V", label: "sell", enabled: session.hub.unlocked && sellableValue > 0, hint: sellableValue > 0 ? `Sell for ${sellableValue} village coins.` : "No village sale value." },
+  ]
+}
+
+export function performInventoryAction(session: GameSession, index: number, action: InventoryActionId) {
+  if (action === "use") return useInventoryItemAt(session, index)
+  const item = session.inventory[index]
+  if (!item) return { used: false, message: "Empty slot selected." }
+
+  if (action === "inspect") return { used: false, message: `${item}: ${inventoryItemDescription(item)} ${inventoryItemUseHint(item)}` }
+  if (action === "equip") return equipInventoryItem(session, index, item)
+  if (action === "drop") return dropInventoryItem(session, index, item)
+  if (action === "stash") return stashInventoryItem(session, index, item)
+  if (action === "sell") return sellInventoryItem(session, index, item)
+  return { used: false, message: `${item}: no action mapped.` }
+}
+
+function equipInventoryItem(session: GameSession, _index: number, item: string) {
+  const slot = inventoryEquipmentSlot(item)
+  if (!slot) return { used: false, message: `${item} is not gear.` }
+  const equipped = equipmentFromInventoryItem(item, slot)
+  session.equipment[slot] = equipped
+  const message = `${item} equipped as ${slot}.`
+  pushSessionMessage(session, message)
+  addToast(session, "Equipped", `${item} is now your ${slot}.`, "success")
+  return { used: true, message }
+}
+
+function dropInventoryItem(session: GameSession, index: number, item: string) {
   session.inventory.splice(index, 1)
-  session.hp = Math.min(session.maxHp, session.hp + 5)
-  session.log.unshift("Potion used. The pulse settles.")
-  addToast(session, "Potion used", "Health returns and the pulse settles.", "success")
+  const message = `${item} dropped from the pack.`
+  pushSessionMessage(session, message)
+  addToast(session, "Dropped", item, "info")
+  return { used: true, message }
+}
+
+function stashInventoryItem(session: GameSession, index: number, item: string) {
+  session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  if (!session.hub.unlocked) return { used: false, message: "Village storage is locked until the first clear." }
+  if (!session.hub.stations.storage.built) return { used: false, message: "Build Storage in the village before stashing pack items." }
+  session.inventory.splice(index, 1)
+  session.hub.village.sharedFarm.storage.unshift(item)
+  session.hub.village.sharedFarm.storage = session.hub.village.sharedFarm.storage.slice(0, 50)
+  const message = `${item} moved to village storage.`
+  pushSessionMessage(session, message)
+  addToast(session, "Stashed", item, "success")
+  return { used: true, message }
+}
+
+function sellInventoryItem(session: GameSession, index: number, item: string) {
+  session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  if (!session.hub.unlocked) return { used: false, message: "Village market is locked until the first clear." }
+  const value = sellValue(item)
+  if (value <= 0) return { used: false, message: `${item} has no village sale value.` }
+  session.inventory.splice(index, 1)
+  session.hub.coins += value
+  session.hub.lootSold += 1
+  const message = `${item} sold for ${value} village coins.`
+  pushSessionMessage(session, message)
+  addToast(session, "Sold", `${item} +${value} village coins.`, "success")
+  return { used: true, message }
+}
+
+function useRollbackScroll(session: GameSession, index: number, item: string) {
+  if (!session.combat.active && !session.skillCheck) return { used: false, message: `${item} waits for combat or a talent check gone wrong.` }
+  session.inventory.splice(index, 1)
+  if (session.skillCheck) {
+    session.skillCheck = null
+    const message = `${item} rewound the talent check before the roll landed.`
+    pushSessionMessage(session, message)
+    addToast(session, "Check rewound", "The check was cancelled without a consequence.", "success")
+    return { used: true, message }
+  }
+  endCombat(session, `${item} pulled the crawler out of initiative.`)
+  return { used: true, message: `${item} ended the fight before another exchange.` }
+}
+
+function useTraversalTool(session: GameSession, index: number, item: string) {
+  session.inventory.splice(index, 1)
+  session.focus = Math.min(session.maxFocus, session.focus + 1)
+  session.turn += 1
+  revealAroundPlayer(session)
+  const message = `${item} marked a safer route. +1 focus and nearby paths revealed.`
+  pushSessionMessage(session, message)
+  addToast(session, "Tool used", message, "success")
+  return { used: true, message }
+}
+
+function useCombatTool(session: GameSession, index: number, item: string) {
+  if (!session.combat.active) return { used: false, message: `${item} needs an active fight.` }
+  const target = combatTargets(session)[session.combat.selectedTarget]
+  if (!target) return { used: false, message: `${item} has no target.` }
+  session.inventory.splice(index, 1)
+  const damage = item.toLowerCase().includes("bomb") ? 6 : 4
+  target.hp -= damage
+  session.statusEffects.push({
+    id: "weakened",
+    targetId: target.id,
+    label: "Pinned",
+    remainingTurns: 2,
+    magnitude: 1,
+    source: item,
+  })
+  const message = `${item} pins ${label(target.kind)} for ${damage} damage and weakens the next exchange.`
+  session.combat.message = message
+  session.log.unshift(message)
+  addToast(session, "Tactical tool", message, "success")
+  if (target.hp <= 0) defeatActor(session, target)
+  if (combatTargets(session).length > 0) finishCombatRound(session, true)
+  else {
+    endCombat(session, "The room falls silent.")
+    finishCombatRound(session, false)
+  }
+  return { used: true, message }
+}
+
+function useCursedReward(session: GameSession, index: number, item: string) {
+  session.inventory.splice(index, 1)
+  const hpCost = Math.min(4, Math.max(0, session.hp - 1))
+  session.hp = Math.max(1, session.hp - hpCost)
+  session.focus = Math.max(0, session.focus - 1)
+  session.gold += 14
+  session.xp += 2
+  maybeLevelUp(session)
+  const message = `${item} paid out 14g and 2 XP, but took ${hpCost} HP and 1 focus.`
+  pushSessionMessage(session, message)
+  addToast(session, "Cursed reward", message, "warning")
+  if (session.combat.active) finishCombatRound(session, true)
+  return { used: true, message }
+}
+
+function consumeInventoryItem(session: GameSession, index: number, item: string, effect: { hp: number; focus: number; maxHp?: number; maxFocus?: number; title: string; text: string }) {
+  const beforeHp = session.hp
+  const beforeFocus = session.focus
+  const maxHpGain = Math.max(0, effect.maxHp ?? 0)
+  const maxFocusGain = Math.max(0, effect.maxFocus ?? 0)
+  const nextMaxHp = session.maxHp + maxHpGain
+  const nextMaxFocus = session.maxFocus + maxFocusGain
+  const nextHp = Math.min(nextMaxHp, session.hp + effect.hp)
+  const nextFocus = Math.min(nextMaxFocus, session.focus + effect.focus)
+  if (nextHp === beforeHp && nextFocus === beforeFocus && !maxHpGain && !maxFocusGain) return { used: false, message: `${item} kept. HP and focus are already full.` }
+
+  session.inventory.splice(index, 1)
+  session.maxHp = nextMaxHp
+  session.maxFocus = nextMaxFocus
+  session.hp = nextHp
+  session.focus = nextFocus
+  const restored = [
+    `${nextHp - beforeHp ? `+${nextHp - beforeHp} HP` : ""}`,
+    `${nextFocus - beforeFocus ? `+${nextFocus - beforeFocus} focus` : ""}`,
+    `${maxHpGain ? `+${maxHpGain} max HP` : ""}`,
+    `${maxFocusGain ? `+${maxFocusGain} max focus` : ""}`,
+  ]
+    .filter(Boolean)
+    .join(", ")
+  const message = `${item} used. ${restored}.`
+  session.log.unshift(message)
+  addToast(session, effect.title, effect.text, "success")
   if (session.combat.active) finishCombatRound(session, true)
   else trimLog(session)
+  return { used: true, message }
+}
+
+function isConsumableInventoryItem(item: string) {
+  return /potion|vial|broth|food|ration|tripwire|bomb|rope arrow|lockpick|rollback scroll|cursed shard/i.test(item)
+}
+
+function inventoryEquipmentSlot(item: string): EquipmentSlot | null {
+  const lower = item.toLowerCase()
+  if (/blade|sword|axe|mace|rapier|focus|spanner|knife/i.test(lower)) return "weapon"
+  if (/shield|buckler|cloak/i.test(lower)) return "armor"
+  if (/relic|charm|token|spark|shard/i.test(lower)) return "relic"
+  return null
+}
+
+function equipmentFromInventoryItem(item: string, slot: EquipmentSlot): EquipmentItem {
+  const lower = item.toLowerCase()
+  const explicitBonus = Number(item.match(/\+(\d+)/)?.[1] ?? 0)
+  const rarity: EquipmentRarity = /boss|grave|bound|shrine/i.test(item) ? "rare" : /cursed|ash|parry|oath/i.test(item) ? "uncommon" : "common"
+  const statBonuses: Partial<HeroStats> = {}
+  if (slot === "weapon") {
+    if (/focus|spark|scroll/i.test(lower)) statBonuses.intelligence = rarity === "rare" ? 2 : 1
+    else if (/rapier|knife|blade|arrow/i.test(lower)) statBonuses.dexterity = rarity === "rare" ? 2 : 1
+    else statBonuses.strength = rarity === "rare" ? 2 : 1
+  }
+  if (slot === "armor") {
+    statBonuses.endurance = rarity === "rare" ? 2 : 1
+    if (/cloak/i.test(lower)) statBonuses.dexterity = 1
+    if (/shield|buckler/i.test(lower)) statBonuses.vigor = 1
+  }
+  if (slot === "relic") {
+    statBonuses.luck = rarity === "rare" ? 2 : 1
+    if (/shrine|bell|charm/i.test(lower)) statBonuses.faith = 1
+    if (/cursed|hex|spark/i.test(lower)) statBonuses.intelligence = 1
+  }
+  return {
+    id: cleanId(`${slot}-${item}`),
+    name: cleanBookText(item, 48),
+    slot,
+    rarity,
+    bonusDamage: slot === "weapon" ? Math.max(explicitBonus, rarity === "rare" ? 2 : rarity === "uncommon" ? 1 : 0) : 0,
+    statBonuses,
+    activeText: equipmentActiveText(item, slot, rarity),
+  }
+}
+
+function equipmentActiveText(item: string, slot: EquipmentSlot, rarity: EquipmentRarity) {
+  const lower = item.toLowerCase()
+  if (slot === "weapon") return `${item} changes damage math; ${rarity} weapons add more base pressure.`
+  if (slot === "armor") return /cloak/i.test(lower) ? `${item} helps evasive defenses and escape plans.` : `${item} raises survivability against longer fights.`
+  if (/cursed/i.test(lower)) return `${item} is a risky relic: better checks, worse decisions if you spend it.`
+  return `${item} sharpens talent checks and story-event odds.`
+}
+
+export function equipmentComparisonText(session: GameSession, item: string) {
+  const slot = inventoryEquipmentSlot(item)
+  if (!slot) return `Compare: utility or loot item. ${inventoryItemUseHint(item)}`
+  const candidate = equipmentFromInventoryItem(item, slot)
+  const equipped = session.equipment[slot]
+  const equippedText = equipped ? equipmentBonusText(equipped) : "empty slot"
+  return `Compare ${slot}: ${candidate.name} gives ${equipmentBonusText(candidate)}. Current ${equipped?.name ?? "empty"} gives ${equippedText}. ${candidate.activeText}`
+}
+
+function equipmentBonusText(item: EquipmentItem) {
+  const stats = Object.entries(item.statBonuses)
+    .filter(([, value]) => value)
+    .map(([stat, value]) => `${statAbbreviations[stat as StatId]} ${formatSigned(value ?? 0)}`)
+  const damage = item.bonusDamage ? [`damage +${item.bonusDamage}`] : []
+  return [...damage, ...stats, item.rarity].join(", ")
+}
+
+export function inventoryItemDescription(item: string) {
+  const lower = item.toLowerCase()
+  if (lower.includes("potion") || lower.includes("vial")) return "Consumable: restores HP during a descent."
+  if (lower.includes("focus broth")) return "Prepared food buff: restores focus and raises max focus for this descent."
+  if (lower.includes("food") || lower.includes("ration")) return "Prepared food buff: restores HP/focus and raises max HP for this descent."
+  if (lower.includes("tripwire") || lower.includes("bomb")) return "Combat tool: use during a fight to damage and weaken the selected enemy."
+  if (lower.includes("rope arrow") || lower.includes("lockpick")) return "Traversal tool: reveals nearby routes and restores a little focus."
+  if (lower.includes("rollback scroll")) return "Emergency tool: cancels a talent check or escapes combat before the next exchange."
+  if (lower.includes("bound relic")) return "Passive relic: adds +1 to talent checks."
+  if (lower.includes("cursed shard")) return "Risk relic: valuable in the village, dangerous in checks."
+  if (lower.includes("relic") || lower.includes("shard")) return "Relic: lore, checks, or village sale value."
+  if (lower.includes("blade") || lower.includes("sword") || lower.includes("axe") || lower.includes("mace") || lower.includes("rapier")) return "Equipped weapon: affects your combat plan."
+  if (lower.includes("shield") || lower.includes("cloak") || lower.includes("charm")) return "Passive gear: defensive or class flavor equipment."
+  if (lower.includes("lockpick") || lower.includes("tool") || lower.includes("rope")) return "Tool: useful for events, doors, or village work."
+  if (lower.includes("scroll") || lower.includes("map") || lower.includes("ledger")) return "Record: open the Book for lore and routing clues."
+  if (lower.includes("deed")) return "Village deed: unlocks or improves village work."
+  if (lower.includes("memory") || lower.includes("fossil") || lower.includes("keepsake")) return "Village treasure: sell, study, or keep for story."
+  return "Stored item: keep for later or sell in the village."
+}
+
+function inventoryItemUseHint(item: string) {
+  const lower = item.toLowerCase()
+  if (lower.includes("bound relic")) return "passive +1 to talent checks; no manual use needed."
+  if (lower.includes("cursed shard")) return "use for gold and XP at an HP/focus cost, or sell it in the village market."
+  if (lower.includes("tripwire") || lower.includes("bomb")) return "active combat tool; use it while a fight is open."
+  if (lower.includes("rope arrow") || lower.includes("lockpick")) return "active traversal tool; spend it to reveal space and regain focus."
+  if (lower.includes("rollback scroll")) return "emergency tool; use during combat or a talent check."
+  if (lower.includes("relic") || lower.includes("shard")) return "passive lore/check item; sell extras from the village market."
+  if (lower.includes("blade") || lower.includes("sword") || lower.includes("axe") || lower.includes("mace") || lower.includes("rapier")) return "already equipped as your weapon; upgrade weapons in the village."
+  if (lower.includes("shield") || lower.includes("cloak") || lower.includes("charm")) return "passive gear; keep it equipped or sell later in the village."
+  if (lower.includes("lockpick") || lower.includes("tool") || lower.includes("rope")) return "tool item; doors, events, and village projects use it automatically."
+  if (lower.includes("scroll") || lower.includes("map") || lower.includes("ledger")) return "record item; open B Book to read what it taught you."
+  if (lower.includes("deed")) return "village item; return home to build or upgrade with it."
+  if (lower.includes("memory") || lower.includes("fossil") || lower.includes("keepsake")) return "treasure/story item; sell or study it in the village."
+  return "stored for later. Sell it in the village if it is loot."
 }
 
 export function interactWithWorld(session: GameSession): ConversationState | null {
@@ -1874,10 +2576,12 @@ function tutorialMoveAction(dx: number, dy: number): TutorialActionId {
 export function currentTutorialPrompt(session: GameSession) {
   const tutorial = session.tutorial
   if (!tutorial.enabled || tutorial.completed || tutorial.disabledAfterDeath || session.deaths > 0) return null
+  const coopNote = session.mode === "coop" ? " In co-op, every connected crawler must finish this checkpoint." : ""
   if (tutorial.stage === "movement") {
+    const hold = tutorialGateHold(session, "movement")
     return {
       title: "Area I - Movement",
-      text: "Use arrows, WASD, or Vim keys to move in each direction. Open the basic journals before the east gate unlocks.",
+      text: `Use arrows, WASD, or Vim keys to move in each direction. Open the basic journals before the east gate unlocks.${coopNote}`,
       steps: [
         `Up ${doneText(tutorial.movedUp)}`,
         `Down ${doneText(tutorial.movedDown)}`,
@@ -1887,37 +2591,56 @@ export function currentTutorialPrompt(session: GameSession) {
         `Quests J/O ${doneText(tutorial.openedQuests)}`,
         `Book B ${doneText(tutorial.openedBook)}`,
       ],
-      footer: movementTutorialComplete(tutorial) ? "Gate open. Go east into Area II." : "The gate opens when every row is done.",
+      footer: hold ? `Waiting for ${formatCoopWaitingNames(hold.waitingNames)} before Area II opens.` : movementTutorialComplete(tutorial) ? "Gate open. Go east into Area II." : "The gate opens when every row is done.",
     }
   }
   if (tutorial.stage === "npc-check") {
     const talked = tutorial.talkedToNpc
+    const hold = tutorialGateHold(session, "npc-check")
     return {
       title: "Area II - People and Artifacts",
       text: talked
-        ? "Take the relic artifact. Talent checks roll d20 + stat + luck + level, and Bound relics add +1 to later checks. Enter rolls; Esc steps away."
-        : "Walk to the NPC and bump or press E nearby. Conversations use 1-3 to choose, Enter to confirm, and Esc to leave. NPCs remember what you already asked.",
+        ? `Take the relic artifact. Talent checks roll d20 + stat + luck + level, and Bound relics add +1 to later checks. Enter rolls; Esc steps away.${coopNote}`
+        : `Walk to the NPC and bump or press E nearby. Conversations use 1-3 to choose, Enter to confirm, and Esc to leave. NPCs remember what you already asked.${coopNote}`,
       steps: [
         `Talk to NPC ${doneText(tutorial.talkedToNpc)}`,
         `Take relic check ${doneText(tutorial.handledTalentCheck)}`,
       ],
-      footer: tutorial.handledTalentCheck ? "Second gate open. Go east into Area III." : "Finish the relic lesson to unlock the next gate.",
+      footer: hold ? `Waiting for ${formatCoopWaitingNames(hold.waitingNames)} before Area III opens.` : tutorial.handledTalentCheck ? "Second gate open. Go east into Area III." : "Finish the relic lesson to unlock the next gate.",
     }
   }
   if (tutorial.stage === "combat") {
+    const hold = tutorialGateHold(session, "combat")
     return {
       title: "Area III - Fighting",
       text: tutorial.combatStarted
-        ? "Finish the fight. Choose skills with 1-6 or up/down, Tab changes target, Enter rolls, H uses a potion, and F tries to flee."
-        : "Bump the enemy to start combat. Initiative locks movement until the fight is resolved.",
+        ? `Finish the fight. Choose skills with 1-6 or up/down, Tab changes target, Enter rolls, H uses a potion, and F tries to flee.${coopNote}`
+        : `Bump the enemy to start combat. Initiative locks movement until the fight is resolved.${coopNote}`,
       steps: [
         `Start combat ${doneText(tutorial.combatStarted)}`,
         `Finish combat ${doneText(tutorial.combatFinished)}`,
       ],
-      footer: tutorial.combatFinished ? "Tutorial complete. Use the stairs when ready." : "The exit stays gated until the fight is over.",
+      footer: hold ? `Waiting for ${formatCoopWaitingNames(hold.waitingNames)} before the tutorial closes.` : tutorial.combatFinished ? "Tutorial complete. Use the stairs when ready." : "The exit stays gated until the fight is over.",
     }
   }
   return null
+}
+
+export function tutorialCoopCheckpoint(session: GameSession) {
+  const tutorial = session.tutorial
+  if (!tutorial.enabled || tutorial.disabledAfterDeath || session.deaths > 0) return { stage: "complete" as TutorialStageId, ready: true, completed: true }
+  if (tutorial.completed || tutorial.stage === "complete") return { stage: "complete" as TutorialStageId, ready: true, completed: true }
+  if (tutorial.stage === "movement") return { stage: tutorial.stage, ready: movementTutorialComplete(tutorial), completed: false }
+  if (tutorial.stage === "npc-check") return { stage: tutorial.stage, ready: tutorial.talkedToNpc && tutorial.handledTalentCheck, completed: false }
+  return { stage: tutorial.stage, ready: tutorial.combatStarted && tutorial.combatFinished, completed: false }
+}
+
+export function setTutorialCoopGateHold(session: GameSession, stage: Exclude<TutorialStageId, "complete"> | null, waitingNames: string[]) {
+  const tutorial = session.tutorial
+  if (!tutorial.enabled || tutorial.completed || tutorial.disabledAfterDeath || session.deaths > 0) return
+  const names = [...new Set(waitingNames.map((name) => cleanConversationText(name, 24)).filter(Boolean))].slice(0, 4)
+  tutorial.coopGateHold = stage && names.length ? { stage, waitingNames: names } : null
+  advanceTutorial(session)
 }
 
 function advanceTutorial(session: GameSession) {
@@ -1925,7 +2648,13 @@ function advanceTutorial(session: GameSession) {
   if (!tutorial.enabled || tutorial.completed || tutorial.disabledAfterDeath || session.deaths > 0) return
 
   if (tutorial.stage === "movement" && movementTutorialComplete(tutorial)) {
+    const hold = tutorialGateHold(session, "movement")
+    if (hold) {
+      pushTutorialHoldLog(session, "Area I gate", hold)
+      return
+    }
     tutorial.stage = "npc-check"
+    tutorial.coopGateHold = null
     openTutorialGate(session, 0)
     session.log.unshift("Area I gate opens. Move east and talk to the NPC.")
     trimLog(session)
@@ -1933,7 +2662,13 @@ function advanceTutorial(session: GameSession) {
   }
 
   if (tutorial.stage === "npc-check" && tutorial.talkedToNpc && tutorial.handledTalentCheck) {
+    const hold = tutorialGateHold(session, "npc-check")
+    if (hold) {
+      pushTutorialHoldLog(session, "Area II gate", hold)
+      return
+    }
     tutorial.stage = "combat"
+    tutorial.coopGateHold = null
     openTutorialGate(session, 1)
     session.log.unshift("Area II gate opens. Move east and finish the fight.")
     trimLog(session)
@@ -1941,7 +2676,13 @@ function advanceTutorial(session: GameSession) {
   }
 
   if (tutorial.stage === "combat" && tutorial.combatStarted && tutorial.combatFinished) {
+    const hold = tutorialGateHold(session, "combat")
+    if (hold) {
+      pushTutorialHoldLog(session, "Tutorial", hold)
+      return
+    }
     tutorial.stage = "complete"
+    tutorial.coopGateHold = null
     tutorial.completed = true
     session.log.unshift("Tutorial complete. The descent is open.")
     trimLog(session)
@@ -1959,8 +2700,16 @@ function tutorialGateMessageForPoint(session: GameSession, point: Point) {
   if (!tutorial.enabled || tutorial.completed || tutorial.disabledAfterDeath || session.deaths > 0) return null
   const gateIndex = tutorial.gatePoints.findIndex((gate) => samePoint(gate, point))
   if (gateIndex < 0 || tileAt(session.dungeon, point) !== "door") return null
-  if (gateIndex === 0 && tutorial.stage === "movement") return "Area I gate is locked. Finish the movement, Pack, Quest, and Book rows first."
-  if (gateIndex === 1 && (tutorial.stage === "movement" || tutorial.stage === "npc-check")) return "Area II gate is locked. Talk to the NPC and finish the relic talent check first."
+  if (gateIndex === 0 && tutorial.stage === "movement") {
+    const hold = tutorialGateHold(session, "movement")
+    if (hold) return `Area I gate waits for ${formatCoopWaitingNames(hold.waitingNames)}.`
+    return "Area I gate is locked. Finish the movement, Pack, Quest, and Book rows first."
+  }
+  if (gateIndex === 1 && (tutorial.stage === "movement" || tutorial.stage === "npc-check")) {
+    const hold = tutorialGateHold(session, "npc-check")
+    if (hold) return `Area II gate waits for ${formatCoopWaitingNames(hold.waitingNames)}.`
+    return "Area II gate is locked. Talk to the NPC and finish the relic talent check first."
+  }
   return null
 }
 
@@ -1972,6 +2721,24 @@ function openTutorialGate(session: GameSession, index: number) {
 function movementTutorialComplete(tutorial: RunTutorialState) {
   const movedAllDirections = tutorial.movedUp && tutorial.movedDown && tutorial.movedLeft && tutorial.movedRight
   return (movedAllDirections || tutorial.movementSteps >= 4) && tutorial.openedInventory && tutorial.openedQuests && tutorial.openedBook
+}
+
+function tutorialGateHold(session: GameSession, stage: Exclude<TutorialStageId, "complete">) {
+  const hold = session.tutorial.coopGateHold
+  return hold?.stage === stage && hold.waitingNames.length ? hold : null
+}
+
+function pushTutorialHoldLog(session: GameSession, labelText: string, hold: TutorialCoopGateHold) {
+  const message = `${labelText} waits for ${formatCoopWaitingNames(hold.waitingNames)}.`
+  if (session.log[0] !== message) {
+    session.log.unshift(message)
+    trimLog(session)
+  }
+}
+
+function formatCoopWaitingNames(names: string[]) {
+  if (names.length <= 2) return names.join(" and ")
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`
 }
 
 function doneText(done: boolean) {
@@ -2029,7 +2796,7 @@ export function normalizeSessionAfterLoad(session: GameSession): GameSession {
   session.tutorial = normalizeTutorialState(session.tutorial)
   session.deaths = Math.max(0, Math.floor(Number(session.deaths) || 0))
   session.statusEffects = normalizeStatusEffects(session.statusEffects)
-  session.world ??= createWorldForSeed(session.seed, session.finalFloor || 5)
+  session.world ??= createWorldForSeed(session.seed, session.finalFloor || defaultFinalFloor)
   session.worldLog ??= []
   session.pendingWorldGeneration = Boolean(session.pendingWorldGeneration)
   session.knowledge = normalizeKnowledge(session.knowledge)
@@ -2082,7 +2849,8 @@ export function selectSkill(session: GameSession, index: number) {
   const skill = combatSkills[session.combat.selectedSkill]
   const modifier = combatModifier(session, skill.stat)
   const target = combatTargets(session)[session.combat.selectedTarget]
-  session.combat.message = `${skill.name}: d20 ${formatSigned(modifier)} ${statAbbreviations[skill.stat]} vs DC ${skill.dc + enemyDefenseBonus(target?.kind)}. ${combatMatchupText(skill, target?.kind)}`
+  const talentText = talentEffectTextForSkill(session, skill)
+  session.combat.message = `${skill.name}: d20 ${formatSigned(modifier)} ${statAbbreviations[skill.stat]} vs DC ${skill.dc + enemyDefenseBonus(target?.kind)}. ${combatMatchupText(skill, target?.kind)} ${talentText}`.trim()
 }
 
 export function focusCostForSkill(session: GameSession, skill: CombatSkill) {
@@ -2091,6 +2859,30 @@ export function focusCostForSkill(session: GameSession, skill: CombatSkill) {
     .filter((talent) => talent?.skillId === skill.id)
     .reduce((total, talent) => total + Math.max(0, talent.focusDiscount ?? 0), 0)
   return Math.max(0, skill.cost - discount)
+}
+
+export function talentEffectTextForSkill(session: GameSession, skill: CombatSkill) {
+  const effects = skillTalentEffects(session, skill)
+  if (!effects.length) return ""
+  return `Talent: ${effects.join("; ")}.`
+}
+
+export function compactTalentEffectTextForSkill(session: GameSession, skill: CombatSkill) {
+  return skillTalentEffects(session, skill)
+    .map((effect) => effect.replace(/\bdamage\b/g, "dmg").replace(/\bfocus\b/g, "focus"))
+    .join("  ")
+}
+
+function skillTalentEffects(session: GameSession, skill: CombatSkill) {
+  return session.talents
+    .map((id) => talentDefinitions[id])
+    .filter((talent) => talent?.skillId === skill.id)
+    .map((talent) => {
+      const parts = []
+      if (talent.damageBonus) parts.push(`+${talent.damageBonus} damage`)
+      if (talent.focusDiscount) parts.push(`-${talent.focusDiscount} focus`)
+      return parts.length ? `${talent.name} ${parts.join(", ")}` : `${talent.name} passive`
+    })
 }
 
 export function combatAffinityLabel(affinity: CombatAffinity) {
@@ -2197,9 +2989,9 @@ export function applyStatusEffect(session: GameSession, effect: StatusEffect) {
 export function fleeModifier(session: GameSession) {
   return (
     session.level +
-    statModifier(session.stats.dexterity) +
-    Math.max(0, statModifier(session.stats.luck)) +
-    Math.max(0, Math.floor(statModifier(session.stats.endurance) / 2))
+    statModifier(session.stats.dexterity + equipmentStatBonus(session, "dexterity")) +
+    Math.max(0, statModifier(session.stats.luck + equipmentStatBonus(session, "luck"))) +
+    Math.max(0, Math.floor(statModifier(session.stats.endurance + equipmentStatBonus(session, "endurance")) / 2))
   )
 }
 
@@ -2207,6 +2999,80 @@ export function fleeDc(session: GameSession) {
   const targets = combatTargets(session)
   const pressure = targets.reduce((highest, target) => Math.max(highest, enemyDefenseBonus(target.kind)), 0)
   return 11 + Math.floor(session.floor / 2) + pressure + Math.min(4, Math.max(0, targets.length - 1))
+}
+
+export function combatBalanceSnapshot(session: GameSession): CombatBalanceSnapshot {
+  const targets = combatTargets(session)
+  const visibleTargets = targets.length
+    ? targets
+    : nearbyHostiles(session).length
+      ? nearbyHostiles(session)
+      : session.dungeon.actors.filter((actor) => isEnemyActorId(actor.kind))
+  const target = visibleTargets[clamp(session.combat.selectedTarget, 0, Math.max(0, visibleTargets.length - 1))]
+  const skill = combatSkills[clamp(session.combat.selectedSkill, 0, combatSkills.length - 1)] ?? combatSkills[0]
+  const modifier = combatModifier(session, skill.stat)
+  const dc = skill.dc + (target ? enemyDefenseDcBonus(session, target) : 0)
+  const hitChance = d20SuccessChance(modifier, dc)
+  const fleeChance = d20SuccessChance(fleeModifier(session), fleeDc(session))
+  const focusCost = focusCostForSkill(session, skill)
+  const focusPressure = clamp(
+    Math.round((focusCost / Math.max(1, session.maxFocus)) * 100 + (session.focus < focusCost ? 35 : 0) + Math.max(0, visibleTargets.length - 1) * 8),
+    0,
+    100,
+  )
+  const incomingDamage = visibleTargets.reduce((total, actor) => total + Math.max(0, actor.damage), 0)
+  const deathRisk = clamp(
+    Math.round((incomingDamage / Math.max(1, session.hp)) * 45 + Math.max(0, session.floor - 1) * 6 + Math.max(0, visibleTargets.length - 1) * 10 - Math.max(0, session.focus) * 2),
+    0,
+    95,
+  )
+  const projectedClassWinRate = clamp(
+    Math.round(
+      72 +
+        statModifier(session.stats.vigor + equipmentStatBonus(session, "vigor")) * 2 +
+        statModifier(session.stats.dexterity + equipmentStatBonus(session, "dexterity")) * 2 +
+        equipmentDamageBonus(session) * 3 +
+        session.level * 3 -
+        deathRisk * 0.55 -
+        focusPressure * 0.15,
+    ),
+    5,
+    95,
+  )
+  return {
+    target: target ? label(target.kind) : "No target",
+    skill: skill.name,
+    hitChance,
+    fleeChance,
+    focusPressure,
+    deathRisk,
+    projectedClassWinRate,
+    weaknessNote: combatBalanceWeaknessNote(session, target, skill),
+    focusNote: combatBalanceFocusNote(session, skill, focusCost, focusPressure),
+  }
+}
+
+function d20SuccessChance(modifier: number, dc: number) {
+  let wins = 0
+  for (let roll = 1; roll <= 20; roll += 1) {
+    if (roll === 20 || (roll !== 1 && roll + modifier >= dc)) wins += 1
+  }
+  return Math.round((wins / 20) * 100)
+}
+
+function combatBalanceWeaknessNote(session: GameSession, actor: Actor | undefined, skill: CombatSkill) {
+  if (!actor || !isEnemyActorId(actor.kind)) return "No enemy target yet. Pick a target, then compare d20 odds and affinities."
+  const profile = monsterProfiles[actor.kind]
+  const known = knownMonsterWeaknesses(session, actor.kind)
+  const knownText = known.length ? `Known weak: ${known.map(combatAffinityLabel).join(", ")}.` : "Weakness unknown; a correct affinity hit writes it into the Book."
+  const resistText = profile.resists.length ? `Resists: ${profile.resists.map(combatAffinityLabel).join(", ")}.` : "No resistance recorded."
+  return `${label(actor.kind)} vs ${skill.name}: ${knownText} ${resistText} ${combatMatchupText(skill, actor.kind)}`
+}
+
+function combatBalanceFocusNote(session: GameSession, skill: CombatSkill, focusCost: number, pressure: number) {
+  if (session.focus < focusCost) return `${skill.name} needs ${focusCost} focus; rest, use a vial, or choose a cheaper move.`
+  if (pressure >= 55) return `Focus pressure ${pressure}%. Save high-cost skills for weakness hits or guarded turns.`
+  return `Focus pressure ${pressure}%. Current focus can support ${skill.name} safely.`
 }
 
 export function attemptFlee(session: GameSession): CombatRoll | null {
@@ -2418,7 +3284,41 @@ function defeatActor(session: GameSession, actor: Actor) {
       kind: "note",
       floor: session.floor,
     })
+    applyBossAftermath(session, actor.kind)
   }
+}
+
+function applyBossAftermath(session: GameSession, kind: Actor["kind"]) {
+  session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  const bossName = label(kind)
+  const memory = `${bossName} memory`
+  if (!session.inventory.includes(memory)) session.inventory.unshift(memory)
+  gainNpcTrust(session, "cartographer", 2, false)
+  gainNpcTrust(session, "guildmaster", 2, false)
+  const customers = session.hub.village.customers.length ? session.hub.village.customers : createVillageCustomers()
+  session.hub.village.customers = customers.map((customer, index) => ({
+    ...customer,
+    taste: index % 2 === 0 ? "memory" : customer.taste === "food" ? "relic" : customer.taste,
+    patience: clamp(customer.patience + (index === 0 ? 2 : 1), 0, 5),
+  }))
+  const shopDemand = `Aftermath: customers want boss memories and relic loot after ${bossName} fell.`
+  session.hub.village.shopLog.unshift(shopDemand)
+  session.hub.village.shopLog = session.hub.village.shopLog.slice(0, 8)
+  session.hub.relationshipLog.unshift(`${bossName} aftermath changed village demand and cartographer routes.`)
+  trimHubLog(session.hub)
+  session.hub.village.schedules = session.hub.village.schedules.map((schedule) => {
+    if (schedule.npc === "cartographer") return { ...schedule, text: "Venn is marking the boss aftermath route near the portal." }
+    if (schedule.npc === "guildmaster") return { ...schedule, text: "Iris is collecting final-gate reports at the Guildhall." }
+    return schedule
+  })
+  rememberKnowledge(session, {
+    id: `boss-aftermath-${kind}-floor-${session.floor}`,
+    title: `${bossName} Aftermath`,
+    text: `${bossName} changed the village economy. Memory collectors pay more attention to boss memories, Cartographer trust rises, and the next market visit should test relic and memory demand.`,
+    kind: "hub",
+    floor: session.floor,
+  })
+  addToast(session, "Village aftermath", "Boss memory demand changed. Visit the market or Book.", "info")
 }
 
 function defeatMessage(kind: Actor["kind"]) {
@@ -2705,7 +3605,7 @@ export function applyOpeningStoryBranch(session: GameSession, branchId: string):
   if (branch.id === "check-wound") session.focus = Math.min(session.maxFocus, session.focus + 1)
 
   session.log.unshift(branch.text)
-  addToast(session, "Opening choice", branch.label, "info")
+  addToast(session, "Opening choice", branch.text, "info")
   trimLog(session)
   return branch.text
 }
@@ -2906,12 +3806,14 @@ function descend(session: GameSession) {
     })
     addToast(session, "Dungeon cleared", "The road home and portal room can open after this run.", "success")
     unlockHub(session, "The final gate opened and the village route became stable.")
+    recordChallengeResult(session)
     return
   }
   const shouldShowTutorialHandoff = session.tutorial.enabled && session.tutorial.completed && !session.tutorial.handoffShown && session.deaths === 0
   session.floor += 1
   session.dungeon = createDungeon(session.seed, session.floor)
   session.floorModifier = floorModifierFor(session.seed, session.floor)
+  applyStrategicDescentPressure(session)
   session.player = { ...session.dungeon.playerStart }
   session.visible = new Set()
   session.seen = new Set()
@@ -2919,9 +3821,10 @@ function descend(session: GameSession) {
   session.focus = Math.min(session.maxFocus, session.focus + 2)
   revealAroundPlayer(session)
   completeWorldProgress(session, "biome", session.player, `Reached floor ${session.floor}.`)
-  session.log.unshift(`Floor ${session.floor}. ${session.floorModifier.name}. Same seed, darker shape.`)
+  const plan = floorTacticalPlan(session.floor)
+  session.log.unshift(`Floor ${session.floor}: ${plan.title}. ${session.floorModifier.name}: ${session.floorModifier.text}`)
   rememberKnowledge(session, floorKnowledgeEntry(session.floor))
-  addToast(session, `Floor ${session.floor}`, session.floorModifier.text, "info")
+  addToast(session, plan.title, plan.finalGateClue, "info")
   if (shouldShowTutorialHandoff) applyPostTutorialHandoff(session)
 }
 
@@ -2933,6 +3836,20 @@ function applyPostTutorialHandoff(session: GameSession) {
   rememberKnowledge(session, {
     id: "post-tutorial-handoff",
     title: "Find the Final Gate",
+    text,
+    kind: "tutorial",
+    floor: session.floor,
+  })
+  addToast(session, "Find the Final Gate", text, "info")
+}
+
+function applyTutorialOffStart(session: GameSession) {
+  const text = `Tutorial is off. Find stairs, survive to Floor ${session.finalFloor}, and open the road home.`
+  focusFinalGateQuest(session)
+  session.log.unshift(text)
+  rememberKnowledge(session, {
+    id: "tutorial-off-start",
+    title: "Tutorial Skipped",
     text,
     kind: "tutorial",
     floor: session.floor,
@@ -3057,6 +3974,7 @@ function markPlayerDeath(session: GameSession) {
   }
   session.log.unshift(`You fall beneath the dungeon's build. Deaths this run: ${session.deaths}.`)
   addToast(session, "Run ended", `Deaths this run: ${session.deaths}.`, "danger")
+  recordChallengeResult(session)
 }
 
 function combatEnemyTurn(session: GameSession) {
@@ -3230,10 +4148,23 @@ function maybeAdvanceBossPhase(session: GameSession, actor: Actor) {
   ai.alerted = true
   ai.aggroRadius += 2
   ai.leashRadius += 2
-  const message = bossStoryLine(actor, session.floor, 2) || `${label(actor.kind)} enters phase 2.`
+  const telegraph = bossPhaseTelegraph(actor)
+  const message = `${bossStoryLine(actor, session.floor, 2) || `${label(actor.kind)} enters phase 2.`} ${telegraph}`
   session.log.unshift(message)
+  rememberKnowledge(session, {
+    id: `boss-phase-${actor.kind}-floor-${session.floor}-phase-${actor.phase}`,
+    title: `${label(actor.kind)} Phase ${actor.phase}`,
+    text: `${label(actor.kind)} changed tactics at half health. ${telegraph} Keep focus for weakness hits and use flee only if the odds are better than trading another round.`,
+    kind: "monster",
+    floor: session.floor,
+  })
   addToast(session, "Boss phase", message, "warning")
   return message
+}
+
+function bossPhaseTelegraph(actor: Actor) {
+  if (actor.kind === "grave-root-boss") return "Telegraph: roots glow amber before a heavier lash; Holy and Arcane hits are the safest finishers."
+  return `Telegraph: ${label(actor.kind)} gets faster and hits harder after half health.`
 }
 
 function tickStatusEffects(session: GameSession) {
@@ -3351,6 +4282,7 @@ function normalizeTutorialState(value: unknown): RunTutorialState {
     enabled,
     completed,
     stage: completed ? "complete" : stage,
+    coopGateHold: normalizeTutorialCoopGateHold(source.coopGateHold),
     gatePoints: normalizeTutorialGatePoints(source.gatePoints),
     movementSteps: Math.max(0, Math.floor(Number(source.movementSteps) || 0)),
     movedUp: Boolean(source.movedUp),
@@ -3367,6 +4299,13 @@ function normalizeTutorialState(value: unknown): RunTutorialState {
     disabledAfterDeath: Boolean(source.disabledAfterDeath),
     handoffShown: Boolean(source.handoffShown),
   }
+}
+
+function normalizeTutorialCoopGateHold(value: unknown): TutorialCoopGateHold | null {
+  const source = value && typeof value === "object" ? (value as Partial<TutorialCoopGateHold>) : null
+  if (!source || !(source.stage === "movement" || source.stage === "npc-check" || source.stage === "combat")) return null
+  const waitingNames = Array.isArray(source.waitingNames) ? source.waitingNames.map((name) => cleanConversationText(name, 24)).filter(Boolean).slice(0, 4) : []
+  return waitingNames.length ? { stage: source.stage, waitingNames } : null
 }
 
 function normalizeTutorialGatePoints(value: unknown): Point[] {
@@ -3486,10 +4425,12 @@ function normalizeHubState(hub: unknown, mode: MultiplayerMode, heroName: string
     activeMutators: normalizeRunMutators(value.activeMutators),
     relationshipLog: normalizeStringList(value.relationshipLog, 12, 120),
     village: normalizeVillageMapState(value.village, fallback.village),
+    calendar: normalizeVillageCalendarState(value.calendar, fallback.calendar),
     cutscenes: normalizeCutscenes(value.cutscenes, fallback.cutscenes),
     lastCutsceneId: isCutsceneId(value.lastCutsceneId) ? value.lastCutsceneId : null,
     contentPacks: normalizeContentPackState(value.contentPacks, fallback.contentPacks),
     balanceDashboard: normalizeBalanceDashboardState(value.balanceDashboard, fallback.balanceDashboard),
+    challengeBoard: normalizeChallengeBoardState(value.challengeBoard, fallback.challengeBoard),
   }
 }
 
@@ -3544,21 +4485,48 @@ function normalizeRunMutators(value: unknown): RunMutatorId[] {
 function normalizeVillageMapState(value: unknown, fallback: VillageMapState): VillageMapState {
   const source = value && typeof value === "object" ? (value as Partial<VillageMapState>) : {}
   const selectedLocation = isVillageLocationId(source.selectedLocation) ? source.selectedLocation : fallback.selectedLocation
+  const selectedPermission = isVillagePermissionArea(source.selectedPermission) ? source.selectedPermission : fallback.selectedPermission
   const player = source.player && typeof source.player === "object" ? (source.player as Partial<Point>) : fallback.player
   const sharedFarm = source.sharedFarm && typeof source.sharedFarm === "object" ? source.sharedFarm : fallback.sharedFarm
+  const permissions = normalizeVillagePermissions(source.permissions, fallback.permissions, sharedFarm.permissions)
   return {
     player: {
       x: clamp(Math.floor(Number(player.x) || fallback.player.x), 1, 17),
       y: clamp(Math.floor(Number(player.y) || fallback.player.y), 1, 8),
     },
     selectedLocation,
+    selectedPermission,
     schedules: normalizeVillageSchedules(source.schedules, fallback.schedules),
     customers: normalizeVillageCustomers(source.customers, fallback.customers),
     shopLog: normalizeStringList(source.shopLog, 8, 120),
+    permissions,
     sharedFarm: {
-      permissions: isFarmPermission(sharedFarm.permissions) ? sharedFarm.permissions : fallback.sharedFarm.permissions,
+      permissions: permissions.farm,
       storage: normalizeStringList(sharedFarm.storage, 20, 50),
     },
+  }
+}
+
+function normalizeVillagePermissions(value: unknown, fallback: VillagePermissionState, oldFarmPermission: unknown): VillagePermissionState {
+  const source = value && typeof value === "object" ? (value as Partial<Record<VillagePermissionArea, unknown>>) : {}
+  const permissions = Object.fromEntries(
+    villagePermissionAreas.map((area) => {
+      const legacyFarm = area === "farm" && isFarmPermission(oldFarmPermission) ? oldFarmPermission : undefined
+      return [area, isFarmPermission(source[area]) ? source[area] : legacyFarm ?? fallback[area]]
+    }),
+  ) as VillagePermissionState
+  return permissions
+}
+
+function normalizeVillageCalendarState(value: unknown, fallback: VillageCalendarState): VillageCalendarState {
+  const source = value && typeof value === "object" ? (value as Partial<VillageCalendarState>) : {}
+  return {
+    day: Math.max(1, Math.floor(Number(source.day) || fallback.day)),
+    season: isVillageSeasonId(source.season) ? source.season : fallback.season,
+    weather: isVillageWeatherId(source.weather) ? source.weather : fallback.weather,
+    festival: isVillageFestivalId(source.festival) ? source.festival : fallback.festival,
+    dungeonModifier: cleanBookText(source.dungeonModifier || fallback.dungeonModifier, 120),
+    note: cleanBookText(source.note || fallback.note, 180),
   }
 }
 
@@ -3641,6 +4609,53 @@ function normalizeBalanceDashboardState(value: unknown, fallback: BalanceDashboa
   }
 }
 
+function normalizeChallengeBoardState(value: unknown, fallback: ChallengeBoardState): ChallengeBoardState {
+  const source = value && typeof value === "object" ? (value as Partial<ChallengeBoardState>) : {}
+  return {
+    activeRun: normalizeChallengeRunMetadata(source.activeRun),
+    leaderboard: normalizeChallengeLeaderboard(source.leaderboard, fallback.leaderboard),
+  }
+}
+
+function normalizeChallengeRunMetadata(value: unknown): ChallengeRunMetadata | null {
+  const source = value && typeof value === "object" ? (value as Partial<ChallengeRunMetadata>) : null
+  if (!source || !isChallengeCadence(source.cadence)) return null
+  const seed = Math.max(1, Math.floor(Number(source.seed) || 1))
+  const classId = isHeroClass(source.classId) ? source.classId : "ranger"
+  return {
+    id: cleanId(source.id || `${source.cadence}-${seed}`),
+    cadence: source.cadence,
+    seed,
+    classId,
+    mutators: normalizeRunMutators(source.mutators),
+    startedAtTurn: Math.max(0, Math.floor(Number(source.startedAtTurn) || 0)),
+    replayKey: cleanId(source.replayKey || `${source.cadence}-${seed}-${classId}`),
+  }
+}
+
+function normalizeChallengeLeaderboard(value: unknown, fallback: ChallengeLeaderboardEntry[]) {
+  if (!Array.isArray(value)) return fallback
+  const rows = value.flatMap((item) => {
+    const base = normalizeChallengeRunMetadata(item)
+    const source = item && typeof item === "object" ? (item as Partial<ChallengeLeaderboardEntry>) : null
+    if (!base || !source) return []
+    return [
+      {
+        ...base,
+        name: cleanHeroName(source.name || "Crawler"),
+        status: isRunStatus(source.status) ? source.status : "running",
+        floor: Math.max(1, Math.floor(Number(source.floor) || 1)),
+        turns: Math.max(0, Math.floor(Number(source.turns) || 0)),
+        kills: Math.max(0, Math.floor(Number(source.kills) || 0)),
+        gold: Math.max(0, Math.floor(Number(source.gold) || 0)),
+        score: Math.max(0, Math.floor(Number(source.score) || 0)),
+        medal: isChallengeMedal(source.medal) ? source.medal : "none",
+      },
+    ]
+  })
+  return rows.sort((left, right) => right.score - left.score || left.turns - right.turns).slice(0, 12)
+}
+
 function normalizeHeroClassScores(value: unknown, fallback: Record<HeroClass, number>) {
   const source = value && typeof value === "object" ? (value as Partial<Record<HeroClass, number>>) : {}
   return Object.fromEntries(heroClassIds.map((id) => [id, clamp(Math.floor(Number(source[id]) || fallback[id] || 0), 0, 100)])) as Record<HeroClass, number>
@@ -3681,9 +4696,11 @@ function createVillageHouses(mode: MultiplayerMode, heroName: string): VillageHo
 }
 
 function createVillageMapState(mode: MultiplayerMode): VillageMapState {
+  const permissions = createVillagePermissions(mode)
   return {
     player: { ...villageLocations.portal.position },
     selectedLocation: "portal",
+    selectedPermission: "storage",
     schedules: villageNpcIds.map((npc) => ({
       npc,
       location: npc === "blacksmith" ? "blacksmith" : npc === "farmer" ? "farm" : npc === "guildmaster" ? "guildhall" : npc === "cook" ? "market" : "portal",
@@ -3692,10 +4709,38 @@ function createVillageMapState(mode: MultiplayerMode): VillageMapState {
     })),
     customers: createVillageCustomers(),
     shopLog: [],
+    permissions,
     sharedFarm: {
-      permissions: mode === "coop" ? "friends" : "owner-only",
+      permissions: permissions.farm,
       storage: [],
     },
+  }
+}
+
+function createVillagePermissions(mode: MultiplayerMode): VillagePermissionState {
+  const sharedDefault: FarmPermission = mode === "coop" ? "friends" : "owner-only"
+  return {
+    houses: sharedDefault,
+    farm: sharedDefault,
+    storage: sharedDefault,
+    shop: "owner-only",
+    upgrades: "owner-only",
+  }
+}
+
+function createVillageCalendarState(seed: number, turn: number): VillageCalendarState {
+  const day = Math.max(1, Math.floor(turn / 12) + 1)
+  const season = villageSeasonIds[Math.floor((day - 1) / 7) % villageSeasonIds.length] ?? "spring"
+  const weather = villageWeatherIds[Math.abs(seed + day * 13) % villageWeatherIds.length] ?? "clear"
+  const festival = villageFestivalForDay(day, season)
+  const modifier = villageCalendarModifier(weather, festival)
+  return {
+    day,
+    season,
+    weather,
+    festival,
+    dungeonModifier: modifier,
+    note: villageCalendarNote(day, season, weather, festival, modifier),
   }
 }
 
@@ -3753,6 +4798,30 @@ function createContentPackState(): ContentPackState {
   }
 }
 
+function villageFestivalForDay(day: number, season: VillageSeasonId): VillageFestivalId {
+  if (day % 13 === 0) return "final-gate-vigil"
+  if (day % 9 === 0) return season === "autumn" ? "harvest-night" : "market-day"
+  if (day % 6 === 0) return "forge-fair"
+  return "none"
+}
+
+function villageCalendarModifier(weather: VillageWeatherId, festival: VillageFestivalId) {
+  if (festival === "final-gate-vigil") return "Final-gate rooms reveal more relic clues."
+  if (festival === "market-day") return "Loot sells better, and cache gold rises."
+  if (festival === "forge-fair") return "Weapon prep is stronger, but armored enemies patrol more."
+  if (festival === "harvest-night") return "Food prep stretches farther into the next descent."
+  if (weather === "storm") return "Traps hit harder, but focus drafts are stronger."
+  if (weather === "fog") return "Sight lines shrink in the next dungeon."
+  if (weather === "rain") return "Slimes and moths are more common near wet rooms."
+  if (weather === "emberfall") return "Burning lasts longer for both sides."
+  return "No extra dungeon pressure today."
+}
+
+function villageCalendarNote(day: number, season: VillageSeasonId, weather: VillageWeatherId, festival: VillageFestivalId, modifier: string) {
+  const festivalText = festival === "none" ? "no festival" : festival.replace(/-/g, " ")
+  return `Day ${day}, ${season}, ${weather}; ${festivalText}. ${modifier}`
+}
+
 function createBalanceDashboardState(): BalanceDashboardState {
   return {
     runs: 0,
@@ -3762,6 +4831,13 @@ function createBalanceDashboardState(): BalanceDashboardState {
     averageHubCoins: 0,
     upgradePacing: 0,
     notes: [],
+  }
+}
+
+function createChallengeBoardState(): ChallengeBoardState {
+  return {
+    activeRun: null,
+    leaderboard: [],
   }
 }
 
@@ -3816,8 +4892,36 @@ function isVillageCustomerTaste(value: unknown): value is VillageCustomerTaste {
   return typeof value === "string" && (villageCustomerTastes as readonly string[]).includes(value)
 }
 
+function isVillageSeasonId(value: unknown): value is VillageSeasonId {
+  return typeof value === "string" && (villageSeasonIds as readonly string[]).includes(value)
+}
+
+function isVillageWeatherId(value: unknown): value is VillageWeatherId {
+  return typeof value === "string" && (villageWeatherIds as readonly string[]).includes(value)
+}
+
+function isVillageFestivalId(value: unknown): value is VillageFestivalId {
+  return value === "none" || value === "market-day" || value === "forge-fair" || value === "harvest-night" || value === "final-gate-vigil"
+}
+
+function isVillagePermissionArea(value: unknown): value is VillagePermissionArea {
+  return typeof value === "string" && (villagePermissionAreas as readonly string[]).includes(value)
+}
+
 function isFarmPermission(value: unknown): value is FarmPermission {
   return value === "owner-only" || value === "friends" || value === "everyone"
+}
+
+function isChallengeCadence(value: unknown): value is ChallengeCadence {
+  return value === "daily" || value === "weekly"
+}
+
+function isChallengeMedal(value: unknown): value is ChallengeMedal {
+  return value === "none" || value === "bronze" || value === "silver" || value === "gold"
+}
+
+function isRunStatus(value: unknown): value is ChallengeLeaderboardEntry["status"] {
+  return value === "running" || value === "dead" || value === "victory"
 }
 
 function isCutsceneId(value: unknown): value is CutsceneId {
@@ -3887,7 +4991,176 @@ function applyMutatorPressure(session: GameSession) {
     session.hp = Math.min(session.hp, session.maxHp)
   }
   if (active.has("cursed-floors")) session.floorModifier = { ...session.floorModifier, trapDamageBonus: session.floorModifier.trapDamageBonus + 1 }
-  if (active.has("boss-rush")) session.finalFloor = Math.min(session.finalFloor, 3)
+  if (active.has("boss-rush")) session.finalFloor = Math.min(session.finalFloor, defaultFinalFloor)
+}
+
+function applyVillageCalendarModifier(session: GameSession) {
+  const calendar = session.hub.calendar
+  if (calendar.weather === "storm") {
+    session.floorModifier = { ...session.floorModifier, trapDamageBonus: session.floorModifier.trapDamageBonus + 1, restFocusBonus: session.floorModifier.restFocusBonus + 1 }
+  }
+  if (calendar.weather === "fog") session.floorModifier = { ...session.floorModifier, visionBonus: session.floorModifier.visionBonus - 1 }
+  if (calendar.weather === "emberfall") session.floorModifier = { ...session.floorModifier, goldBonus: session.floorModifier.goldBonus + 1 }
+  if (calendar.festival === "market-day") session.floorModifier = { ...session.floorModifier, goldBonus: session.floorModifier.goldBonus + 4 }
+  if (calendar.festival === "forge-fair" && session.equipment.weapon) session.equipment.weapon = { ...session.equipment.weapon, bonusDamage: session.equipment.weapon.bonusDamage + 1 }
+  if (calendar.festival === "harvest-night" && !session.inventory.includes("Festival rations")) session.inventory.unshift("Festival rations")
+  if (calendar.festival === "final-gate-vigil" && !session.inventory.includes("Final-gate candle")) session.inventory.unshift("Final-gate candle")
+  rememberKnowledge(session, {
+    id: `village-calendar-day-${calendar.day}`,
+    title: `Village Calendar Day ${calendar.day}`,
+    text: calendar.note,
+    kind: "hub",
+    floor: session.floor,
+  })
+  addToast(session, "Village calendar", calendar.dungeonModifier, "info")
+}
+
+function strategicPressureTier(session: GameSession) {
+  if (!session.hub?.unlocked) return 0
+  const stationLevels = hubStationIds.reduce((total, id) => total + Math.max(0, session.hub.stations[id]?.level ?? 0), 0)
+  const stationPressure = Math.floor(stationLevels / 3)
+  const floorPressure = session.floor >= session.finalFloor ? 2 : session.floor >= 2 ? 1 : 0
+  const mutatorPressure = session.hub.activeMutators.length
+  return clamp(1 + stationPressure + floorPressure + mutatorPressure, 1, 5)
+}
+
+function applyStrategicDescentPressure(session: GameSession) {
+  const tier = strategicPressureTier(session)
+  if (!tier) return
+  const enemies = session.dungeon.actors.filter((actor) => isEnemyActorId(actor.kind))
+  for (const actor of enemies) {
+    const bossBonus = isBossActorId(actor.kind) ? tier + session.floor : 0
+    const hpBonus = tier + Math.floor(session.floor / 2) + bossBonus
+    actor.maxHp = Math.max(actor.maxHp ?? actor.hp, actor.hp) + hpBonus
+    actor.hp += hpBonus
+    actor.damage += session.floor >= 2 ? Math.ceil(tier / 2) : 0
+    if (actor.ai) {
+      actor.ai.aggroRadius += Math.min(2, tier)
+      actor.ai.leashRadius += Math.min(3, tier)
+    }
+  }
+  placeStrategicGuards(session, tier)
+  session.log.unshift(`Strategic pressure tier ${tier}: enemies have more HP, stronger roles, and tighter guards.`)
+  trimLog(session)
+}
+
+const gmFloorEncounterPath = /^floors\.(\d+)\.encounterBudget$/
+
+export function applyGmPatchOperations(session: GameSession, operations: readonly GmPatchOperationInput[]): GmPatchApplyResult {
+  if (!Array.isArray(operations) || operations.length === 0) return { applied: 0, message: "No GM operations to apply." }
+  let applied = 0
+  const notes: string[] = []
+
+  for (const operation of operations) {
+    const path = String(operation.path || "")
+    if (path === "rules.enemyHpMultiplier") {
+      const multiplier = clampNumber(operation.value, 0.5, 2)
+      applied += applyGmEnemyHpMultiplier(session, multiplier)
+      notes.push(`enemy HP x${multiplier.toFixed(2)}`)
+      continue
+    }
+    if (path === "rules.enemyDamageBonus") {
+      const bonus = Math.trunc(clampNumber(operation.value, -3, 3))
+      applied += applyGmEnemyDamageBonus(session, bonus)
+      notes.push(`enemy damage ${formatSigned(bonus)}`)
+      continue
+    }
+    const floorMatch = gmFloorEncounterPath.exec(path)
+    if (floorMatch) {
+      const floor = Number(floorMatch[1])
+      if (floor === session.floor) {
+        const budget = Math.trunc(clampNumber(operation.value, 0, 12))
+        applied += applyGmEncounterBudget(session, budget)
+        notes.push(`encounter pressure ${budget}`)
+      }
+      continue
+    }
+    if (path === "lore.gmBriefing" && typeof operation.value === "string") {
+      pushSessionMessage(session, `GM briefing: ${operation.value.slice(0, 180)}`)
+      applied += 1
+      notes.push("briefing")
+    }
+  }
+
+  if (!applied) return { applied: 0, message: "No current-floor GM operations matched this run." }
+  const message = `GM patch applied: ${notes.join(", ")}.`
+  pushSessionMessage(session, message)
+  addToast(session, "GM rules applied", message, "warning")
+  return { applied, message }
+}
+
+function applyGmEnemyHpMultiplier(session: GameSession, multiplier: number) {
+  let applied = 0
+  for (const actor of session.dungeon.actors) {
+    if (!isEnemyActorId(actor.kind)) continue
+    const maxHp = Math.max(actor.maxHp ?? actor.hp, actor.hp, 1)
+    const nextMax = Math.max(1, Math.ceil(maxHp * multiplier))
+    const delta = nextMax - maxHp
+    actor.maxHp = nextMax
+    actor.hp = clamp(actor.hp + delta, 1, nextMax)
+    applied += 1
+  }
+  return applied
+}
+
+function applyGmEnemyDamageBonus(session: GameSession, bonus: number) {
+  let applied = 0
+  for (const actor of session.dungeon.actors) {
+    if (!isEnemyActorId(actor.kind)) continue
+    actor.damage = Math.max(1, actor.damage + bonus)
+    applied += 1
+  }
+  return applied
+}
+
+function applyGmEncounterBudget(session: GameSession, budget: number) {
+  const enemies = session.dungeon.actors.filter((actor) => isEnemyActorId(actor.kind))
+  const aiBonus = Math.min(3, Math.floor(budget / 3))
+  for (const actor of enemies) {
+    if (!actor.ai) ensureEnemyAi(actor, session.dungeon.actors.indexOf(actor), session.floor)
+    if (actor.ai) {
+      actor.ai.aggroRadius += aiBonus
+      actor.ai.leashRadius += aiBonus
+      actor.ai.alerted = budget >= 5
+    }
+  }
+  if (budget >= 4) placeStrategicGuards(session, Math.min(5, Math.ceil(budget / 2)))
+  return enemies.length
+}
+
+function clampNumber(value: unknown, min: number, max: number) {
+  const number = Number(value)
+  return Number.isFinite(number) ? clamp(number, min, max) : min
+}
+
+function placeStrategicGuards(session: GameSession, tier: number) {
+  if (session.floor < 2) return
+  const anchors = session.dungeon.actors.filter((actor) => actor.kind === "necromancer" || isBossActorId(actor.kind))
+  for (const anchor of anchors.slice(0, session.floor >= session.finalFloor ? 2 : 1)) {
+    const alreadyGuarded = session.dungeon.actors.some((actor) => actor.kind === "rust-squire" && manhattan(actor.position, anchor.position) <= 2)
+    if (alreadyGuarded) continue
+    const position = firstFreeNeighbor(session, anchor.position)
+    if (!position) continue
+    const guard: Actor = {
+      id: `strategic-guard-${session.floor}-${anchor.id}`,
+      kind: "rust-squire",
+      position,
+      hp: 5 + session.floor + tier,
+      maxHp: 5 + session.floor + tier,
+      damage: 2 + Math.ceil(tier / 2),
+      phase: 1,
+      ai: enemyAi("rust-squire", position, session.dungeon.actors.length, session.floor),
+    }
+    guard.ai!.pattern = "guard"
+    session.dungeon.actors.push(guard)
+  }
+}
+
+function firstFreeNeighbor(session: GameSession, point: Point) {
+  return cardinalNeighbors(point).find((candidate) => {
+    if (tileAt(session.dungeon, candidate) !== "floor") return false
+    return !session.dungeon.actors.some((actor) => actor.position.x === candidate.x && actor.position.y === candidate.y)
+  })
 }
 
 function pushSessionMessage(session: GameSession, message: string) {
@@ -4245,6 +5518,7 @@ function createWorldForSeed(seed: number, finalFloor: number) {
 }
 
 function completeWorldProgress(session: GameSession, type: WorldEventType, point: Point, message: string) {
+  const completedQuestsBefore = new Set(session.world.quests.filter((quest) => quest.status === "completed").map((quest) => quest.id))
   const event = completeFirstMatchingWorldEvent(session.world, type, nearestWorldAnchorId(session, point)) ?? completeFirstMatchingWorldEvent(session.world, type)
   if (!event) return
   session.worldLog.push(
@@ -4255,7 +5529,66 @@ function completeWorldProgress(session: GameSession, type: WorldEventType, point
       metadata: { eventType: event.type, completed: completedWorldEventCount(session.world) },
     }),
   )
+  applyCompletedQuestOutcomes(session, completedQuestsBefore)
   queueWorldMilestones(session, event)
+}
+
+function applyCompletedQuestOutcomes(session: GameSession, completedBefore: Set<string>) {
+  const completedNow = session.world.quests.filter((quest) => quest.status === "completed" && !completedBefore.has(quest.id))
+  for (const quest of completedNow) applyQuestOutcome(session, quest)
+}
+
+function applyQuestOutcome(session: GameSession, quest: WorldQuest) {
+  const title = quest.title.toLowerCase()
+  const reward = questOutcomeForTitle(title)
+  if (!reward) return
+
+  if (reward.item && !session.inventory.includes(reward.item)) session.inventory.unshift(reward.item)
+  if (reward.gold) session.gold += reward.gold
+  if (reward.hubCoins) session.hub.coins += reward.hubCoins
+  if (reward.trustNpc) gainNpcTrust(session, reward.trustNpc, reward.trust, true)
+  if (reward.maxFocus) {
+    session.maxFocus += reward.maxFocus
+    session.focus = Math.min(session.maxFocus, session.focus + reward.maxFocus)
+  }
+  if (reward.maxHp) {
+    session.maxHp += reward.maxHp
+    session.hp = Math.min(session.maxHp, session.hp + reward.maxHp)
+  }
+
+  session.hub.relationshipLog.unshift(`Quest outcome: ${quest.title}. ${reward.message}`)
+  trimHubLog(session.hub)
+  rememberKnowledge(session, {
+    id: `quest-outcome-${quest.id}`,
+    title: `Quest Complete: ${quest.title}`,
+    text: `${quest.summary} ${reward.message}`,
+    kind: "hub",
+    floor: session.floor,
+  })
+  pushSessionMessage(session, `Quest complete: ${quest.title}. ${reward.message}`)
+  addToast(session, "Quest complete", reward.message, "success")
+}
+
+function questOutcomeForTitle(title: string):
+  | {
+      message: string
+      item?: string
+      gold?: number
+      hubCoins?: number
+      trustNpc?: VillageNpcId
+      trust: number
+      maxFocus?: number
+      maxHp?: number
+    }
+  | null {
+  if (title.includes("escort")) return { message: "Cartographer trust rises and a route token joins the pack.", item: "Escort route token", hubCoins: 8, trustNpc: "cartographer", trust: 3 }
+  if (title.includes("rescue")) return { message: "The rescued lead becomes a keepsake and the surgeon trusts you more.", item: "Rescue keepsake", hubCoins: 10, trustNpc: "cook", trust: 3, maxHp: 1 }
+  if (title.includes("timed curse")) return { message: "A curse ward note reduces future panic and adds focus preparation.", item: "Curse ward note", gold: 8, trustNpc: "guildmaster", trust: 2, maxFocus: 1 }
+  if (title.includes("shrine repair")) return { message: "Shrine repair adds a blessing clue for the final gate.", item: "Shrine repair key", hubCoins: 12, trustNpc: "guildmaster", trust: 3 }
+  if (title.includes("bounty")) return { message: "Bounty proof pays out and updates the monster book.", item: "Bounty proof", gold: 16, hubCoins: 12, trustNpc: "guildmaster", trust: 4 }
+  if (title.includes("merchant delivery")) return { message: "Merchant delivery improves market reputation and price tests.", item: "Delivery receipt", hubCoins: 14, trustNpc: "blacksmith", trust: 3 }
+  if (title.includes("final-gate keys")) return { message: "A final-gate key is ready for the road home.", item: "Final gate key", gold: 12, hubCoins: 18, trustNpc: "cartographer", trust: 4 }
+  return null
 }
 
 function queueWorldMilestones(session: GameSession, event: WorldEvent) {

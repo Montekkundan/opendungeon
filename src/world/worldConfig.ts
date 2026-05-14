@@ -235,12 +235,41 @@ export const worldConfigJsonSchema = {
 const eventTypes: WorldEventType[] = ["interaction", "enemy", "loot", "quest", "biome"]
 const biomes = ["crypt", "moss vault", "iron shrine", "flooded archive", "ember jail"]
 const questArchetypes = [
-  { title: "Escort", summary: "Keep an NPC route safe through linked rooms before the dungeon reshuffles." },
-  { title: "Rescue", summary: "Find a trapped villager or memory before the next floor claims it." },
-  { title: "Timed Curse", summary: "Resolve cursed events quickly or accept a harsher floor modifier." },
-  { title: "Locked Shrine", summary: "Recover shrine proof, keys, or relic fragments to open a sealed reward." },
-  { title: "Bounty", summary: "Hunt a named enemy chain and bring proof back to the village." },
-  { title: "Multi-Floor Chain", summary: "Carry evidence across floors so a later quest can branch cleanly." },
+  {
+    title: "Escort",
+    summary: "Keep an NPC route safe across rooms and floors. Village outcome: safer co-op house routes and cartographer trust.",
+    types: ["quest", "interaction", "biome", "quest"],
+  },
+  {
+    title: "Rescue",
+    summary: "Find a trapped villager or memory before the next floor claims it. Village outcome: wound-surgeon trust and a keepsake lead.",
+    types: ["quest", "interaction", "loot", "quest"],
+  },
+  {
+    title: "Timed Curse",
+    summary: "Resolve cursed rooms quickly or accept a harsher floor modifier. Village outcome: curse warnings and safer preparation notes.",
+    types: ["biome", "quest", "enemy", "loot"],
+  },
+  {
+    title: "Shrine Repair",
+    summary: "Recover shrine proof, keys, and relic fragments to repair a sealed reward. Village outcome: shrine blessings and final-gate clues.",
+    types: ["loot", "quest", "interaction", "biome"],
+  },
+  {
+    title: "Bounty",
+    summary: "Hunt a named enemy chain and bring proof back to the village. Village outcome: guild trust, coins, and monster notes.",
+    types: ["enemy", "enemy", "quest", "boss"],
+  },
+  {
+    title: "Merchant Delivery",
+    summary: "Carry goods between merchant, floor events, and village market. Village outcome: better price tests and shop reputation.",
+    types: ["interaction", "loot", "quest", "loot"],
+  },
+  {
+    title: "Final-Gate Keys",
+    summary: "Assemble keys from people, relics, and fights before opening the road home. Village outcome: unlocks the next descent plan.",
+    types: ["quest", "loot", "enemy", "boss"],
+  },
 ] as const
 const npcNames = ["Cartographer Venn", "Shrine Keeper Sol", "Wound Surgeon Iri", "Jailer Maro", "Ash Merchant Pell"]
 const enemyNames = ["Grave Squire", "Rust Wisp", "Carrion Moth", "Crypt Mimic", "Root-Bound Ghoul"]
@@ -450,20 +479,60 @@ function createInitialQuests(events: WorldEvent[], entities: WorldEntity[]): Wor
   const quests: WorldQuest[] = []
   for (let index = 0; index < questArchetypes.length; index++) {
     const archetype = questArchetypes[index]
-    const start = index * 4
-    const objectiveEventIds = events.slice(start, start + 4).map((event) => event.id)
-    const rewardEntityIds = entities.slice(start + 3, start + 4).map((entity) => entity.id)
+    const objectiveEventIds = questObjectiveEventIds(events, index, archetype.types)
+    const rewardEntityIds = questRewardEntityIds(events, entities, objectiveEventIds)
+    const route = questRouteLabel(events, objectiveEventIds)
+    const previousTrigger = quests[index - 1]?.objectiveEventIds.at(-1)
     quests.push({
       id: `quest-${index.toString().padStart(2, "0")}`,
-      title: `${archetype.title}: ${biomes[index % biomes.length]}`,
+      title: `${archetype.title}: ${route}`,
       summary: archetype.summary,
       status: index === 0 ? "active" : "locked",
       objectiveEventIds,
       rewardEntityIds,
-      triggerEventIds: objectiveEventIds.slice(0, 1),
+      triggerEventIds: index === 0 ? objectiveEventIds.slice(0, 1) : previousTrigger ? [previousTrigger] : objectiveEventIds.slice(0, 1),
     })
   }
   return quests
+}
+
+function questObjectiveEventIds(events: WorldEvent[], questIndex: number, preferredTypes: readonly WorldEventType[]) {
+  const floors = [...new Set(events.map((event) => floorFromAnchorId(event.anchorId)))].filter((floor) => floor > 0).sort((left, right) => left - right)
+  const selected: WorldEvent[] = []
+  const floorOrder = floors.length ? floors : [0]
+  for (let step = 0; step < Math.min(4, Math.max(3, floorOrder.length)); step++) {
+    const floor = floorOrder[(questIndex + step) % floorOrder.length] ?? 0
+    const type = preferredTypes[step % preferredTypes.length] ?? "quest"
+    const candidates = events.filter((event) => (floor ? floorFromAnchorId(event.anchorId) === floor : true) && event.type === type)
+    const fallback = events.filter((event) => (floor ? floorFromAnchorId(event.anchorId) === floor : true))
+    const pool = candidates.length ? candidates : fallback.length ? fallback : events
+    const event = pool[(questIndex + step) % Math.max(1, pool.length)]
+    if (event && !selected.some((candidate) => candidate.id === event.id)) selected.push(event)
+  }
+  const preferredFallback = events.filter((event) => preferredTypes.includes(event.type))
+  for (const event of [...preferredFallback, ...events]) {
+    if (selected.length >= 4) break
+    if (!selected.some((candidate) => candidate.id === event.id)) selected.push(event)
+  }
+  return selected.slice(0, 4).map((event) => event.id)
+}
+
+function questRewardEntityIds(events: WorldEvent[], entities: WorldEntity[], objectiveEventIds: string[]) {
+  const ids = objectiveEventIds.flatMap((eventId) => events.find((event) => event.id === eventId)?.entityIds ?? [])
+  const known = new Set(entities.map((entity) => entity.id))
+  return [...new Set(ids.filter((id) => known.has(id)))].slice(-2)
+}
+
+function questRouteLabel(events: WorldEvent[], objectiveEventIds: string[]) {
+  const floors = [...new Set(objectiveEventIds.map((eventId) => floorFromAnchorId(events.find((event) => event.id === eventId)?.anchorId ?? "")))].filter((floor) => floor > 0)
+  if (!floors.length) return "unmapped route"
+  const min = Math.min(...floors)
+  const max = Math.max(...floors)
+  return min === max ? `Floor ${min}` : `Floors ${min}-${max}`
+}
+
+function floorFromAnchorId(anchorId: string) {
+  return Number(anchorId.match(/^f(\d+)-/)?.[1] ?? 0)
 }
 
 function activateFutureEvents(world: WorldConfig) {

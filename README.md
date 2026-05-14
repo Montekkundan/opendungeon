@@ -17,6 +17,10 @@
 ### Installation
 
 ```bash
+# Curl installer for macOS and Linux
+curl -fsSL https://opendungeon.xyz/install | bash
+opendungeon
+
 # npm
 npm i -g @montekkundan/opendungeon
 opendungeon
@@ -37,6 +41,7 @@ opendungeon update
 ```bash
 bun install
 bun run dev
+bun run verify:gameplay
 ```
 
 Website:
@@ -57,18 +62,25 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_o-QLR6jUUh04QCm58di_8w_7bP4M
 
 Keep service-role keys server-only. The Next.js website only needs the publishable key.
 
+### Play Modes
+
+- **Single Player** is the canonical authored story loop: local dungeon rules, lore, curated assets, village progression, and offline saves.
+- **Multiplayer** uses that same story loop with multiple players sharing the run and village through a lobby host. `coop` is the shared-story lobby variant; `race` is only a same-seed challenge variant.
+- **Multiplayer with GM** is a logged-in website flow for GM-created worlds. AI/GM lore, rooms, quests, and generated assets must stay per-world in Supabase and must not replace the Single Player story.
+
 ### Multiplayer
 
-`localhost` only works on the same computer. For friends on the same Wi-Fi/LAN, host on `0.0.0.0` and share the LAN IP printed by the host.
+`127.0.0.1` and `localhost` only work on the same computer. For friends on the same Wi-Fi/LAN, host on `0.0.0.0` and share the LAN IP printed by the host.
 
 ```bash
 # Same laptop, multiple terminal tabs
 bun run host -- --host 127.0.0.1 --mode coop --seed 2423368 --port 3737
-OPENDUNGEON_PLAYER_NAME=Mira bun run dev join http://127.0.0.1:3737
-OPENDUNGEON_PLAYER_NAME=Nyx bun run dev join http://127.0.0.1:3737
+OPENDUNGEON_PLAYER_NAME=Mira bun run dev -- join http://127.0.0.1:3737
+OPENDUNGEON_PLAYER_NAME=Nyx bun run dev -- join http://127.0.0.1:3737
 
 # Same Wi-Fi / LAN
 opendungeon-host --host 0.0.0.0 --mode coop --seed 2423368 --port 3737
+curl http://YOUR_LAN_IP:3737/health
 ```
 
 Friends join with:
@@ -77,11 +89,28 @@ Friends join with:
 opendungeon join http://YOUR_LAN_IP:3737
 ```
 
-For an internet server, open TCP port `3737` and set the public URL or domain:
+For source checkout testing on LAN, use the same command through Bun:
+
+```bash
+bun run host -- --host 0.0.0.0 --mode coop --seed 2423368 --port 3737
+OPENDUNGEON_PLAYER_NAME=Sol bun run dev -- join http://YOUR_LAN_IP:3737
+```
+
+For an internet server, run `opendungeon-host` on a reachable machine, open TCP port `3737`, and set the public URL or domain:
 
 ```bash
 opendungeon-host --host 0.0.0.0 --public-url http://YOUR_SERVER_IP:3737 --mode coop --seed 2423368 --port 3737
 opendungeon join http://YOUR_SERVER_IP:3737
+```
+
+The live host coordinates co-op snapshots, applies typed player commands where possible, exposes `/state`, `/commands`, and `/actions` for the GM console, and broadcasts approved GM patches. Vercel can host invite pages and `/gm`, while internet multiplayer needs a long-running host on a VPS, Docker platform, Fly/Render/Railway, or another WebSocket-capable service.
+
+Vercel Sandbox is an experimental internet-host option for logged-in hosts who connect their own Vercel account. The product path would create a sandbox under the host player's Vercel team, run `opendungeon-host` there, expose its public URL, store the lobby in Supabase, and stop the sandbox when the session ends. It is not the default path yet because sandbox runtimes are time-limited and need account-linking, lifecycle, reconnect, and cleanup guardrails.
+
+The website now stores a Sandbox host plan with each logged-in `/create` lobby. That plan is only metadata until the Vercel account-linking and provisioning flow exists. The intended launch command inside a sandbox is:
+
+```bash
+opendungeon-host --host 0.0.0.0 --public-url "$OPENDUNGEON_PUBLIC_URL" --mode coop --seed 2423368 --port 3737
 ```
 
 For local source testing:
@@ -91,6 +120,12 @@ bun run host -- --mode coop --seed 2423368 --port 3737
 ```
 
 Signed-in accounts are protected from duplicate local play: opening a second Ghostty tab with the same saved login shows an already-in-game message. Guest/local tabs are allowed, so multiple players can join from one laptop without logging in.
+`OPENDUNGEON_PLAYER_NAME` is process-local, so every guest tab can use a different crawler name without changing your saved profile.
+Hosted lobbies also reject a second live player using the same signed-in account identity, including over LAN. Use `OPENDUNGEON_AUTH_DIR="$(mktemp -d)"` when you intentionally want another guest client from the same machine.
+
+### Contributing
+
+Start with [CONTRIBUTING.md](CONTRIBUTING.md) for the repo map, local multiplayer test commands, website commands, and the checks expected before release-facing changes.
 
 Docker/server hosting:
 
@@ -105,6 +140,7 @@ Ghost-style server platforms can use `packaging/ghost/opendungeon` as the game t
 
 ```bash
 bun install --frozen-lockfile
+bun run verify:contributor
 bun run package:check
 bun run changeset
 git push origin main

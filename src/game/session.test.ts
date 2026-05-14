@@ -2,24 +2,37 @@ import { describe, expect, test } from "bun:test"
 import {
   chooseConversationOption,
   chooseLevelUpTalent,
+  combatBalanceSnapshot,
+  craftVillageRecipe,
+  createNextDescentSession,
   createSession,
   currentBiome,
+  equipmentComparisonText,
   enemyBehaviorText,
   floorModifierFor,
+  fleeModifier,
   focusCostForSkill,
   grantXp,
   interactWithWorld,
+  inventoryActionsForItem,
+  inventoryItemDescription,
   normalizeSessionAfterLoad,
+  performInventoryAction,
   performCombatAction,
   recordTutorialAction,
   rest,
   combatSkills,
   startingLoadout,
   tryMove,
+  useInventoryItemAt,
   usePotion,
   addToast,
+  applyChallengeRun,
+  applyGmPatchOperations,
+  applyOpeningStoryBranch,
   buildHubStation,
   cycleContentPack,
+  cycleCoopVillagePermission,
   cycleSharedFarmPermission,
   completeVillageQuest,
   customizeVillageHouse,
@@ -29,16 +42,22 @@ import {
   playLocalCutscene,
   prepareFood,
   refreshBalanceDashboard,
+  refreshVillageCalendar,
+  recordChallengeResult,
   runVillageShopSale,
   sellLootToVillage,
+  setTutorialCoopGateHold,
+  talentEffectTextForSkill,
   toggleRunMutator,
+  tutorialCoopCheckpoint,
   unlockHub,
   upgradeWeapon,
   visitVillageLocation,
 } from "./session.js"
 import type { GameSession } from "./session.js"
 import { cardinalNeighbors, createDungeon, enemyAi, setTile, tileAt } from "./dungeon.js"
-import type { ActorId } from "./domainTypes.js"
+import { isEnemyActorId, type ActorId } from "./domainTypes.js"
+import { defaultFinalFloor } from "./progression.js"
 import { addEnemyBesidePlayer } from "./testHelpers.test.js"
 
 describe("game session", () => {
@@ -163,11 +182,79 @@ describe("game session", () => {
     expect(session.toasts[0].title).toBe("Potion used")
   })
 
+  test("inventory item use explains passive and empty-slot choices", () => {
+    const session = createSession(1234)
+    session.inventory.unshift("Bound relic")
+
+    const passive = performInventoryAction(session, 0, "use")
+    const empty = useInventoryItemAt(session, 99)
+
+    expect(passive.used).toBe(false)
+    expect(passive.message).toContain("passive +1 to talent checks")
+    expect(passive.message).not.toContain("No apply action")
+    expect(empty.message).toBe("Empty slot selected.")
+    expect(inventoryItemDescription("Dew vial")).toContain("Consumable")
+  })
+
+  test("inventory actions support equip stash sell and drop flows", () => {
+    const session = createSession(1234)
+    const actions = inventoryActionsForItem(session, 0)
+
+    expect(actions.map((action) => action.id)).toEqual(["inspect", "use", "equip", "drop", "stash", "sell"])
+    expect(performInventoryAction(session, 0, "equip")).toMatchObject({ used: true })
+    expect(session.equipment.weapon?.name).toBe("Rusty blade")
+
+    unlockHub(session)
+    session.hub.coins = 80
+    expect(buildHubStation(session, "storage")).toBe(true)
+    session.inventory.unshift("Tool part bundle")
+    expect(performInventoryAction(session, 0, "stash")).toMatchObject({ used: true })
+    expect(session.hub.village.sharedFarm.storage[0]).toBe("Tool part bundle")
+
+    session.inventory.unshift("Bound relic")
+    const coins = session.hub.coins
+    expect(performInventoryAction(session, 0, "sell")).toMatchObject({ used: true })
+    expect(session.hub.coins).toBeGreaterThan(coins)
+
+    session.inventory.unshift("Bent lockpick")
+    expect(performInventoryAction(session, 0, "drop")).toMatchObject({ used: true })
+    expect(session.inventory).not.toContain("Bent lockpick")
+  })
+
+  test("inventory tools create tactical item and gear decisions", () => {
+    const session = createSession(1234)
+    session.hp = session.maxHp - 1
+    session.focus = Math.max(0, session.maxFocus - 1)
+    const startingMaxHp = session.maxHp
+    session.inventory.unshift("Travel rations")
+
+    expect(performInventoryAction(session, 0, "use")).toMatchObject({ used: true })
+    expect(session.maxHp).toBe(startingMaxHp + 1)
+    expect(session.hp).toBe(session.maxHp)
+
+    const gold = session.gold
+    session.inventory.unshift("Cursed shard")
+    expect(performInventoryAction(session, 0, "use")).toMatchObject({ used: true })
+    expect(session.gold).toBe(gold + 14)
+    expect(session.hp).toBeLessThan(session.maxHp)
+
+    addEnemyBesidePlayer(session, "tool-slime", "slime", 3, 1)
+    tryMove(session, 1, 0)
+    expect(session.combat.active).toBe(true)
+    session.inventory.unshift("Tripwire kit")
+
+    expect(performInventoryAction(session, 0, "use")).toMatchObject({ used: true })
+    expect(session.dungeon.actors.some((actor) => actor.id === "tool-slime")).toBe(false)
+    expect(equipmentComparisonText(session, "Shrine charm")).toContain("Compare relic")
+    expect(equipmentComparisonText(session, "Shrine charm")).toContain("FTH +1")
+  })
+
   test("tracks Book knowledge and event toasts for the amnesia story", () => {
     const session = createSession(1234)
 
     expect(session.log[0]).toContain("no memory")
     expect(session.knowledge.map((entry) => entry.title)).toContain("Waking Cell")
+    expect(session.knowledge.find((entry) => entry.id === "floor-1-the-waking-cell")?.text).toContain("Tactical purpose")
     expect(session.knowledge.some((entry) => entry.kind === "hub")).toBe(true)
 
     addToast(session, "Test event", "The Book and toast rails are active.", "info")
@@ -182,6 +269,29 @@ describe("game session", () => {
     expect(["cartographer", "wound-surgeon", "shrine-keeper", "jailer"].some((kind) => kinds.has(kind as ActorId))).toBe(true)
     expect(["gallows-wisp", "rust-squire", "carrion-moth", "crypt-mimic"].some((kind) => kinds.has(kind as ActorId))).toBe(true)
     expect(dungeon.actors.every((actor) => tileAt(dungeon, actor.position) !== "wall")).toBe(true)
+  })
+
+  test("applies validated GM patch operations to live enemy pressure", () => {
+    const session = createSession(1234)
+    addEnemyBesidePlayer(session, "gm-slime", "slime", 4, 1)
+    const enemy = session.dungeon.actors.find((actor) => actor.id === "gm-slime")
+    expect(enemy).toBeDefined()
+    const hp = enemy!.hp
+    const damage = enemy!.damage
+
+    const result = applyGmPatchOperations(session, [
+      { path: "rules.enemyHpMultiplier", value: 1.5 },
+      { path: "rules.enemyDamageBonus", value: 2 },
+      { path: `floors.${session.floor}.encounterBudget`, value: 5 },
+      { path: "lore.gmBriefing", value: "The GM adds pressure without changing the canonical story." },
+    ])
+
+    expect(result.applied).toBeGreaterThan(0)
+    expect(enemy!.maxHp).toBeGreaterThan(hp)
+    expect(enemy!.damage).toBe(damage + 2)
+    expect(enemy!.ai?.alerted).toBe(true)
+    expect(session.log[0]).toContain("GM patch applied")
+    expect(session.toasts[0]?.title).toBe("GM rules applied")
   })
 
   test("bumping a friendly NPC opens conversation instead of combat", () => {
@@ -243,6 +353,30 @@ describe("game session", () => {
     expect(session.worldLog.length).toBeGreaterThan(1)
   })
 
+  test("completed quest chains apply village-facing outcomes", () => {
+    const session = createSession(1234)
+    const questEvent = session.world.events.find((event) => event.type === "quest")
+    expect(questEvent).toBeTruthy()
+    questEvent!.status = "active"
+    session.world.quests.unshift({
+      id: "quest-test-rescue",
+      title: "Rescue: Floors 1-2",
+      summary: "Find a trapped villager. Village outcome: trust and keepsake lead.",
+      status: "active",
+      objectiveEventIds: [questEvent!.id],
+      rewardEntityIds: [],
+      triggerEventIds: [],
+    })
+
+    applyOpeningStoryBranch(session, "follow-voice")
+
+    expect(session.world.quests[0]?.status).toBe("completed")
+    expect(session.inventory).toContain("Rescue keepsake")
+    expect(session.knowledge.find((entry) => entry.id === "quest-outcome-quest-test-rescue")?.title).toContain("Quest Complete")
+    expect(session.hub.relationshipLog[0]).toContain("Quest outcome")
+    expect(session.toasts).toEqual(expect.arrayContaining([expect.objectContaining({ title: "Quest complete" })]))
+  })
+
   test("NPCs remember already-used choices for the current descent", () => {
     const session = createSession(1234)
     addEnemyBesidePlayer(session, "repeat-merchant", "merchant", 1, 0)
@@ -258,6 +392,18 @@ describe("game session", () => {
     expect(repeated?.text).toContain("already asked")
     expect(session.xp).toBe(xpAfterFirstRumor)
     expect(session.toasts[0].title).toBe("Already asked")
+  })
+
+  test("tutorial-off starts still focus the final-gate quest", () => {
+    const session = createSession(1234, "solo", "ranger", "Mira", undefined, false, true)
+
+    expect(session.tutorial.enabled).toBe(false)
+    expect(session.tutorial.completed).toBe(true)
+    expect(session.tutorial.gatePoints).toEqual([])
+    expect(session.world.quests[0]?.title).toBe("Find the Final Gate")
+    expect(session.toasts[0]).toMatchObject({ title: "Find the Final Gate", tone: "info" })
+    expect(session.log[0]).toContain("Tutorial is off")
+    expect(session.knowledge.find((entry) => entry.id === "tutorial-off-start")?.text).toContain("Find stairs")
   })
 
   test("tutorial gates three first-floor areas for movement, NPC checks, and combat", () => {
@@ -312,6 +458,30 @@ describe("game session", () => {
     expect(session.world.quests[0]?.title).toBe("Find the Final Gate")
   })
 
+  test("co-op tutorial gates wait for party checkpoints before opening", () => {
+    const session = createSession(1234, "coop", "ranger", "Mira", undefined, true)
+    const [gateOne] = session.tutorial.gatePoints
+
+    setTutorialCoopGateHold(session, "movement", ["Sol"])
+    recordTutorialAction(session, "move-up")
+    recordTutorialAction(session, "move-down")
+    recordTutorialAction(session, "move-left")
+    recordTutorialAction(session, "move-right")
+    recordTutorialAction(session, "inventory")
+    recordTutorialAction(session, "quests")
+    recordTutorialAction(session, "book")
+
+    expect(tutorialCoopCheckpoint(session)).toMatchObject({ stage: "movement", ready: true, completed: false })
+    expect(session.tutorial.stage).toBe("movement")
+    expect(tileAt(session.dungeon, gateOne!)).toBe("door")
+    expect(session.log[0]).toContain("waits for Sol")
+
+    setTutorialCoopGateHold(session, null, [])
+
+    expect(session.tutorial.stage).toBe("npc-check")
+    expect(tileAt(session.dungeon, gateOne!)).toBe("floor")
+  })
+
   test("death increments the run counter and disables the current tutorial", () => {
     const session = createSession(1234, "solo", "ranger", "Mira", undefined, true)
     const trap = { x: session.player.x + 1, y: session.player.y }
@@ -339,6 +509,16 @@ describe("game session", () => {
     expect(session.talents).toContain("ash-channel")
     expect(session.levelUp).toBeNull()
     expect(focusCostForSkill(session, arcaneBurst)).toBe(1)
+  })
+
+  test("ranger pathfinder talent is visible as an aimed-shot combat effect", () => {
+    const session = createSession(1234, "solo", "ranger")
+    grantXp(session, 10)
+    chooseLevelUpTalent(session, 0)
+    const aimedShot = combatSkills.find((skill) => skill.id === "aimed-shot")!
+
+    expect(session.talents).toContain("pathfinder")
+    expect(talentEffectTextForSkill(session, aimedShot)).toContain("Pathfinder +1 damage")
   })
 
   test("skill trees offer later class and replayability branches", () => {
@@ -411,6 +591,72 @@ describe("game session", () => {
     const beforeHp = session.hp
     performCombatAction(session)
     expect(session.hp).toBeLessThanOrEqual(beforeHp)
+  })
+
+  test("combat balance snapshot exposes d20 odds, focus pressure, and monster notes", () => {
+    const session = createSession(1234)
+    addEnemyBesidePlayer(session, "balance-slime", "slime", 6, 2)
+
+    tryMove(session, 1, 0)
+
+    const snapshot = combatBalanceSnapshot(session)
+    expect(snapshot.target).toContain("Slime")
+    expect(snapshot.skill).toBeTruthy()
+    expect(snapshot.hitChance).toBeGreaterThan(0)
+    expect(snapshot.fleeChance).toBeGreaterThan(0)
+    expect(snapshot.focusPressure).toBeGreaterThanOrEqual(0)
+    expect(snapshot.deathRisk).toBeGreaterThanOrEqual(0)
+    expect(snapshot.projectedClassWinRate).toBeGreaterThan(0)
+    expect(snapshot.weaknessNote).toContain("Resists")
+    expect(snapshot.focusNote).toContain("Focus pressure")
+  })
+
+  test("flee odds include equipment stat bonuses", () => {
+    const session = createSession(1234)
+    const before = fleeModifier(session)
+
+    session.equipment.armor = {
+      id: "runner-cloak",
+      name: "Runner cloak",
+      slot: "armor",
+      rarity: "uncommon",
+      bonusDamage: 0,
+      statBonuses: { dexterity: 4, luck: 2 },
+      activeText: "A light cloak for breaking from bad fights.",
+    }
+
+    expect(fleeModifier(session)).toBeGreaterThan(before)
+  })
+
+  test("boss phase telegraphs write Book notes before the fight ends", () => {
+    const session = createSession(1234)
+    session.stats.strength = 30
+    const target = addEnemyBesidePlayer(session, "phase-root", "grave-root-boss", 18, 1)
+    const boss = session.dungeon.actors.find((actor) => actor.id === "phase-root")!
+    boss.maxHp = 34
+
+    tryMove(session, target.x - session.player.x, target.y - session.player.y)
+    for (let attempt = 0; attempt < 3 && (boss.phase ?? 1) < 2; attempt += 1) performCombatAction(session)
+
+    expect(boss.phase).toBe(2)
+    expect(session.log.some((line) => line.includes("Telegraph"))).toBe(true)
+    expect(session.knowledge.some((entry) => entry.id === "boss-phase-grave-root-boss-floor-1-phase-2" && entry.text.includes("Holy and Arcane"))).toBe(true)
+    expect(session.toasts).toEqual(expect.arrayContaining([expect.objectContaining({ title: "Boss phase" })]))
+  })
+
+  test("boss defeats create village aftermath and market demand", () => {
+    const session = createSession(1234)
+    session.stats.strength = 30
+    const target = addEnemyBesidePlayer(session, "aftermath-root", "grave-root-boss", 2, 1)
+
+    tryMove(session, target.x - session.player.x, target.y - session.player.y)
+    for (let attempt = 0; attempt < 3 && session.dungeon.actors.some((actor) => actor.id === "aftermath-root"); attempt += 1) performCombatAction(session)
+
+    expect(session.dungeon.actors.some((actor) => actor.id === "aftermath-root")).toBe(false)
+    expect(session.inventory[0]).toContain("memory")
+    expect(session.hub.village.shopLog[0]).toContain("boss memories")
+    expect(session.hub.village.customers.some((customer) => customer.taste === "memory")).toBe(true)
+    expect(session.knowledge.some((entry) => entry.id === "boss-aftermath-grave-root-boss-floor-1" && entry.text.includes("village economy"))).toBe(true)
   })
 
   test("enemies patrol until the player enters their aggro radius", () => {
@@ -530,6 +776,131 @@ describe("game session", () => {
     expect(session.hub.trust.blacksmith.level).toBeGreaterThanOrEqual(0)
   })
 
+  test("village crafting combines loot crops and trust into run prep", () => {
+    const session = createSession(1234, "solo", "ranger", "Mira")
+    unlockHub(session)
+    session.hub.coins = 200
+    expect(buildHubStation(session, "kitchen")).toBe(true)
+    expect(buildHubStation(session, "upgrade-bench")).toBe(true)
+
+    session.inventory.unshift("Tool part bundle")
+    const tool = craftVillageRecipe(session)
+    expect(tool).toMatchObject({ kind: "tool", item: "Gate bomb" })
+    expect(tool?.consumed).toContain("Tool part bundle")
+    expect(session.inventory).toContain("Gate bomb")
+    expect(session.inventory).not.toContain("Tool part bundle")
+
+    session.hub.trust.cook.level = 1
+    session.inventory.unshift("Friendship keepsake")
+    const charm = craftVillageRecipe(session)
+    expect(charm).toMatchObject({ kind: "charm", item: "Hearth charm" })
+    expect(charm?.consumed).toContain("Friendship keepsake")
+    expect(session.inventory).toContain("Hearth charm")
+    expect(session.hub.unlockedGear).toContain("Hearth charm")
+
+    session.hub.farm.ready = 1
+    const food = craftVillageRecipe(session)
+    expect(food).toBeTruthy()
+    expect(food?.kind).toBe("food")
+    expect(food?.consumed).toContain("village crop")
+    expect(session.hub.farm.ready).toBe(0)
+    expect(session.hub.preparedFood[0]).toBe(food!.item)
+    expect(session.knowledge.some((entry) => entry.id === "craft-gate-bomb")).toBe(true)
+  })
+
+  test("next descent preserves village meta-progression and preparation", () => {
+    const session = createSession(1234, "coop", "ranger", "Mira", undefined, true)
+    unlockHub(session)
+    session.hub.coins = 260
+    expect(buildHubStation(session, "blacksmith")).toBe(true)
+    expect(buildHubStation(session, "kitchen")).toBe(true)
+    expect(prepareFood(session)).toBe("Travel rations")
+    expect(upgradeWeapon(session)?.bonusDamage).toBe(1)
+    expect(toggleRunMutator(session, "hard-mode")).toBe(true)
+    expect(cycleContentPack(session).active).toBe("high-contrast")
+
+    const next = createNextDescentSession(session, 9999)
+    expect(next.seed).toBe(9999)
+    expect(next.floor).toBe(1)
+    expect(next.tutorial.enabled).toBe(false)
+    expect(next.hub.unlocked).toBe(true)
+    expect(next.hub.stations.blacksmith.built).toBe(true)
+    expect(next.hub.stations.kitchen.built).toBe(true)
+    expect(next.hub.activeMutators).toContain("hard-mode")
+    expect(next.hub.contentPacks.active).toBe("high-contrast")
+    expect(next.hub.coins).toBe(session.hub.coins)
+    expect(next.hub.houses.length).toBe(session.hub.houses.length)
+    expect(next.inventory).toContain("Travel rations")
+    expect(next.equipment.weapon?.bonusDamage).toBe(1)
+    expect(next.maxHp).toBeLessThanOrEqual(session.maxHp)
+    expect(next.world.quests[0]?.title).toBe("Find the Final Gate")
+    expect(next.toasts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ title: "Next descent", tone: "success" }),
+        expect.objectContaining({ title: "Sharper descent", tone: "warning" }),
+      ]),
+    )
+    expect(next.log[0]).toContain("Village preparations carried")
+  })
+
+  test("village-launched descents add strategic enemy pressure", () => {
+    const session = createSession(1234, "coop", "ranger", "Mira")
+    unlockHub(session)
+    session.hub.coins = 260
+    expect(buildHubStation(session, "blacksmith")).toBe(true)
+    expect(toggleRunMutator(session, "hard-mode")).toBe(true)
+
+    const base = createDungeon(9999, 1)
+    const next = createNextDescentSession(session, 9999)
+    const baseEnemy = base.actors.find((actor) => isEnemyActorId(actor.kind))
+    expect(baseEnemy).toBeTruthy()
+    const pressuredEnemy = next.dungeon.actors.find((actor) => actor.id === baseEnemy!.id)
+    const baseAggro = baseEnemy?.ai?.aggroRadius ?? 0
+
+    expect(pressuredEnemy?.hp).toBeGreaterThan(baseEnemy!.hp)
+    expect(pressuredEnemy?.ai?.aggroRadius).toBeGreaterThan(baseAggro)
+    expect(next.log.some((line) => line.includes("Strategic pressure tier"))).toBe(true)
+  })
+
+  test("challenge descents add fixed mutators and local replay leaderboard metadata", () => {
+    const session = createSession(1234, "solo", "ranger", "Mira")
+    unlockHub(session)
+    const next = createNextDescentSession(session, 2_026_051)
+    const active = applyChallengeRun(next, "weekly")
+
+    expect(active.cadence).toBe("weekly")
+    expect(active.seed).toBe(2_026_051)
+    expect(active.mutators.length).toBeGreaterThan(1)
+    expect(next.hub.activeMutators).toEqual(expect.arrayContaining(active.mutators))
+    expect(next.knowledge.some((entry) => entry.id === "challenge-weekly-2026051")).toBe(true)
+
+    next.status = "victory"
+    next.floor = next.finalFloor
+    next.kills = 6
+    next.gold = 30
+    const entry = recordChallengeResult(next)
+
+    expect(entry?.replayKey).toBe(active.replayKey)
+    expect(entry?.score).toBeGreaterThan(0)
+    expect(next.hub.challengeBoard.activeRun).toBeNull()
+    expect(next.hub.challengeBoard.leaderboard[0]?.name).toBe("Mira")
+  })
+
+  test("village calendar changes seasons and modifies the next descent", () => {
+    const session = createSession(1234, "solo", "ranger", "Mira")
+    unlockHub(session)
+    session.turn = 144
+    const calendar = refreshVillageCalendar(session)
+
+    expect(calendar.day).toBe(13)
+    expect(calendar.festival).toBe("final-gate-vigil")
+
+    const next = createNextDescentSession(session, 8888)
+    expect(next.hub.calendar.day).toBe(13)
+    expect(next.inventory).toContain("Final-gate candle")
+    expect(next.knowledge.some((entry) => entry.id === "village-calendar-day-13" && entry.text.includes("final gate vigil"))).toBe(true)
+  })
+
   test("village screen systems cover movement, schedules, shop pricing, co-op homes, content packs, cutscenes, and balance", () => {
     const session = createSession(1234, "coop", "ranger", "Mira")
     unlockHub(session)
@@ -547,6 +918,15 @@ describe("game session", () => {
     const house = customizeVillageHouse(session, "player-2")
     expect(house.built).toBe(true)
     expect(cycleSharedFarmPermission(session)).toBe("everyone")
+    expect(cycleCoopVillagePermission(session, "storage")).toMatchObject({ area: "storage", permission: "everyone" })
+    expect(cycleCoopVillagePermission(session, "shop")).toMatchObject({ area: "shop", permission: "friends" })
+    expect(cycleCoopVillagePermission(session, "upgrades")).toMatchObject({ area: "upgrades", permission: "friends" })
+    expect(session.hub.village.permissions).toMatchObject({
+      farm: "everyone",
+      storage: "everyone",
+      shop: "friends",
+      upgrades: "friends",
+    })
     expect(cycleContentPack(session).active).toBe("high-contrast")
     expect(refreshBalanceDashboard(session).classWinRate.ranger).toBeGreaterThan(0)
 
@@ -591,6 +971,26 @@ describe("game session", () => {
 
     expect(session.status).toBe("running")
     expect(session.log[0]).toContain("sealed")
+  })
+
+  test("first clear resolves on the default two-floor arc", () => {
+    const session = createSession(1234)
+    expect(session.finalFloor).toBe(defaultFinalFloor)
+
+    session.floor = session.finalFloor
+    session.dungeon = createDungeon(session.seed, session.floor)
+    expect(session.dungeon.actors.some((actor) => actor.id === "final-guardian")).toBe(true)
+
+    session.player = { ...session.dungeon.playerStart }
+    session.dungeon.actors = session.dungeon.actors.filter((actor) => actor.id !== "final-guardian")
+    const stairs = { x: session.player.x + 1, y: session.player.y }
+    setTile(session.dungeon, stairs, "stairs")
+
+    tryMove(session, 1, 0)
+
+    expect(session.status).toBe("victory")
+    expect(session.hub.unlocked).toBe(true)
+    expect(session.knowledge.find((entry) => entry.id === "ending-first-clear")?.floor).toBe(defaultFinalFloor)
   })
 
 })

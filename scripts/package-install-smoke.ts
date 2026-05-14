@@ -21,10 +21,7 @@ try {
 function smokeNpmInstall(tarball: string) {
   const prefix = join(root, "npm-global")
   run("npm", ["install", "-g", "--prefix", prefix, tarball])
-  const output = run("opendungeon", ["--version"], { env: withPath(npmBin(prefix), { ...process.env, OPENDUNGEON_REQUIRE_BUNDLED_BUN: "1" }) })
-  assertVersionOutput("npm", output)
-  const hostOutput = run("opendungeon-host", ["--help"], { env: withPath(npmBin(prefix), { ...process.env, OPENDUNGEON_REQUIRE_BUNDLED_BUN: "1" }) })
-  assertHostOutput("npm", hostOutput)
+  smokeInstalledCommands("npm", npmBin(prefix))
 }
 
 function findPackedTarball(directory: string) {
@@ -36,10 +33,26 @@ function findPackedTarball(directory: string) {
 function smokeBunInstall(tarball: string) {
   const bunHome = join(root, "bun-home")
   run("bun", ["install", "-g", tarball], { env: { ...process.env, BUN_INSTALL: bunHome } })
-  const output = run("opendungeon", ["--version"], { env: withPath(join(bunHome, "bin"), { ...process.env, OPENDUNGEON_REQUIRE_BUNDLED_BUN: "1" }) })
-  assertVersionOutput("bun", output)
-  const hostOutput = run("opendungeon-host", ["--help"], { env: withPath(join(bunHome, "bin"), { ...process.env, OPENDUNGEON_REQUIRE_BUNDLED_BUN: "1" }) })
-  assertHostOutput("bun", hostOutput)
+  smokeInstalledCommands("bun", join(bunHome, "bin"))
+}
+
+function smokeInstalledCommands(manager: string, binDir: string) {
+  const env = installSmokeEnv(manager, binDir)
+  assertHelpOutput(manager, run("opendungeon", ["--help"], { env }))
+  assertVersionOutput(manager, run("opendungeon", ["--version"], { env }))
+  assertDoctorOutput(manager, run("opendungeon", ["doctor"], { env }))
+  assertSmokeOutput(manager, run("opendungeon", ["smoke"], { env }))
+  assertHostOutput(manager, run("opendungeon-host", ["--help"], { env }))
+}
+
+function installSmokeEnv(manager: string, binDir: string) {
+  return withPath(binDir, {
+    ...process.env,
+    OPENDUNGEON_PROFILE_DIR: join(root, `${manager}-profile`),
+    OPENDUNGEON_REQUIRE_BUNDLED_BUN: "1",
+    OPENDUNGEON_RUN_LOCK_DIR: join(root, `${manager}-locks`),
+    OPENDUNGEON_SAVE_DIR: join(root, `${manager}-saves`),
+  })
 }
 
 function npmBin(prefix: string) {
@@ -52,6 +65,18 @@ function withPath(binDir: string, env = process.env) {
 
 function assertVersionOutput(manager: string, output: string) {
   if (!output.includes("opendungeon ")) throw new Error(`${manager} global install did not run opendungeon --version. Output:\n${output}`)
+}
+
+function assertHelpOutput(manager: string, output: string) {
+  if (!output.includes("opendungeon smoke")) throw new Error(`${manager} global install did not run opendungeon --help. Output:\n${output}`)
+}
+
+function assertDoctorOutput(manager: string, output: string) {
+  if (!output.includes("terminal check")) throw new Error(`${manager} global install did not run opendungeon doctor. Output:\n${output}`)
+}
+
+function assertSmokeOutput(manager: string, output: string) {
+  if (!output.includes('"type":"smoke"') || !output.includes('"ok":true')) throw new Error(`${manager} global install did not run opendungeon smoke. Output:\n${output}`)
 }
 
 function assertHostOutput(manager: string, output: string) {

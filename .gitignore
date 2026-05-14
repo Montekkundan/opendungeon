@@ -20,3 +20,4 @@ dist/
 .playwright-mcp/
 output/
 tmp/
+.omx/

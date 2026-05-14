@@ -1,0 +1,19 @@
+opendungeon project-owned audio
+
+These audio files are bundled as runtime game audio for opendungeon and should not be
+replaced by generated or GM/world-specific audio without explicit ownership metadata.
+
+Runtime files:
+- assets/opendungeon-assets/runtime/audio/title-settings-loop.mp3
+- assets/opendungeon-assets/runtime/audio/dungeon-loop.mp3
+
+Runtime generated SFX:
+- src/audio/sfxSynth.ts synthesizes short project-owned UI, dice, combat, item,
+  gate, teleport, quest, book, and village cues at runtime.
+
+Project usage:
+- title-settings-loop.mp3 loops on title, menu, settings, tutorial, village, and other
+  non-dungeon screens.
+- dungeon-loop.mp3 loops only during dungeon gameplay and dungeon overlays.
+- Synthesized SFX are loaded through OpenTUI loadSound() and are not sourced from
+  third-party packs.
