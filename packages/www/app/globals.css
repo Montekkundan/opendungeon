@@ -1365,18 +1365,79 @@ body {
   [data-component="docs-layout"],
   [data-component="changelog-layout"] {
     grid-template-columns: minmax(0, 1fr);
-    gap: 0;
+    gap: 24px;
+    padding-top: 24px;
   }
 
   [data-component="docs-sidebar"],
   [data-component="docs-toc"] {
     position: static;
-    display: none;
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    max-height: none;
+    padding-top: 0;
+    overflow: visible;
   }
 
   [data-component="docs-article"] {
-    max-width: 44rem;
-    padding: 36px 0 72px;
+    order: 3;
+    width: 100%;
+    min-width: 0;
+    max-width: min(44rem, 100%);
+    padding: 12px 0 72px;
+  }
+
+  [data-component="docs-sidebar"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+    order: 1;
+    padding-bottom: 24px;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border-weak);
+  }
+
+  [data-component="docs-sidebar"] nav + nav {
+    margin-top: 0;
+  }
+
+  [data-component="docs-sidebar"] nav,
+  [data-component="docs-toc"] nav {
+    min-width: 0;
+  }
+
+  [data-component="docs-sidebar"] a {
+    width: auto;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  [data-component="docs-toc"] {
+    order: 2;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--color-border-weak);
+  }
+
+  [data-component="docs-toc"] nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+  }
+
+  [data-component="docs-toc"] p {
+    width: 100%;
+    margin-bottom: 0;
+  }
+
+  [data-component="docs-toc"] a {
+    min-width: 0;
+    padding: 0;
+    overflow-wrap: anywhere;
+  }
+
+  [data-component="docs-toc"] a[data-depth="3"],
+  [data-component="docs-toc"] a[data-depth="4"] {
+    padding-left: 0;
   }
 }
 
@@ -1391,8 +1452,22 @@ body {
     border-left: 0;
   }
 
+  [data-component="docs-sidebar"] {
+    grid-template-columns: 1fr;
+  }
+
+  [data-component="docs-toc"] nav {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
   [data-component="docs-article"] h1 {
     font-size: 2rem;
+  }
+
+  [data-component="docs-article"] p,
+  [data-component="docs-article"] li {
+    overflow-wrap: anywhere;
   }
 }
 
