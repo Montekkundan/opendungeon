@@ -1806,12 +1806,74 @@ export function usePotion(session: GameSession) {
     return
   }
 
+  useInventoryItemAt(session, index)
+}
+
+export function useInventoryItemAt(session: GameSession, index: number) {
+  const item = session.inventory[index]
+  if (!item) return { used: false, message: "Empty slot selected." }
+  const lower = item.toLowerCase()
+
+  if (session.status !== "running") return { used: false, message: `${item}: use, sell, or prepare items during an active descent or in the village.` }
+  if (session.levelUp) return { used: false, message: "Choose a level-up talent before using items." }
+  if (session.skillCheck) return { used: false, message: "Hands are busy with the talent check. Press Esc to step away first." }
+
+  if (lower.includes("deploy nerve potion")) return consumeInventoryItem(session, index, item, { hp: 5, focus: 0, title: "Potion used", text: "Health returns and the pulse settles." })
+  if (lower.includes("vial") || lower.includes("potion")) return consumeInventoryItem(session, index, item, { hp: 5, focus: 0, title: "Item used", text: `${item} restored health.` })
+  if (lower.includes("focus broth")) return consumeInventoryItem(session, index, item, { hp: 1, focus: 5, title: "Food used", text: `${item} restored focus for the next push.` })
+  if (lower.includes("ration") || lower.includes("food")) return consumeInventoryItem(session, index, item, { hp: 3, focus: 1, title: "Food used", text: `${item} restored a little HP and focus.` })
+
+  return { used: false, message: `${item}: ${inventoryItemUseHint(item)}` }
+}
+
+function consumeInventoryItem(session: GameSession, index: number, item: string, effect: { hp: number; focus: number; title: string; text: string }) {
+  const beforeHp = session.hp
+  const beforeFocus = session.focus
+  const nextHp = Math.min(session.maxHp, session.hp + effect.hp)
+  const nextFocus = Math.min(session.maxFocus, session.focus + effect.focus)
+  if (nextHp === beforeHp && nextFocus === beforeFocus) return { used: false, message: `${item} kept. HP and focus are already full.` }
+
   session.inventory.splice(index, 1)
-  session.hp = Math.min(session.maxHp, session.hp + 5)
-  session.log.unshift("Potion used. The pulse settles.")
-  addToast(session, "Potion used", "Health returns and the pulse settles.", "success")
+  session.hp = nextHp
+  session.focus = nextFocus
+  const restored = [`${nextHp - beforeHp ? `+${nextHp - beforeHp} HP` : ""}`, `${nextFocus - beforeFocus ? `+${nextFocus - beforeFocus} focus` : ""}`].filter(Boolean).join(", ")
+  const message = `${item} used. ${restored}.`
+  session.log.unshift(message)
+  addToast(session, effect.title, effect.text, "success")
   if (session.combat.active) finishCombatRound(session, true)
   else trimLog(session)
+  return { used: true, message }
+}
+
+export function inventoryItemDescription(item: string) {
+  const lower = item.toLowerCase()
+  if (lower.includes("potion") || lower.includes("vial")) return "Consumable: restores HP during a descent."
+  if (lower.includes("focus broth")) return "Prepared food: restores focus during a descent."
+  if (lower.includes("food") || lower.includes("ration")) return "Prepared food: restores a little HP and focus."
+  if (lower.includes("bound relic")) return "Passive relic: adds +1 to talent checks."
+  if (lower.includes("cursed shard")) return "Risk relic: valuable in the village, dangerous in checks."
+  if (lower.includes("relic") || lower.includes("shard")) return "Relic: lore, checks, or village sale value."
+  if (lower.includes("blade") || lower.includes("sword") || lower.includes("axe") || lower.includes("mace") || lower.includes("rapier")) return "Equipped weapon: affects your combat plan."
+  if (lower.includes("shield") || lower.includes("cloak") || lower.includes("charm")) return "Passive gear: defensive or class flavor equipment."
+  if (lower.includes("lockpick") || lower.includes("tool") || lower.includes("rope")) return "Tool: useful for events, doors, or village work."
+  if (lower.includes("scroll") || lower.includes("map") || lower.includes("ledger")) return "Record: open the Book for lore and routing clues."
+  if (lower.includes("deed")) return "Village deed: unlocks or improves village work."
+  if (lower.includes("memory") || lower.includes("fossil") || lower.includes("keepsake")) return "Village treasure: sell, study, or keep for story."
+  return "Stored item: keep for later or sell in the village."
+}
+
+function inventoryItemUseHint(item: string) {
+  const lower = item.toLowerCase()
+  if (lower.includes("bound relic")) return "passive +1 to talent checks; no manual use needed."
+  if (lower.includes("cursed shard")) return "hold for risky story value or sell it in the village market."
+  if (lower.includes("relic") || lower.includes("shard")) return "passive lore/check item; sell extras from the village market."
+  if (lower.includes("blade") || lower.includes("sword") || lower.includes("axe") || lower.includes("mace") || lower.includes("rapier")) return "already equipped as your weapon; upgrade weapons in the village."
+  if (lower.includes("shield") || lower.includes("cloak") || lower.includes("charm")) return "passive gear; keep it equipped or sell later in the village."
+  if (lower.includes("lockpick") || lower.includes("tool") || lower.includes("rope")) return "tool item; doors, events, and village projects use it automatically."
+  if (lower.includes("scroll") || lower.includes("map") || lower.includes("ledger")) return "record item; open B Book to read what it taught you."
+  if (lower.includes("deed")) return "village item; return home to build or upgrade with it."
+  if (lower.includes("memory") || lower.includes("fossil") || lower.includes("keepsake")) return "treasure/story item; sell or study it in the village."
+  return "stored for later. Sell it in the village if it is loot."
 }
 
 export function interactWithWorld(session: GameSession): ConversationState | null {

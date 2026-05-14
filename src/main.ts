@@ -40,6 +40,7 @@ import {
   upgradeWeapon,
   visitVillageLocation,
   usePotion,
+  useInventoryItemAt,
   type GameSession,
   type HeroClass,
   type MultiplayerMode,
@@ -284,6 +285,7 @@ const screen = new FrameBufferRenderable(renderer, {
   width: renderer.terminalWidth,
   height: renderer.terminalHeight,
   onMouseDown: handleMouseDown,
+  onMouseMove: handleMouseMove,
   onMouseDrag: handleMouseDrag,
   onMouseDragEnd: handleMouseDragEnd,
 })
@@ -713,6 +715,16 @@ function handleMouseDown(event: OpenTuiMouseEvent) {
   refresh()
 }
 
+function handleMouseMove(event: OpenTuiMouseEvent) {
+  if (model.dialog !== "inventory" || model.inventoryDragIndex !== null) return
+  const hit = inventoryHitTest(model, renderer.terminalWidth, renderer.terminalHeight, event.x, event.y)
+  if (hit?.kind !== "slot" || hit.index === model.inventoryIndex) return
+  event.preventDefault()
+  event.stopPropagation()
+  setInventoryIndex(hit.index)
+  refresh()
+}
+
 function handleMouseDrag(event: OpenTuiMouseEvent) {
   if (model.dialog !== "inventory" || model.inventoryDragIndex === null) return
   const hit = inventoryHitTest(model, renderer.terminalWidth, renderer.terminalHeight, event.x, event.y)
@@ -746,31 +758,11 @@ function setInventoryIndex(index: number) {
 }
 
 function applySelectedInventoryItem() {
-  const index = clamp(model.inventoryIndex, 0, Math.max(0, model.session.inventory.length - 1))
-  const item = model.session.inventory[index]
-  if (!item) {
-    model.message = "No item selected."
-    return
-  }
-
-  if (item === "Deploy nerve potion") {
-    usePotion(model.session)
-    model.message = model.session.log[0] ?? "Potion applied."
-    setInventoryIndex(index)
-    return
-  }
-
-  if (/vial|potion/i.test(item) && model.session.status === "running" && !model.session.skillCheck) {
-    model.session.inventory.splice(index, 1)
-    model.session.hp = Math.min(model.session.maxHp, model.session.hp + 3)
-    pushSessionLog(`${item} applied. A little health returns.`)
-    addToast(model.session, "Item used", `${item} restored a little health.`, "success")
-    model.message = model.session.log[0] ?? `${item} applied.`
-    setInventoryIndex(index)
-    return
-  }
-
-  model.message = `${item} selected. No apply action yet.`
+  const grid = inventoryGridInfo(model, renderer.terminalWidth, renderer.terminalHeight)
+  const index = clamp(model.inventoryIndex, 0, Math.max(0, grid.slotCount - 1))
+  const result = useInventoryItemAt(model.session, index)
+  model.message = result.message
+  setInventoryIndex(index)
 }
 
 function moveInventoryItem(source: number, target: number) {
@@ -780,11 +772,6 @@ function moveInventoryItem(source: number, target: number) {
   model.session.inventory.splice(destination, 0, item)
   model.inventoryIndex = destination
   model.message = `${item} moved.`
-}
-
-function pushSessionLog(message: string) {
-  model.session.log.unshift(message)
-  while (model.session.log.length > 8) model.session.log.pop()
 }
 
 function handleSkillCheckKey(key: KeyEvent) {

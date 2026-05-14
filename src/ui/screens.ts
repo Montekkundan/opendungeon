@@ -23,6 +23,7 @@ import {
   focusCostForSkill,
   heroClassIds,
   hubStationIds,
+  inventoryItemDescription,
   pointKey,
   skillCheckFormulaText,
   skillCheckModifier,
@@ -2519,12 +2520,12 @@ function countInventory(session: GameSession, name: string) {
 }
 
 function selectedInventoryItem(model: AppModel) {
-  return model.session.inventory[clamp(model.inventoryIndex, 0, Math.max(0, model.session.inventory.length - 1))]
+  return model.session.inventory[model.inventoryIndex]
 }
 
 function drawInventoryDialog(canvas: Canvas, model: AppModel) {
   const layout = inventoryLayout(model, canvas.width, canvas.height)
-  const selectedIndex = clamp(model.inventoryIndex, 0, Math.max(0, model.session.inventory.length - 1))
+  const selectedIndex = clamp(model.inventoryIndex, 0, Math.max(0, layout.slots.length - 1))
   const selectedItem = selectedInventoryItem(model)
 
   drawPanel(canvas, layout.character.x, layout.character.y, layout.character.width, layout.character.height, "Crawler", UI.edge)
@@ -2555,7 +2556,7 @@ function drawInventoryDialog(canvas: Canvas, model: AppModel) {
     canvas.write(layout.details.x + 10, layout.details.y + 1, trim(selectedItem, Math.floor(layout.details.width * 0.34)), UI.gold, UI.panel)
     canvas.write(layout.details.x + Math.floor(layout.details.width * 0.42), layout.details.y + 1, trim(inventoryItemDescription(selectedItem), Math.floor(layout.details.width * 0.44)), UI.soft, UI.panel)
   } else {
-    canvas.write(layout.details.x + 2, layout.details.y + 1, "Pack is empty.", UI.soft, UI.panel)
+    canvas.write(layout.details.x + 2, layout.details.y + 1, model.session.inventory.length ? "Empty slot." : "Pack is empty.", UI.soft, UI.panel)
   }
 
   if (model.message) canvas.write(layout.details.x + 2, layout.details.y + 2, trim(model.message, layout.details.width - 4), UI.muted, UI.panel)
@@ -2593,16 +2594,6 @@ function findInventoryByKind(inventory: string[], kind: "weapon" | "relic" | "co
   if (kind === "weapon") return inventory.find((item) => /blade|sword|lockpick/i.test(item))
   if (kind === "relic") return inventory.find((item) => /relic|shard|scroll/i.test(item))
   return inventory.find((item) => /potion|vial/i.test(item))
-}
-
-function inventoryItemDescription(item: string) {
-  const lower = item.toLowerCase()
-  if (lower.includes("potion")) return "Restores health when applied."
-  if (lower.includes("vial")) return "Small healing vial. Click or Enter to apply."
-  if (lower.includes("scroll")) return "Run-scoped utility item."
-  if (lower.includes("relic") || lower.includes("shard")) return "Quest and lore item."
-  if (lower.includes("blade") || lower.includes("sword")) return "Equipped as a basic weapon."
-  return "Stored in this world save."
 }
 
 function questProgress(session: GameSession, eventIds: string[]) {

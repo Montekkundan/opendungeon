@@ -311,6 +311,17 @@ test("inventory presents gold and full action labels", () => {
   expect(text).toContain("Esc close")
 })
 
+test("inventory details follow the highlighted slot exactly", () => {
+  const session = createSession(1234)
+  const vial = screenText(draw(modelFor("game", session, { dialog: "inventory", inventoryIndex: 1 }), 120, 40).chunks)
+  const empty = screenText(draw(modelFor("game", session, { dialog: "inventory", inventoryIndex: 12 }), 120, 40).chunks)
+
+  expect(vial).toContain("Dew vial")
+  expect(vial).toContain("Consumable")
+  expect(vial).not.toContain("Equipped weapon: affects")
+  expect(empty).toContain("Empty slot.")
+})
+
 test("quickbar does not expose gold as a dead G action", () => {
   const output = draw(modelFor("game", createSession(1234)), 120, 40)
   const text = screenText(output.chunks)

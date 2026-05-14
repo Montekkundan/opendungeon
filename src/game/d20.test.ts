@@ -213,6 +213,7 @@ describe("d20 combat and skill checks", () => {
       source: "Lucky Riposte",
     })
     session.inventory.unshift("Deploy nerve potion")
+    session.hp = session.maxHp - 5
     const actor = session.dungeon.actors.find((candidate) => candidate.id === "riposte-ghoul")!
 
     tryMove(session, 1, 0)

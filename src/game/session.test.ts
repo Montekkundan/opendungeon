@@ -10,6 +10,7 @@ import {
   focusCostForSkill,
   grantXp,
   interactWithWorld,
+  inventoryItemDescription,
   normalizeSessionAfterLoad,
   performCombatAction,
   recordTutorialAction,
@@ -17,6 +18,7 @@ import {
   combatSkills,
   startingLoadout,
   tryMove,
+  useInventoryItemAt,
   usePotion,
   addToast,
   buildHubStation,
@@ -166,6 +168,20 @@ describe("game session", () => {
     expect(session.hp).toBe(7)
     expect(session.inventory).not.toContain("Deploy nerve potion")
     expect(session.toasts[0].title).toBe("Potion used")
+  })
+
+  test("inventory item use explains passive and empty-slot choices", () => {
+    const session = createSession(1234)
+    session.inventory.unshift("Bound relic")
+
+    const passive = useInventoryItemAt(session, 0)
+    const empty = useInventoryItemAt(session, 99)
+
+    expect(passive.used).toBe(false)
+    expect(passive.message).toContain("passive +1 to talent checks")
+    expect(passive.message).not.toContain("No apply action")
+    expect(empty.message).toBe("Empty slot selected.")
+    expect(inventoryItemDescription("Dew vial")).toContain("Consumable")
   })
 
   test("tracks Book knowledge and event toasts for the amnesia story", () => {
