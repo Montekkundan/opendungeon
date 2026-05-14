@@ -467,7 +467,10 @@ body {
 
 [data-component="lobby-form"] input,
 [data-component="lobby-form"] select,
-[data-component="auth-form"] input {
+[data-component="auth-form"] input,
+[data-component="gm-create"] input,
+[data-slot="gm-prompt"] input,
+[data-slot="gm-prompt"] select {
   min-height: 44px;
   padding: 0 12px;
   color: var(--color-text-strong);
@@ -554,6 +557,12 @@ body {
   background: var(--color-background-weak);
 }
 
+[data-component="gm-create"],
+[data-slot="gm-prompt"] label {
+  display: grid;
+  gap: 8px;
+}
+
 [data-slot="gm-toolbar"] {
   display: flex;
   justify-content: space-between;
@@ -584,8 +593,9 @@ body {
 
 [data-slot="gm-prompt"] {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
   gap: 12px;
+  align-items: end;
 }
 
 [data-slot="gm-prompt"] textarea {
@@ -595,6 +605,65 @@ body {
   resize: vertical;
   background: var(--color-background);
   border: 1px solid var(--color-border-weak);
+}
+
+[data-slot="gm-wide-field"] {
+  grid-column: 1 / -1;
+}
+
+[data-component="gm-create"] {
+  grid-template-columns: minmax(12rem, 1fr) auto;
+  align-items: end;
+}
+
+[data-component="gm-patch-preview"],
+[data-component="gm-patch-card"],
+[data-component="gm-tool-list"] {
+  display: grid;
+  gap: 14px;
+}
+
+[data-component="gm-patch-preview"] h2,
+[data-component="gm-patch-card"] h3 {
+  color: var(--color-text-strong);
+}
+
+[data-component="gm-patch-card"] {
+  padding: 16px;
+  border: 1px solid var(--color-border-weak);
+}
+
+[data-component="gm-operation-grid"] {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--color-border-weak);
+}
+
+[data-component="gm-operation-grid"] div,
+[data-component="gm-tool-list"] div {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  background: var(--color-background);
+}
+
+[data-component="gm-operation-grid"] span,
+[data-component="gm-tool-list"] span {
+  color: var(--color-accent);
+}
+
+[data-component="gm-operation-grid"] strong,
+[data-component="gm-tool-list"] strong {
+  color: var(--color-text-strong);
+}
+
+[data-component="gm-tool-list"] div[data-status="needs-review"] {
+  border: 1px solid var(--color-accent);
+}
+
+[data-component="gm-side"] li[data-active="true"] {
+  color: var(--color-accent);
 }
 
 [data-component="gm-side"] section {
@@ -637,6 +706,7 @@ body {
   [data-component="profile-card"],
   [data-component="mode-grid"],
   [data-component="gm-layout"],
+  [data-component="gm-operation-grid"],
   [data-slot="gm-prompt"] {
     grid-template-columns: 1fr;
   }

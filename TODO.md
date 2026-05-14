@@ -14,7 +14,7 @@
 
 ## Latest Playtest Bugs And Requested Fixes
 
-- [ ] GM difficulty steering: in `/gm`, let a logged-in GM steer the AI/agent from the multiplayer web view to make the current world harder or easier in a D&D-style way. The GM should see live players/state, ask the agent for encounter/rule/story changes, review the generated patch, then apply it to connected players after validation.
+- [ ] GM difficulty steering: in `/gm`, let a logged-in GM steer the AI/agent from the multiplayer web view to make the current world harder or easier in a D&D-style way. The logged-in world selector, difficulty prompt, Supabase draft event, patch preview, and approval queue are landed; remaining work is live player/state ingestion, AI Gateway model calls, and host delivery to connected players after validation.
 - [x] Level-up talent selection bug: pressing Enter currently selects the top talent too easily. Require an explicit `1`, `2`, `3`, etc. choice first, then Enter confirms the highlighted/numbered talent.
 - [x] Talent unlock bug: unlocked talents such as Pathfinder must visibly affect available combat moves, combat strategy text, or the relevant stats. If a talent is passive-only, label it as passive in the state/character screen instead of implying it should appear as a fight move.
 - [x] Inventory hover/detail bug: the inventory detail pane should describe the hovered/highlighted item, not a stale or previously selected item.
@@ -156,7 +156,7 @@
 - [x] Add a contributor/docs link from `README.md` and the website docs so new agents can find `CONTRIBUTING.md`.
 - [ ] Keep `packages/www/content/docs` in sync with new game mechanics, controls, multiplayer commands, Supabase setup, and deployment decisions.
 - [x] Add docs and website copy that clearly separates Single Player, Multiplayer, and Multiplayer with GM, including what works now and which backend pieces still need to land.
-- [ ] Finish the `/gm` logged-in shell: world selector, player list, AI chat panel, tool-call audit panel, patch preview, asset-generation queue, and Supabase-backed world ownership.
+- [x] Finish the `/gm` logged-in shell: world selector, player list, AI chat panel, tool-call audit panel, patch preview, asset-generation queue, and Supabase-backed world ownership.
 - [x] Add website browser verification for home, docs, changelog, create, create invite, login, and profile pages at desktop and mobile widths.
 - [x] Finish `/create` and `/create/[id]` copy so it clearly says what the website can do now and what still needs a running host.
 - [x] Add a website feature section for local one-laptop multiplayer, guest sessions, and signed-in duplicate-run blocking.
