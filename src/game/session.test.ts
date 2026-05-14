@@ -33,6 +33,7 @@ import {
   runVillageShopSale,
   sellLootToVillage,
   setTutorialCoopGateHold,
+  talentEffectTextForSkill,
   toggleRunMutator,
   tutorialCoopCheckpoint,
   unlockHub,
@@ -379,6 +380,16 @@ describe("game session", () => {
     expect(session.talents).toContain("ash-channel")
     expect(session.levelUp).toBeNull()
     expect(focusCostForSkill(session, arcaneBurst)).toBe(1)
+  })
+
+  test("ranger pathfinder talent is visible as an aimed-shot combat effect", () => {
+    const session = createSession(1234, "solo", "ranger")
+    grantXp(session, 10)
+    chooseLevelUpTalent(session, 0)
+    const aimedShot = combatSkills.find((skill) => skill.id === "aimed-shot")!
+
+    expect(session.talents).toContain("pathfinder")
+    expect(talentEffectTextForSkill(session, aimedShot)).toContain("Pathfinder +1 damage")
   })
 
   test("skill trees offer later class and replayability branches", () => {

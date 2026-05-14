@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { applyOpeningStoryBranch, createSession, grantXp, playLocalCutscene, selectSkill, tryMove, unlockHub } from "../game/session.js"
+import { applyOpeningStoryBranch, chooseLevelUpTalent, createSession, grantXp, playLocalCutscene, selectSkill, tryMove, unlockHub } from "../game/session.js"
 import { setTile } from "../game/dungeon.js"
 import { defaultSettings } from "../game/settingsStore.js"
 import { hashText } from "../shared/hash.js"
@@ -46,7 +46,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: combatModel(),
-      expectedHash: "e6df33e5",
+      expectedHash: "9a26e3ea",
       requiredText: ["Turn Combat", "Order", "Shado", "Necroman", "Weakness"],
     },
     {
@@ -417,6 +417,29 @@ test("level-up modal requires an explicit talent selection before enter", () => 
   const selected = screenText(draw(modelFor("game", session, { levelUpIndex: 1 }), 100, 32).chunks)
   expect(selected).toContain("Talent 2 selected")
   expect(selected).toContain("Press Enter to learn it")
+})
+
+test("combat panel labels matching talent effects", () => {
+  const session = createSession(1234, "solo", "ranger")
+  grantXp(session, 10)
+  chooseLevelUpTalent(session, 0)
+  const target = { x: session.player.x + 1, y: session.player.y }
+  setTile(session.dungeon, target, "floor")
+  session.dungeon.actors.push({
+    id: "talent-slime",
+    kind: "slime",
+    position: target,
+    hp: 20,
+    damage: 2,
+  })
+  tryMove(session, 1, 0)
+  selectSkill(session, 1)
+
+  const output = draw(modelFor("game", session), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Pathfinder +1 dmg")
+  expect(text).toContain("Talent: Pathfinder +1 damage.")
 })
 
 test("book dialog separates monster entries into the monster tab", () => {

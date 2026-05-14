@@ -8,10 +8,12 @@ import { authStatusReport, formatAuthStatus } from "../cloud/authStatus.js"
 import { buildCloudSaveBrowserState } from "../cloud/cloudSaves.js"
 import {
   actorAt,
+  combatAffinityLabel,
   combatMatchupText,
   combatModifier,
   combatSkills,
   combatTargets,
+  compactTalentEffectTextForSkill,
   currentBiome,
   currentTutorialPrompt,
   enemyBehaviorText,
@@ -27,6 +29,7 @@ import {
   skillCheckOutcomeText,
   statusEffectsFor,
   startingLoadout,
+  talentEffectTextForSkill,
   villageLocationIds,
   villageLocations,
   villageNpcIds,
@@ -1827,15 +1830,18 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
     const unavailable = session.focus < focusCost
     const modifier = combatModifier(session, skill.stat)
     const dc = skill.dc + targetDefenseBonus(targets[session.combat.selectedTarget]?.kind)
+    const talentEffect = compactTalentEffectTextForSkill(session, skill)
     const row = y + 5 + index * 2
     const bg = selected ? UI.panel3 : UI.panel2
     canvas.fill(actionX, row, actionW, 1, " ", bg, bg)
+    canvas.fill(actionX, row + 1, actionW, 1, " ", bg, bg)
     if (selected) canvas.fill(actionX, row, 1, 1, " ", UI.gold, UI.gold)
     canvas.write(actionX + 2, row, `${index + 1}`, selected ? UI.gold : UI.soft, bg)
     canvas.write(actionX + 5, row, trim(skill.name, Math.max(6, actionW - 27)), unavailable ? UI.muted : selected ? UI.focus : UI.ink, bg)
     canvas.write(actionX + Math.max(18, actionW - 22), row, `${statAbbreviations[skill.stat]} ${formatModifier(modifier)}`, unavailable ? UI.muted : UI.gold, bg)
     canvas.write(actionX + actionW - 10, row, `DC ${dc}`, unavailable ? UI.muted : UI.soft, bg)
     canvas.write(actionX + actionW - 4, row, `F${focusCost}`, unavailable ? UI.hp : focusCost < skill.cost ? UI.focus : UI.muted, bg)
+    canvas.write(actionX + 5, row + 1, trim(talentEffect || `${combatAffinityLabel(skill.affinity)}  base ${skill.damage}`, actionW - 7), talentEffect ? UI.focus : UI.muted, bg)
   })
 
   const fleeY = y + 5 + combatSkills.length * 2
@@ -1850,10 +1856,11 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
   canvas.fill(x + 2, detailY, detailW, 5, " ", UI.panel2, UI.panel2)
   canvas.border(x + 2, detailY, detailW, 5, UI.edgeDim)
   const matchup = selectedTarget ? combatMatchupText(selectedSkill, selectedTarget.kind) : ""
-  const detail = roll?.skill === "Flee" ? "Escape check uses Dexterity, Luck, Endurance, and level." : `${selectedSkill.text} ${matchup}`
+  const talentText = talentEffectTextForSkill(session, selectedSkill)
+  const detail = roll?.skill === "Flee" ? "Escape check uses Dexterity, Luck, Endurance, and level." : `${selectedSkill.text} ${matchup}`.trim()
   const strategy = enemyStrategyText(session, selectedTarget, selectedSkill)
   const statusLine = playerStatus ? `You: ${playerStatus}` : session.combat.message
-  writeWrapped(canvas, x + 4, detailY + 1, detailW - 4, [strategy, detail, statusLine], 3, UI.ink, UI.panel2)
+  writeWrapped(canvas, x + 4, detailY + 1, detailW - 4, talentText ? [talentText, strategy, detail, statusLine] : [strategy, detail, statusLine], 3, UI.ink, UI.panel2)
 
   const diceX = x + width - diceW - 3
   const diceY = detailY

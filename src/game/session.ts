@@ -2192,7 +2192,8 @@ export function selectSkill(session: GameSession, index: number) {
   const skill = combatSkills[session.combat.selectedSkill]
   const modifier = combatModifier(session, skill.stat)
   const target = combatTargets(session)[session.combat.selectedTarget]
-  session.combat.message = `${skill.name}: d20 ${formatSigned(modifier)} ${statAbbreviations[skill.stat]} vs DC ${skill.dc + enemyDefenseBonus(target?.kind)}. ${combatMatchupText(skill, target?.kind)}`
+  const talentText = talentEffectTextForSkill(session, skill)
+  session.combat.message = `${skill.name}: d20 ${formatSigned(modifier)} ${statAbbreviations[skill.stat]} vs DC ${skill.dc + enemyDefenseBonus(target?.kind)}. ${combatMatchupText(skill, target?.kind)} ${talentText}`.trim()
 }
 
 export function focusCostForSkill(session: GameSession, skill: CombatSkill) {
@@ -2201,6 +2202,30 @@ export function focusCostForSkill(session: GameSession, skill: CombatSkill) {
     .filter((talent) => talent?.skillId === skill.id)
     .reduce((total, talent) => total + Math.max(0, talent.focusDiscount ?? 0), 0)
   return Math.max(0, skill.cost - discount)
+}
+
+export function talentEffectTextForSkill(session: GameSession, skill: CombatSkill) {
+  const effects = skillTalentEffects(session, skill)
+  if (!effects.length) return ""
+  return `Talent: ${effects.join("; ")}.`
+}
+
+export function compactTalentEffectTextForSkill(session: GameSession, skill: CombatSkill) {
+  return skillTalentEffects(session, skill)
+    .map((effect) => effect.replace(/\bdamage\b/g, "dmg").replace(/\bfocus\b/g, "focus"))
+    .join("  ")
+}
+
+function skillTalentEffects(session: GameSession, skill: CombatSkill) {
+  return session.talents
+    .map((id) => talentDefinitions[id])
+    .filter((talent) => talent?.skillId === skill.id)
+    .map((talent) => {
+      const parts = []
+      if (talent.damageBonus) parts.push(`+${talent.damageBonus} damage`)
+      if (talent.focusDiscount) parts.push(`-${talent.focusDiscount} focus`)
+      return parts.length ? `${talent.name} ${parts.join(", ")}` : `${talent.name} passive`
+    })
 }
 
 export function combatAffinityLabel(affinity: CombatAffinity) {
