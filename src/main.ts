@@ -2,6 +2,7 @@ import { FrameBufferRenderable, createCliRenderer, type KeyEvent, type MouseEven
 import WebSocket from "ws"
 import {
   addToast,
+  applyChallengeRun,
   applyGmPatchOperations,
   applyOpeningStoryBranch,
   createNextDescentSession,
@@ -78,7 +79,7 @@ import {
   type ScreenId,
   type ScreenTransition,
 } from "./ui/screens.js"
-import { nextVillageSeedMode, seedForVillageDescent, villageSeedPlanText } from "./game/descentSeed.js"
+import { challengeCadenceForVillageSeedMode, nextVillageSeedMode, seedForVillageDescent, villageSeedPlanText } from "./game/descentSeed.js"
 import { shouldUseThreeRenderer } from "./rendering/threeAssets.js"
 import { authHelpText, handleAuthCommand } from "./cloud/authCli.js"
 import { loadAuthSession } from "./cloud/authStore.js"
@@ -1232,6 +1233,8 @@ function startRun() {
 function startVillageDescent() {
   if (!acquireRunSlot()) return
   model.session = createNextDescentSession(model.session, model.seed)
+  const challengeCadence = challengeCadenceForVillageSeedMode(model.villageSeedMode)
+  if (challengeCadence) applyChallengeRun(model.session, challengeCadence)
   model.classIndex = classIndexFor(model.session.hero.classId)
   model.modeIndex = modeIndexFor(model.session.mode)
   submittedSession = null

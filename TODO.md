@@ -113,7 +113,7 @@
 - [x] Add more quest chains that span floors and village outcomes: rescue, bounty, timed curse, shrine repair, escort, merchant delivery, and final-gate keys.
 - [x] Finish combat balance around d20 difficulty, focus economy, enemy weakness/resistance notes, flee odds, death rate, and class win rates.
 - [x] Add boss phases with readable telegraphs, Book updates, and aftermath changes in village dialogue and shop demand.
-- [ ] Add daily/weekly challenge seeds, challenge mutators, and local leaderboard/replay metadata.
+- [x] Add daily/weekly challenge seeds, challenge mutators, and local leaderboard/replay metadata.
 
 ### Village And Meta-Progression
 

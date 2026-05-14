@@ -26,6 +26,7 @@ import {
   useInventoryItemAt,
   usePotion,
   addToast,
+  applyChallengeRun,
   applyGmPatchOperations,
   applyOpeningStoryBranch,
   buildHubStation,
@@ -39,6 +40,7 @@ import {
   playLocalCutscene,
   prepareFood,
   refreshBalanceDashboard,
+  recordChallengeResult,
   runVillageShopSale,
   sellLootToVillage,
   setTutorialCoopGateHold,
@@ -823,6 +825,30 @@ describe("game session", () => {
     expect(pressuredEnemy?.hp).toBeGreaterThan(baseEnemy!.hp)
     expect(pressuredEnemy?.ai?.aggroRadius).toBeGreaterThan(baseAggro)
     expect(next.log.some((line) => line.includes("Strategic pressure tier"))).toBe(true)
+  })
+
+  test("challenge descents add fixed mutators and local replay leaderboard metadata", () => {
+    const session = createSession(1234, "solo", "ranger", "Mira")
+    unlockHub(session)
+    const next = createNextDescentSession(session, 2_026_051)
+    const active = applyChallengeRun(next, "weekly")
+
+    expect(active.cadence).toBe("weekly")
+    expect(active.seed).toBe(2_026_051)
+    expect(active.mutators.length).toBeGreaterThan(1)
+    expect(next.hub.activeMutators).toEqual(expect.arrayContaining(active.mutators))
+    expect(next.knowledge.some((entry) => entry.id === "challenge-weekly-2026051")).toBe(true)
+
+    next.status = "victory"
+    next.floor = next.finalFloor
+    next.kills = 6
+    next.gold = 30
+    const entry = recordChallengeResult(next)
+
+    expect(entry?.replayKey).toBe(active.replayKey)
+    expect(entry?.score).toBeGreaterThan(0)
+    expect(next.hub.challengeBoard.activeRun).toBeNull()
+    expect(next.hub.challengeBoard.leaderboard[0]?.name).toBe("Mira")
   })
 
   test("village screen systems cover movement, schedules, shop pricing, co-op homes, content packs, cutscenes, and balance", () => {

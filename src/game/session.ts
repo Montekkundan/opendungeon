@@ -26,6 +26,7 @@ import {
 } from "../world/worldConfig.js"
 import { clamp, wrap } from "../shared/numeric.js"
 import { normalizeHeroAppearance, type HeroAppearance } from "./appearance.js"
+import type { ChallengeCadence } from "./descentSeed.js"
 import { defaultFinalFloor } from "./progression.js"
 import {
   bossStoryLine,
@@ -411,6 +412,34 @@ export type BalanceDashboardState = {
   notes: string[]
 }
 
+export type ChallengeMedal = "none" | "bronze" | "silver" | "gold"
+
+export type ChallengeRunMetadata = {
+  id: string
+  cadence: ChallengeCadence
+  seed: number
+  classId: HeroClass
+  mutators: RunMutatorId[]
+  startedAtTurn: number
+  replayKey: string
+}
+
+export type ChallengeLeaderboardEntry = ChallengeRunMetadata & {
+  name: string
+  status: "running" | "dead" | "victory"
+  floor: number
+  turns: number
+  kills: number
+  gold: number
+  score: number
+  medal: ChallengeMedal
+}
+
+export type ChallengeBoardState = {
+  activeRun: ChallengeRunMetadata | null
+  leaderboard: ChallengeLeaderboardEntry[]
+}
+
 export type VillageShopSale = {
   customer: VillageCustomer
   item: string
@@ -440,6 +469,7 @@ export type HubState = {
   lastCutsceneId: CutsceneId | null
   contentPacks: ContentPackState
   balanceDashboard: BalanceDashboardState
+  challengeBoard: ChallengeBoardState
 }
 
 export type GameSession = {
@@ -862,6 +892,7 @@ export function createHubState(mode: MultiplayerMode = "solo", heroName = "Mira"
     lastCutsceneId: null,
     contentPacks: createContentPackState(),
     balanceDashboard: createBalanceDashboardState(),
+    challengeBoard: createChallengeBoardState(),
   }
 }
 
@@ -1096,6 +1127,88 @@ export function toggleRunMutator(session: GameSession, id: RunMutatorId) {
   addToast(session, "Run mutator", `${runMutatorLabel(id)} ${active.has(id) ? "enabled" : "disabled"}.`, "info")
   applyMutatorPressure(session)
   return active.has(id)
+}
+
+export function challengeMutatorsFor(seed: number, cadence: ChallengeCadence): RunMutatorId[] {
+  const pool: RunMutatorId[] = ["hard-mode", "cursed-floors", "class-challenge", "boss-rush"]
+  const first = pool[Math.abs(seed) % pool.length] ?? "hard-mode"
+  if (cadence === "daily") return ["daily-seed", first]
+  const second = pool[Math.abs(Math.floor(seed / 7) + 2) % pool.length] ?? "cursed-floors"
+  const mutators: RunMutatorId[] = ["daily-seed", first, second]
+  return mutators.filter((id, index, list) => list.indexOf(id) === index)
+}
+
+export function applyChallengeRun(session: GameSession, cadence: ChallengeCadence) {
+  session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  const mutators = challengeMutatorsFor(session.seed, cadence)
+  const active = new Set(session.hub.activeMutators)
+  for (const mutator of mutators) active.add(mutator)
+  session.hub.activeMutators = runMutatorIds.filter((candidate) => active.has(candidate))
+  const id = `${cadence}-${session.seed}`
+  const replayKey = `${id}-${session.hero.classId}-${session.mode}`
+  session.hub.challengeBoard.activeRun = {
+    id,
+    cadence,
+    seed: session.seed,
+    classId: session.hero.classId,
+    mutators,
+    startedAtTurn: session.turn,
+    replayKey,
+  }
+  applyMutatorPressure(session)
+  applyStrategicDescentPressure(session)
+  rememberKnowledge(session, {
+    id: `challenge-${id}`,
+    title: `${cadence === "weekly" ? "Weekly" : "Daily"} Challenge`,
+    text: `Fixed seed ${session.seed}. Mutators: ${mutators.map(runMutatorLabel).join(", ")}. Replay key ${replayKey}. Results are stored locally in the village leaderboard.`,
+    kind: "hub",
+    floor: session.floor,
+  })
+  addToast(session, "Challenge run", `${cadence} seed ${session.seed} with ${mutators.length} mutators.`, "warning")
+  pushSessionMessage(session, `${cadence} challenge started. Replay key ${replayKey}.`)
+  return session.hub.challengeBoard.activeRun
+}
+
+export function recordChallengeResult(session: GameSession) {
+  session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  const active = session.hub.challengeBoard.activeRun
+  if (!active) return null
+  const score = challengeScore(session, active)
+  const entry: ChallengeLeaderboardEntry = {
+    ...active,
+    name: session.hero.name,
+    status: session.status,
+    floor: session.floor,
+    turns: session.turn,
+    kills: session.kills,
+    gold: session.gold,
+    score,
+    medal: challengeMedal(score),
+  }
+  const existingIndex = session.hub.challengeBoard.leaderboard.findIndex((candidate) => candidate.replayKey === entry.replayKey && candidate.name === entry.name)
+  if (existingIndex >= 0) session.hub.challengeBoard.leaderboard.splice(existingIndex, 1, entry)
+  else session.hub.challengeBoard.leaderboard.unshift(entry)
+  session.hub.challengeBoard.leaderboard = session.hub.challengeBoard.leaderboard.sort((left, right) => right.score - left.score || left.turns - right.turns).slice(0, 12)
+  session.hub.relationshipLog.unshift(`${entry.cadence} challenge ${entry.medal} medal: ${entry.score} score.`)
+  trimHubLog(session.hub)
+  addToast(session, "Challenge recorded", `${entry.medal} medal, score ${entry.score}.`, entry.medal === "gold" ? "success" : "info")
+  session.hub.challengeBoard.activeRun = null
+  return entry
+}
+
+function challengeScore(session: GameSession, active: ChallengeRunMetadata) {
+  const clearBonus = session.status === "victory" ? 1_000 : 0
+  const survival = session.floor * 250 + session.kills * 35 + session.gold * 3
+  const mutatorBonus = active.mutators.length * 120
+  const turnPenalty = Math.min(500, session.turn * 2)
+  return Math.max(0, clearBonus + survival + mutatorBonus - turnPenalty)
+}
+
+function challengeMedal(score: number): ChallengeMedal {
+  if (score >= 1_700) return "gold"
+  if (score >= 1_100) return "silver"
+  if (score >= 650) return "bronze"
+  return "none"
 }
 
 export function refreshVillageSchedules(session: GameSession) {
@@ -3543,6 +3656,7 @@ function descend(session: GameSession) {
     })
     addToast(session, "Dungeon cleared", "The road home and portal room can open after this run.", "success")
     unlockHub(session, "The final gate opened and the village route became stable.")
+    recordChallengeResult(session)
     return
   }
   const shouldShowTutorialHandoff = session.tutorial.enabled && session.tutorial.completed && !session.tutorial.handoffShown && session.deaths === 0
@@ -3710,6 +3824,7 @@ function markPlayerDeath(session: GameSession) {
   }
   session.log.unshift(`You fall beneath the dungeon's build. Deaths this run: ${session.deaths}.`)
   addToast(session, "Run ended", `Deaths this run: ${session.deaths}.`, "danger")
+  recordChallengeResult(session)
 }
 
 function combatEnemyTurn(session: GameSession) {
@@ -4164,6 +4279,7 @@ function normalizeHubState(hub: unknown, mode: MultiplayerMode, heroName: string
     lastCutsceneId: isCutsceneId(value.lastCutsceneId) ? value.lastCutsceneId : null,
     contentPacks: normalizeContentPackState(value.contentPacks, fallback.contentPacks),
     balanceDashboard: normalizeBalanceDashboardState(value.balanceDashboard, fallback.balanceDashboard),
+    challengeBoard: normalizeChallengeBoardState(value.challengeBoard, fallback.challengeBoard),
   }
 }
 
@@ -4315,6 +4431,53 @@ function normalizeBalanceDashboardState(value: unknown, fallback: BalanceDashboa
   }
 }
 
+function normalizeChallengeBoardState(value: unknown, fallback: ChallengeBoardState): ChallengeBoardState {
+  const source = value && typeof value === "object" ? (value as Partial<ChallengeBoardState>) : {}
+  return {
+    activeRun: normalizeChallengeRunMetadata(source.activeRun),
+    leaderboard: normalizeChallengeLeaderboard(source.leaderboard, fallback.leaderboard),
+  }
+}
+
+function normalizeChallengeRunMetadata(value: unknown): ChallengeRunMetadata | null {
+  const source = value && typeof value === "object" ? (value as Partial<ChallengeRunMetadata>) : null
+  if (!source || !isChallengeCadence(source.cadence)) return null
+  const seed = Math.max(1, Math.floor(Number(source.seed) || 1))
+  const classId = isHeroClass(source.classId) ? source.classId : "ranger"
+  return {
+    id: cleanId(source.id || `${source.cadence}-${seed}`),
+    cadence: source.cadence,
+    seed,
+    classId,
+    mutators: normalizeRunMutators(source.mutators),
+    startedAtTurn: Math.max(0, Math.floor(Number(source.startedAtTurn) || 0)),
+    replayKey: cleanId(source.replayKey || `${source.cadence}-${seed}-${classId}`),
+  }
+}
+
+function normalizeChallengeLeaderboard(value: unknown, fallback: ChallengeLeaderboardEntry[]) {
+  if (!Array.isArray(value)) return fallback
+  const rows = value.flatMap((item) => {
+    const base = normalizeChallengeRunMetadata(item)
+    const source = item && typeof item === "object" ? (item as Partial<ChallengeLeaderboardEntry>) : null
+    if (!base || !source) return []
+    return [
+      {
+        ...base,
+        name: cleanHeroName(source.name || "Crawler"),
+        status: isRunStatus(source.status) ? source.status : "running",
+        floor: Math.max(1, Math.floor(Number(source.floor) || 1)),
+        turns: Math.max(0, Math.floor(Number(source.turns) || 0)),
+        kills: Math.max(0, Math.floor(Number(source.kills) || 0)),
+        gold: Math.max(0, Math.floor(Number(source.gold) || 0)),
+        score: Math.max(0, Math.floor(Number(source.score) || 0)),
+        medal: isChallengeMedal(source.medal) ? source.medal : "none",
+      },
+    ]
+  })
+  return rows.sort((left, right) => right.score - left.score || left.turns - right.turns).slice(0, 12)
+}
+
 function normalizeHeroClassScores(value: unknown, fallback: Record<HeroClass, number>) {
   const source = value && typeof value === "object" ? (value as Partial<Record<HeroClass, number>>) : {}
   return Object.fromEntries(heroClassIds.map((id) => [id, clamp(Math.floor(Number(source[id]) || fallback[id] || 0), 0, 100)])) as Record<HeroClass, number>
@@ -4439,6 +4602,13 @@ function createBalanceDashboardState(): BalanceDashboardState {
   }
 }
 
+function createChallengeBoardState(): ChallengeBoardState {
+  return {
+    activeRun: null,
+    leaderboard: [],
+  }
+}
+
 function sellValue(item: string) {
   const lower = item.toLowerCase()
   if (/relic|shard|boss memory|fossil|keepsake|story relic/i.test(item)) return 22
@@ -4492,6 +4662,18 @@ function isVillageCustomerTaste(value: unknown): value is VillageCustomerTaste {
 
 function isFarmPermission(value: unknown): value is FarmPermission {
   return value === "owner-only" || value === "friends" || value === "everyone"
+}
+
+function isChallengeCadence(value: unknown): value is ChallengeCadence {
+  return value === "daily" || value === "weekly"
+}
+
+function isChallengeMedal(value: unknown): value is ChallengeMedal {
+  return value === "none" || value === "bronze" || value === "silver" || value === "gold"
+}
+
+function isRunStatus(value: unknown): value is ChallengeLeaderboardEntry["status"] {
+  return value === "running" || value === "dead" || value === "victory"
 }
 
 function isCutsceneId(value: unknown): value is CutsceneId {
