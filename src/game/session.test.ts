@@ -44,7 +44,7 @@ import {
 } from "./session.js"
 import type { GameSession } from "./session.js"
 import { cardinalNeighbors, createDungeon, enemyAi, setTile, tileAt } from "./dungeon.js"
-import type { ActorId } from "./domainTypes.js"
+import { isEnemyActorId, type ActorId } from "./domainTypes.js"
 import { defaultFinalFloor } from "./progression.js"
 import { addEnemyBesidePlayer } from "./testHelpers.test.js"
 
@@ -623,8 +623,32 @@ describe("game session", () => {
     expect(next.equipment.weapon?.bonusDamage).toBe(1)
     expect(next.maxHp).toBeLessThanOrEqual(session.maxHp)
     expect(next.world.quests[0]?.title).toBe("Find the Final Gate")
-    expect(next.toasts[0]).toMatchObject({ title: "Next descent", tone: "success" })
+    expect(next.toasts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ title: "Next descent", tone: "success" }),
+        expect.objectContaining({ title: "Sharper descent", tone: "warning" }),
+      ]),
+    )
     expect(next.log[0]).toContain("Village preparations carried")
+  })
+
+  test("village-launched descents add strategic enemy pressure", () => {
+    const session = createSession(1234, "coop", "ranger", "Mira")
+    unlockHub(session)
+    session.hub.coins = 260
+    expect(buildHubStation(session, "blacksmith")).toBe(true)
+    expect(toggleRunMutator(session, "hard-mode")).toBe(true)
+
+    const base = createDungeon(9999, 1)
+    const next = createNextDescentSession(session, 9999)
+    const baseEnemy = base.actors.find((actor) => isEnemyActorId(actor.kind))
+    expect(baseEnemy).toBeTruthy()
+    const pressuredEnemy = next.dungeon.actors.find((actor) => actor.id === baseEnemy!.id)
+    const baseAggro = baseEnemy?.ai?.aggroRadius ?? 0
+
+    expect(pressuredEnemy?.hp).toBeGreaterThan(baseEnemy!.hp)
+    expect(pressuredEnemy?.ai?.aggroRadius).toBeGreaterThan(baseAggro)
+    expect(next.log.some((line) => line.includes("Strategic pressure tier"))).toBe(true)
   })
 
   test("village screen systems cover movement, schedules, shop pricing, co-op homes, content packs, cutscenes, and balance", () => {

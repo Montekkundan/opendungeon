@@ -1589,6 +1589,7 @@ export function createNextDescentSession(previous: GameSession, seed: number): G
   }
   next.focus = next.maxFocus
   applyMutatorPressure(next)
+  applyStrategicDescentPressure(next)
   refreshBalanceDashboard(next)
   focusFinalGateQuest(next)
   rememberKnowledge(next, {
@@ -1599,6 +1600,7 @@ export function createNextDescentSession(previous: GameSession, seed: number): G
     floor: next.floor,
   })
   addToast(next, "Next descent", "Village progress carried forward. Find the Final Gate.", "success")
+  if (strategicPressureTier(next)) addToast(next, "Sharper descent", "Enemies now guard, pressure range, and punish one-note attacks.", "warning")
   pushSessionMessage(next, "Village preparations carried into the next descent.")
   return next
 }
@@ -3144,6 +3146,7 @@ function descend(session: GameSession) {
   session.floor += 1
   session.dungeon = createDungeon(session.seed, session.floor)
   session.floorModifier = floorModifierFor(session.seed, session.floor)
+  applyStrategicDescentPressure(session)
   session.player = { ...session.dungeon.playerStart }
   session.visible = new Set()
   session.seen = new Set()
@@ -4142,6 +4145,65 @@ function applyMutatorPressure(session: GameSession) {
   }
   if (active.has("cursed-floors")) session.floorModifier = { ...session.floorModifier, trapDamageBonus: session.floorModifier.trapDamageBonus + 1 }
   if (active.has("boss-rush")) session.finalFloor = Math.min(session.finalFloor, defaultFinalFloor)
+}
+
+function strategicPressureTier(session: GameSession) {
+  if (!session.hub?.unlocked) return 0
+  const stationLevels = hubStationIds.reduce((total, id) => total + Math.max(0, session.hub.stations[id]?.level ?? 0), 0)
+  const stationPressure = Math.floor(stationLevels / 3)
+  const floorPressure = session.floor >= session.finalFloor ? 2 : session.floor >= 2 ? 1 : 0
+  const mutatorPressure = session.hub.activeMutators.length
+  return clamp(1 + stationPressure + floorPressure + mutatorPressure, 1, 5)
+}
+
+function applyStrategicDescentPressure(session: GameSession) {
+  const tier = strategicPressureTier(session)
+  if (!tier) return
+  const enemies = session.dungeon.actors.filter((actor) => isEnemyActorId(actor.kind))
+  for (const actor of enemies) {
+    const bossBonus = isBossActorId(actor.kind) ? tier + session.floor : 0
+    const hpBonus = tier + Math.floor(session.floor / 2) + bossBonus
+    actor.maxHp = Math.max(actor.maxHp ?? actor.hp, actor.hp) + hpBonus
+    actor.hp += hpBonus
+    actor.damage += session.floor >= 2 ? Math.ceil(tier / 2) : 0
+    if (actor.ai) {
+      actor.ai.aggroRadius += Math.min(2, tier)
+      actor.ai.leashRadius += Math.min(3, tier)
+    }
+  }
+  placeStrategicGuards(session, tier)
+  session.log.unshift(`Strategic pressure tier ${tier}: enemies have more HP, stronger roles, and tighter guards.`)
+  trimLog(session)
+}
+
+function placeStrategicGuards(session: GameSession, tier: number) {
+  if (session.floor < 2) return
+  const anchors = session.dungeon.actors.filter((actor) => actor.kind === "necromancer" || isBossActorId(actor.kind))
+  for (const anchor of anchors.slice(0, session.floor >= session.finalFloor ? 2 : 1)) {
+    const alreadyGuarded = session.dungeon.actors.some((actor) => actor.kind === "rust-squire" && manhattan(actor.position, anchor.position) <= 2)
+    if (alreadyGuarded) continue
+    const position = firstFreeNeighbor(session, anchor.position)
+    if (!position) continue
+    const guard: Actor = {
+      id: `strategic-guard-${session.floor}-${anchor.id}`,
+      kind: "rust-squire",
+      position,
+      hp: 5 + session.floor + tier,
+      maxHp: 5 + session.floor + tier,
+      damage: 2 + Math.ceil(tier / 2),
+      phase: 1,
+      ai: enemyAi("rust-squire", position, session.dungeon.actors.length, session.floor),
+    }
+    guard.ai!.pattern = "guard"
+    session.dungeon.actors.push(guard)
+  }
+}
+
+function firstFreeNeighbor(session: GameSession, point: Point) {
+  return cardinalNeighbors(point).find((candidate) => {
+    if (tileAt(session.dungeon, candidate) !== "floor") return false
+    return !session.dungeon.actors.some((actor) => actor.position.x === candidate.x && actor.position.y === candidate.y)
+  })
 }
 
 function pushSessionMessage(session: GameSession, message: string) {
