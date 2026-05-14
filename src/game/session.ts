@@ -26,7 +26,19 @@ import {
 import { clamp, wrap } from "../shared/numeric.js"
 import { normalizeHeroAppearance, type HeroAppearance } from "./appearance.js"
 import { defaultFinalFloor } from "./progression.js"
-import { bossStoryLine, collectibleKnowledgeEntry, floorKnowledgeEntry, initialKnowledgeEntries, localNpcStoryDialog, openingStoryBranches, openingStoryText, skillCheckKnowledgeEntry, victoryStoryText, type StoryKnowledge } from "./story.js"
+import {
+  bossStoryLine,
+  collectibleKnowledgeEntry,
+  floorKnowledgeEntry,
+  floorTacticalPlan,
+  initialKnowledgeEntries,
+  localNpcStoryDialog,
+  openingStoryBranches,
+  openingStoryText,
+  skillCheckKnowledgeEntry,
+  victoryStoryText,
+  type StoryKnowledge,
+} from "./story.js"
 
 export type MultiplayerMode = "solo" | "coop" | "race"
 export const heroClassIds = ["warden", "arcanist", "ranger", "duelist", "cleric", "engineer", "witch", "grave-knight"] as const
@@ -1589,6 +1601,7 @@ export function createSession(
   }
   if (session.tutorial.enabled) prepareTutorialArea(session)
   for (const entry of initialKnowledgeEntries()) rememberKnowledge(session, entry)
+  rememberKnowledge(session, floorKnowledgeEntry(1))
   addToast(session, "Awake", "No memory, one weapon, and a dungeon that knows your steps.", "info")
   if (!session.tutorial.enabled && showTutorialOffStart) applyTutorialOffStart(session)
   revealAroundPlayer(session)
@@ -3291,9 +3304,10 @@ function descend(session: GameSession) {
   session.focus = Math.min(session.maxFocus, session.focus + 2)
   revealAroundPlayer(session)
   completeWorldProgress(session, "biome", session.player, `Reached floor ${session.floor}.`)
-  session.log.unshift(`Floor ${session.floor}. ${session.floorModifier.name}. Same seed, darker shape.`)
+  const plan = floorTacticalPlan(session.floor)
+  session.log.unshift(`Floor ${session.floor}: ${plan.title}. ${session.floorModifier.name}: ${session.floorModifier.text}`)
   rememberKnowledge(session, floorKnowledgeEntry(session.floor))
-  addToast(session, `Floor ${session.floor}`, session.floorModifier.text, "info")
+  addToast(session, plan.title, plan.finalGateClue, "info")
   if (shouldShowTutorialHandoff) applyPostTutorialHandoff(session)
 }
 

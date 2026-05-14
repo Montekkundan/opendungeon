@@ -1,5 +1,18 @@
 import { describe, expect, test } from "bun:test"
-import { bossStoryLine, collectibleKnowledgeEntry, collectibleNoteEntry, floorKnowledgeEntry, initialKnowledgeEntries, localNpcStoryDialog, localStoryBeats, openingStoryText, skillCheckKnowledgeEntry, storyBeatForFloor, victoryStoryText } from "./story.js"
+import {
+  bossStoryLine,
+  collectibleKnowledgeEntry,
+  collectibleNoteEntry,
+  floorKnowledgeEntry,
+  floorTacticalPlan,
+  initialKnowledgeEntries,
+  localNpcStoryDialog,
+  localStoryBeats,
+  openingStoryText,
+  skillCheckKnowledgeEntry,
+  storyBeatForFloor,
+  victoryStoryText,
+} from "./story.js"
 import type { Actor } from "./dungeon.js"
 import type { NpcActorId } from "./domainTypes.js"
 
@@ -15,6 +28,9 @@ describe("local story script", () => {
     expect(initialKnowledgeEntries().map((entry) => entry.kind)).toContain("memory")
     expect(initialKnowledgeEntries().map((entry) => entry.kind)).toContain("hub")
     expect(floorKnowledgeEntry(2).title).toBe("The Quiet Wards")
+    expect(floorKnowledgeEntry(2).text).toContain("Monster mix")
+    expect(floorKnowledgeEntry(2).text).toContain("Final-gate clue")
+    expect(floorTacticalPlan(3).monsterMix).toContain("necromancers")
     expect(skillCheckKnowledgeEntry("relic", 3, true).text).toContain("portal room")
     expect(collectibleNoteEntry(1, "1-2-3").title).toContain("Recovered Note")
     expect(collectibleKnowledgeEntry("deed", 1, "1-2-3").kind).toBe("hub")

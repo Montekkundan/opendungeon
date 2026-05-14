@@ -217,6 +217,7 @@ describe("game session", () => {
 
     expect(session.log[0]).toContain("no memory")
     expect(session.knowledge.map((entry) => entry.title)).toContain("Waking Cell")
+    expect(session.knowledge.find((entry) => entry.id === "floor-1-the-waking-cell")?.text).toContain("Tactical purpose")
     expect(session.knowledge.some((entry) => entry.kind === "hub")).toBe(true)
 
     addToast(session, "Test event", "The Book and toast rails are active.", "info")
