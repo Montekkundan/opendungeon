@@ -49,6 +49,34 @@ opendungeon join http://YOUR_SERVER_IP:3737
 
 The later browser-native path can replace this only when the browser client has an authoritative realtime adapter that preserves validated command-log semantics.
 
+## Vercel Sandbox experiment
+
+Vercel Sandbox is a plausible future path for player-owned internet hosting, but it should be treated as an experiment before it becomes the default. The flow would be:
+
+- The host player signs in to opendungeon, connects their Vercel account, and chooses a team/project that owns sandbox usage.
+- The website creates a sandbox under that host account, starts `opendungeon-host` with `runCommand({ detached: true })`, and exposes the sandbox port as the lobby URL.
+- Supabase stores the lobby id, owner id, sandbox id, host URL, mode, seed, GM world id, and cleanup status.
+- Snapshots can warm the sandbox so dependency install and package setup do not happen for every game session.
+- The website stops the sandbox when the lobby ends or expires.
+
+The limits matter for gameplay. Vercel documents a default sandbox timeout of 5 minutes, with configurable/extendable runtime up to 45 minutes on Hobby and 5 hours on Pro/Enterprise. Open ports are limited per sandbox. Installed system packages do not persist unless the prepared sandbox is snapshotted, and snapshot creation stops the sandbox that was captured.
+
+That means the first implementation should stay opt-in:
+
+- Keep LAN/VPS/Docker hosting as the supported path.
+- Use Sandbox only for logged-in hosts who explicitly connect Vercel.
+- Warn hosts about plan limits and session timeout before creating the sandbox.
+- Keep a reconnect path when the sandbox expires.
+- Always call cleanup and store cleanup state in Supabase.
+
+References:
+
+- https://vercel.com/docs/vercel-sandbox
+- https://vercel.com/docs/vercel-sandbox/pricing
+- https://vercel.com/docs/vercel-sandbox/sdk-reference
+- https://vercel.com/kb/guide/how-to-install-system-packages-in-vercel-sandbox
+- https://vercel.com/kb/guide/how-to-use-snapshots-for-faster-sandbox-startup
+
 ## Release path
 
 Changesets tracks package releases. Website changes can be deployed independently, but package versions still move through the repo release flow and generated changelog.

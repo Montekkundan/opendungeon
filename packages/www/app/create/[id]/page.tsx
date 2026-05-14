@@ -62,6 +62,7 @@ export default async function LobbyPage({ params, searchParams }: PageProps) {
           <section>
             <h2>Host on LAN</h2>
             <Command value={commands.local} />
+            <Command value="curl http://YOUR_LAN_IP:3737/health" />
           </section>
 
           <section>
@@ -76,6 +77,11 @@ export default async function LobbyPage({ params, searchParams }: PageProps) {
               For public internet play, the host still needs a reachable
               WebSocket endpoint. A Vercel-only route cannot keep the current
               CLI lobby socket alive.
+            </p>
+            <p>
+              Vercel Sandbox hosting is planned as an opt-in path for logged-in
+              hosts who connect their own Vercel account; until then, use a
+              reachable host process or private LAN.
             </p>
           </section>
         </article>

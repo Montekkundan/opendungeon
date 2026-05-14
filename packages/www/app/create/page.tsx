@@ -37,8 +37,9 @@ export default function CreatePage() {
           </form>
 
           <section>
-            <h2>Local host command</h2>
+            <h2>LAN host command</h2>
             <Command value="opendungeon-host --host 0.0.0.0 --mode coop --seed 2423368 --port 3737" />
+            <Command value="opendungeon join http://YOUR_LAN_IP:3737" />
           </section>
 
           <section>
@@ -55,7 +56,8 @@ export default function CreatePage() {
               </li>
               <li>
                 Keeps the website deploy simple on Vercel while we decide
-                whether to add Supabase Realtime or a dedicated server later.
+                whether to add a user-owned Vercel Sandbox host, Supabase
+                Realtime browser adapter, or dedicated server later.
               </li>
             </ul>
           </section>

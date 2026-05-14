@@ -76,6 +76,7 @@ OPENDUNGEON_PLAYER_NAME=Nyx bun run dev -- join http://127.0.0.1:3737
 
 # Same Wi-Fi / LAN
 opendungeon-host --host 0.0.0.0 --mode coop --seed 2423368 --port 3737
+curl http://YOUR_LAN_IP:3737/health
 ```
 
 Friends join with:
@@ -84,7 +85,14 @@ Friends join with:
 opendungeon join http://YOUR_LAN_IP:3737
 ```
 
-For an internet server, open TCP port `3737` and set the public URL or domain:
+For source checkout testing on LAN, use the same command through Bun:
+
+```bash
+bun run host -- --host 0.0.0.0 --mode coop --seed 2423368 --port 3737
+OPENDUNGEON_PLAYER_NAME=Sol bun run dev -- join http://YOUR_LAN_IP:3737
+```
+
+For an internet server, run `opendungeon-host` on a reachable machine, open TCP port `3737`, and set the public URL or domain:
 
 ```bash
 opendungeon-host --host 0.0.0.0 --public-url http://YOUR_SERVER_IP:3737 --mode coop --seed 2423368 --port 3737
@@ -92,6 +100,8 @@ opendungeon join http://YOUR_SERVER_IP:3737
 ```
 
 The live game is host-authoritative: the `opendungeon-host` process validates actions, keeps the deterministic command log, and broadcasts state. Vercel can host invite pages and `/gm`, while internet multiplayer needs a long-running host on a VPS, Docker platform, Fly/Render/Railway, or another WebSocket-capable service.
+
+Vercel Sandbox is an experimental internet-host option for logged-in hosts who connect their own Vercel account. The product path would create a sandbox under the host player's Vercel team, run `opendungeon-host` there, expose its public URL, store the lobby in Supabase, and stop the sandbox when the session ends. It is not the default path yet because sandbox runtimes are time-limited and need account-linking, lifecycle, reconnect, and cleanup guardrails.
 
 For local source testing:
 

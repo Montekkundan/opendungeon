@@ -30,6 +30,8 @@ Multiplayer with GM uses the same host-authoritative runtime. The website GM con
 
 ## Host and join
 
+Co-op is the default hosted multiplayer mode. Pass `--mode race` only when you want a same-seed challenge instead of a shared story run.
+
 ```txt
 bun run host -- --host 127.0.0.1 --mode coop --seed 2423368 --port 3737
 OPENDUNGEON_PLAYER_NAME=Mira bun run dev -- join http://127.0.0.1:3737
@@ -47,7 +49,21 @@ For LAN or a small private server, bind the host to all interfaces:
 bun run host -- --host 0.0.0.0 --mode coop --seed 2423368 --port 3737
 ```
 
+Then verify from another device:
+
+```txt
+curl http://YOUR_LAN_IP:3737/health
+opendungeon join http://YOUR_LAN_IP:3737
+```
+
 The browser page at the printed lobby URL is a status and invite page. It is not the game renderer. Players still join from terminal clients.
+
+The global package uses the same shape:
+
+```txt
+opendungeon-host --host 0.0.0.0 --mode coop --seed 2423368 --port 3737
+opendungeon join http://YOUR_LAN_IP:3737
+```
 
 ## Duplicate signed-in account check
 
@@ -60,6 +76,17 @@ OPENDUNGEON_TERMINAL_APP=Ghostty bun run dev -- join http://127.0.0.1:3737
 ## Website invite pages
 
 `/create` generates a shareable lobby URL. `/create/[id]` renders the commands friends need. The website does not keep the current CLI WebSocket lobby alive by itself, so the host process still needs to run somewhere reachable.
+
+## Internet play
+
+For internet play, run the host process on a reachable machine and set the public URL that players should use:
+
+```txt
+opendungeon-host --host 0.0.0.0 --public-url https://play.example.com --mode coop --seed 2423368 --port 3737
+opendungeon join https://play.example.com
+```
+
+If you do not own a server, the planned website-hosted path is a Vercel Sandbox experiment: the signed-in host links their Vercel account, the website creates a sandbox under that account, runs `opendungeon-host` in detached mode, stores the public host URL in Supabase, and stops the sandbox after play. This keeps hosting costs on the host player's Vercel plan, but it still needs lifecycle limits, reconnects, cleanup, and billing guardrails before it should be treated as a supported player flow.
 
 ## Future browser play
 
