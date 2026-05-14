@@ -40,6 +40,7 @@ import {
   playLocalCutscene,
   prepareFood,
   refreshBalanceDashboard,
+  refreshVillageCalendar,
   recordChallengeResult,
   runVillageShopSale,
   sellLootToVillage,
@@ -849,6 +850,21 @@ describe("game session", () => {
     expect(entry?.score).toBeGreaterThan(0)
     expect(next.hub.challengeBoard.activeRun).toBeNull()
     expect(next.hub.challengeBoard.leaderboard[0]?.name).toBe("Mira")
+  })
+
+  test("village calendar changes seasons and modifies the next descent", () => {
+    const session = createSession(1234, "solo", "ranger", "Mira")
+    unlockHub(session)
+    session.turn = 144
+    const calendar = refreshVillageCalendar(session)
+
+    expect(calendar.day).toBe(13)
+    expect(calendar.festival).toBe("final-gate-vigil")
+
+    const next = createNextDescentSession(session, 8888)
+    expect(next.hub.calendar.day).toBe(13)
+    expect(next.inventory).toContain("Final-gate candle")
+    expect(next.knowledge.some((entry) => entry.id === "village-calendar-day-13" && entry.text.includes("final gate vigil"))).toBe(true)
   })
 
   test("village screen systems cover movement, schedules, shop pricing, co-op homes, content packs, cutscenes, and balance", () => {

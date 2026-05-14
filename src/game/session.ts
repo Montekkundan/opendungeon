@@ -301,6 +301,11 @@ export type FarmPermission = "owner-only" | "friends" | "everyone"
 export type CutsceneId = "waking-cell" | "first-clear" | "village-unlock" | "ending-rooted" | "ending-remixed"
 export const contentPackIds = ["opendungeon", "high-contrast", "mono-terminal"] as const
 export type ContentPackId = (typeof contentPackIds)[number]
+export const villageSeasonIds = ["spring", "summer", "autumn", "winter"] as const
+export type VillageSeasonId = (typeof villageSeasonIds)[number]
+export const villageWeatherIds = ["clear", "rain", "fog", "storm", "emberfall"] as const
+export type VillageWeatherId = (typeof villageWeatherIds)[number]
+export type VillageFestivalId = "none" | "market-day" | "forge-fair" | "harvest-night" | "final-gate-vigil"
 export type EquipmentSlot = "weapon" | "armor" | "relic"
 export type EquipmentRarity = "common" | "uncommon" | "rare" | "legendary"
 
@@ -388,6 +393,15 @@ export type VillageMapState = {
   }
 }
 
+export type VillageCalendarState = {
+  day: number
+  season: VillageSeasonId
+  weather: VillageWeatherId
+  festival: VillageFestivalId
+  dungeonModifier: string
+  note: string
+}
+
 export type CutsceneState = {
   id: CutsceneId
   title: string
@@ -465,6 +479,7 @@ export type HubState = {
   activeMutators: RunMutatorId[]
   relationshipLog: string[]
   village: VillageMapState
+  calendar: VillageCalendarState
   cutscenes: CutsceneState[]
   lastCutsceneId: CutsceneId | null
   contentPacks: ContentPackState
@@ -888,6 +903,7 @@ export function createHubState(mode: MultiplayerMode = "solo", heroName = "Mira"
     activeMutators: [],
     relationshipLog: [],
     village: createVillageMapState(mode),
+    calendar: createVillageCalendarState(1, 0),
     cutscenes: createCutscenes(heroName),
     lastCutsceneId: null,
     contentPacks: createContentPackState(),
@@ -1213,6 +1229,7 @@ function challengeMedal(score: number): ChallengeMedal {
 
 export function refreshVillageSchedules(session: GameSession) {
   session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  refreshVillageCalendar(session)
   const phase = Math.floor(session.turn / 12) % 3
   const routes: Record<VillageNpcId, VillageLocationId[]> = {
     blacksmith: ["blacksmith", "market", "guildhall"],
@@ -1234,6 +1251,12 @@ export function refreshVillageSchedules(session: GameSession) {
     }
   })
   return session.hub.village.schedules
+}
+
+export function refreshVillageCalendar(session: GameSession) {
+  session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  session.hub.calendar = createVillageCalendarState(session.seed, session.turn)
+  return session.hub.calendar
 }
 
 export function moveVillagePlayer(session: GameSession, dx: number, dy: number) {
@@ -1740,6 +1763,7 @@ export function createSession(
 export function createNextDescentSession(previous: GameSession, seed: number): GameSession {
   const next = createSession(seed, previous.mode, previous.hero.classId, previous.hero.name, previous.hero.appearance, false)
   next.hub = normalizeHubState(previous.hub, previous.mode, previous.hero.name)
+  next.hub.calendar = createVillageCalendarState(previous.seed, previous.turn)
   next.hub.lastCutsceneId = null
   next.hub.relationshipLog.unshift(`New descent opened from the village with seed ${seed}.`)
   trimHubLog(next.hub)
@@ -1751,6 +1775,7 @@ export function createNextDescentSession(previous: GameSession, seed: number): G
     if (food === "Focus broth") next.maxFocus += 1
   }
   next.focus = next.maxFocus
+  applyVillageCalendarModifier(next)
   applyMutatorPressure(next)
   applyStrategicDescentPressure(next)
   refreshBalanceDashboard(next)
@@ -4275,6 +4300,7 @@ function normalizeHubState(hub: unknown, mode: MultiplayerMode, heroName: string
     activeMutators: normalizeRunMutators(value.activeMutators),
     relationshipLog: normalizeStringList(value.relationshipLog, 12, 120),
     village: normalizeVillageMapState(value.village, fallback.village),
+    calendar: normalizeVillageCalendarState(value.calendar, fallback.calendar),
     cutscenes: normalizeCutscenes(value.cutscenes, fallback.cutscenes),
     lastCutsceneId: isCutsceneId(value.lastCutsceneId) ? value.lastCutsceneId : null,
     contentPacks: normalizeContentPackState(value.contentPacks, fallback.contentPacks),
@@ -4349,6 +4375,18 @@ function normalizeVillageMapState(value: unknown, fallback: VillageMapState): Vi
       permissions: isFarmPermission(sharedFarm.permissions) ? sharedFarm.permissions : fallback.sharedFarm.permissions,
       storage: normalizeStringList(sharedFarm.storage, 20, 50),
     },
+  }
+}
+
+function normalizeVillageCalendarState(value: unknown, fallback: VillageCalendarState): VillageCalendarState {
+  const source = value && typeof value === "object" ? (value as Partial<VillageCalendarState>) : {}
+  return {
+    day: Math.max(1, Math.floor(Number(source.day) || fallback.day)),
+    season: isVillageSeasonId(source.season) ? source.season : fallback.season,
+    weather: isVillageWeatherId(source.weather) ? source.weather : fallback.weather,
+    festival: isVillageFestivalId(source.festival) ? source.festival : fallback.festival,
+    dungeonModifier: cleanBookText(source.dungeonModifier || fallback.dungeonModifier, 120),
+    note: cleanBookText(source.note || fallback.note, 180),
   }
 }
 
@@ -4536,6 +4574,22 @@ function createVillageMapState(mode: MultiplayerMode): VillageMapState {
   }
 }
 
+function createVillageCalendarState(seed: number, turn: number): VillageCalendarState {
+  const day = Math.max(1, Math.floor(turn / 12) + 1)
+  const season = villageSeasonIds[Math.floor((day - 1) / 7) % villageSeasonIds.length] ?? "spring"
+  const weather = villageWeatherIds[Math.abs(seed + day * 13) % villageWeatherIds.length] ?? "clear"
+  const festival = villageFestivalForDay(day, season)
+  const modifier = villageCalendarModifier(weather, festival)
+  return {
+    day,
+    season,
+    weather,
+    festival,
+    dungeonModifier: modifier,
+    note: villageCalendarNote(day, season, weather, festival, modifier),
+  }
+}
+
 function createVillageCustomers(): VillageCustomer[] {
   return villageCustomerNames.map((name, index) => ({
     id: `customer-${name.toLowerCase()}`,
@@ -4588,6 +4642,30 @@ function createContentPackState(): ContentPackState {
     preview: contentPackPreview("opendungeon"),
     lastChangedTurn: 0,
   }
+}
+
+function villageFestivalForDay(day: number, season: VillageSeasonId): VillageFestivalId {
+  if (day % 13 === 0) return "final-gate-vigil"
+  if (day % 9 === 0) return season === "autumn" ? "harvest-night" : "market-day"
+  if (day % 6 === 0) return "forge-fair"
+  return "none"
+}
+
+function villageCalendarModifier(weather: VillageWeatherId, festival: VillageFestivalId) {
+  if (festival === "final-gate-vigil") return "Final-gate rooms reveal more relic clues."
+  if (festival === "market-day") return "Loot sells better, and cache gold rises."
+  if (festival === "forge-fair") return "Weapon prep is stronger, but armored enemies patrol more."
+  if (festival === "harvest-night") return "Food prep stretches farther into the next descent."
+  if (weather === "storm") return "Traps hit harder, but focus drafts are stronger."
+  if (weather === "fog") return "Sight lines shrink in the next dungeon."
+  if (weather === "rain") return "Slimes and moths are more common near wet rooms."
+  if (weather === "emberfall") return "Burning lasts longer for both sides."
+  return "No extra dungeon pressure today."
+}
+
+function villageCalendarNote(day: number, season: VillageSeasonId, weather: VillageWeatherId, festival: VillageFestivalId, modifier: string) {
+  const festivalText = festival === "none" ? "no festival" : festival.replace(/-/g, " ")
+  return `Day ${day}, ${season}, ${weather}; ${festivalText}. ${modifier}`
 }
 
 function createBalanceDashboardState(): BalanceDashboardState {
@@ -4658,6 +4736,18 @@ function isVillageNpcId(value: unknown): value is VillageNpcId {
 
 function isVillageCustomerTaste(value: unknown): value is VillageCustomerTaste {
   return typeof value === "string" && (villageCustomerTastes as readonly string[]).includes(value)
+}
+
+function isVillageSeasonId(value: unknown): value is VillageSeasonId {
+  return typeof value === "string" && (villageSeasonIds as readonly string[]).includes(value)
+}
+
+function isVillageWeatherId(value: unknown): value is VillageWeatherId {
+  return typeof value === "string" && (villageWeatherIds as readonly string[]).includes(value)
+}
+
+function isVillageFestivalId(value: unknown): value is VillageFestivalId {
+  return value === "none" || value === "market-day" || value === "forge-fair" || value === "harvest-night" || value === "final-gate-vigil"
 }
 
 function isFarmPermission(value: unknown): value is FarmPermission {
@@ -4744,6 +4834,27 @@ function applyMutatorPressure(session: GameSession) {
   }
   if (active.has("cursed-floors")) session.floorModifier = { ...session.floorModifier, trapDamageBonus: session.floorModifier.trapDamageBonus + 1 }
   if (active.has("boss-rush")) session.finalFloor = Math.min(session.finalFloor, defaultFinalFloor)
+}
+
+function applyVillageCalendarModifier(session: GameSession) {
+  const calendar = session.hub.calendar
+  if (calendar.weather === "storm") {
+    session.floorModifier = { ...session.floorModifier, trapDamageBonus: session.floorModifier.trapDamageBonus + 1, restFocusBonus: session.floorModifier.restFocusBonus + 1 }
+  }
+  if (calendar.weather === "fog") session.floorModifier = { ...session.floorModifier, visionBonus: session.floorModifier.visionBonus - 1 }
+  if (calendar.weather === "emberfall") session.floorModifier = { ...session.floorModifier, goldBonus: session.floorModifier.goldBonus + 1 }
+  if (calendar.festival === "market-day") session.floorModifier = { ...session.floorModifier, goldBonus: session.floorModifier.goldBonus + 4 }
+  if (calendar.festival === "forge-fair" && session.equipment.weapon) session.equipment.weapon = { ...session.equipment.weapon, bonusDamage: session.equipment.weapon.bonusDamage + 1 }
+  if (calendar.festival === "harvest-night" && !session.inventory.includes("Festival rations")) session.inventory.unshift("Festival rations")
+  if (calendar.festival === "final-gate-vigil" && !session.inventory.includes("Final-gate candle")) session.inventory.unshift("Final-gate candle")
+  rememberKnowledge(session, {
+    id: `village-calendar-day-${calendar.day}`,
+    title: `Village Calendar Day ${calendar.day}`,
+    text: calendar.note,
+    kind: "hub",
+    floor: session.floor,
+  })
+  addToast(session, "Village calendar", calendar.dungeonModifier, "info")
 }
 
 function strategicPressureTier(session: GameSession) {

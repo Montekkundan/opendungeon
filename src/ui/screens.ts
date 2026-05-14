@@ -907,8 +907,9 @@ function drawVillage(canvas: Canvas, model: AppModel) {
   writeWrapped(canvas, sideX + 3, mapY + 2, sideW - 6, [selected.text], 3, UI.ink, UI.panel)
   writeWrapped(canvas, sideX + 3, mapY + 6, sideW - 6, [`Coins ${hub.coins}  Loot sold ${hub.lootSold}`], 1, UI.soft, UI.panel)
   writeWrapped(canvas, sideX + 3, mapY + 7, sideW - 6, [`Pack ${hub.contentPacks.active}  Farm ${hub.village.sharedFarm.permissions}`], 1, UI.soft, UI.panel)
-  writeWrapped(canvas, sideX + 3, mapY + 8, sideW - 6, [`Seed ${villageSeedModeLabel(model.villageSeedMode)}. S cycles.`], 1, UI.gold, UI.panel)
-  writeWrapped(canvas, sideX + 3, mapY + 9, sideW - 6, ["G starts when loot, build, and food are ready."], 2, UI.focus, UI.panel)
+  writeWrapped(canvas, sideX + 3, mapY + 8, sideW - 6, [`Day ${hub.calendar.day} ${hub.calendar.season} ${hub.calendar.weather}. ${hub.calendar.festival}`], 1, UI.brass, UI.panel)
+  writeWrapped(canvas, sideX + 3, mapY + 9, sideW - 6, [`Seed ${villageSeedModeLabel(model.villageSeedMode)}. S cycles.`], 1, UI.gold, UI.panel)
+  writeWrapped(canvas, sideX + 3, mapY + 10, sideW - 6, ["G starts when loot, build, and food are ready."], 1, UI.focus, UI.panel)
 
   const scheduleY = mapY + locationH + 1
   drawPanel(canvas, sideX, scheduleY, sideW, 9, "NPC Schedule", UI.edge)
