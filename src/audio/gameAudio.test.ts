@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
 import type { UserSettings } from "../game/settingsStore.js"
 import { defaultSettings } from "../game/settingsStore.js"
 import { effectiveGroupVolumes, effectiveMasterVolume, GameAudioController, musicTrackForSurface } from "./gameAudio.js"
@@ -8,6 +9,12 @@ function settings(overrides: Partial<UserSettings> = {}): UserSettings {
 }
 
 describe("game audio", () => {
+  test("does not require Bun file APIs in published runtime audio loading", () => {
+    const source = readFileSync(new URL("./gameAudio.ts", import.meta.url), "utf8")
+
+    expect(source).not.toContain("Bun.file")
+  })
+
   test("routes menu and dungeon surfaces to different music loops", () => {
     expect(musicTrackForSurface({ screen: "start" })).toBe("title-settings")
     expect(musicTrackForSurface({ screen: "settings" })).toBe("title-settings")

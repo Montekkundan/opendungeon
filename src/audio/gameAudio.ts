@@ -1,4 +1,5 @@
 import { Audio, type AudioGroup, type AudioSound, type AudioVoice } from "@opentui/core"
+import { readFile } from "node:fs/promises"
 import type { UserSettings } from "../game/settingsStore.js"
 import {
   audioEvent,
@@ -186,7 +187,7 @@ export class GameAudioController {
   private async loadTrackFromEmbeddedBytes(trackId: AudioTrackId, audio: AudioLike) {
     const embeddedPath = embeddedTrackFiles[trackId]
     try {
-      const sound = audio.loadSound(await Bun.file(embeddedPath).bytes())
+      const sound = audio.loadSound(await readFile(embeddedPath))
       if (sound != null) return sound
     } catch {
       // Fall back to the source file during development or unusual packaged layouts.

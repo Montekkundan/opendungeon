@@ -190,7 +190,7 @@
 - [x] Rename and import the two local music files into the runtime audio folder with purpose-based names: `Quest_Preparation.mp3` -> `assets/opendungeon-assets/runtime/audio/title-settings-loop.mp3`, and `Beneath_the_Blackened_Stone.mp3` -> `assets/opendungeon-assets/runtime/audio/dungeon-loop.mp3`.
 - [x] Add third-party/source notes for the two local MP3s before bundling them in the package, even if they are project-owned.
 - [x] Build a real OpenTUI audio layer from `https://opentui.com/docs/core-concepts/audio/`: create one `Audio` engine, handle `error` events, call `start()` only when audio is enabled, load files with `loadSoundFile()` in dev, play music voices with `{ loop: true }`, dispose audio on app shutdown, and fail silently when no output device exists.
-- [x] For Bun compiled binaries, import music/SFX with `with { type: "file" }`, read bytes through `Bun.file(...).bytes()`, and use `loadSound()` so packaged executables can decode embedded audio without relying on loose file paths.
+- [x] For packaged audio, import music/SFX with `with { type: "file" }`, read bytes through the Node `fs` API, and use `loadSound()` so npm-installed CLI runs and compiled binaries can decode bundled audio without relying on loose file paths or Bun-only runtime APIs.
 - [x] Add named audio groups: `music`, `sfx`, and `ui`; use `setMasterVolume()` for master volume and `setGroupVolume()` for per-group controls.
 - [x] Loop `title-settings-loop.mp3` on title, character, mode, saves, cloud, settings, controls, tutorial, village, profile/cloud-style non-dungeon screens, and any non-game modal-only surfaces.
 - [x] Loop `dungeon-loop.mp3` only while the active run is visible or the player is inside dungeon gameplay/combat/talent-check/inventory/Book/map overlays; crossfade or stop/swap cleanly when leaving the dungeon.
@@ -205,7 +205,7 @@
 
 ### Packaging, Release, And Cross-Platform Validation
 
-- [ ] Remove or isolate Bun-only assumptions from the globally installed `opendungeon` package so Windows/macOS/Linux users can run the published CLI reliably.
+- [x] Remove or isolate Bun-only assumptions from the globally installed `opendungeon` package so Windows/macOS/Linux users can run the published CLI reliably. Runtime audio now uses Node `fs` instead of `Bun.file`, and user-facing multiplayer copy points to `opendungeon-host`; Bun-only release/dev scripts remain contributor tooling.
 - [x] Add install smoke coverage for npm global install on macOS, Linux, and Windows, including `opendungeon --help`, `opendungeon doctor`, and a short run start.
 - [ ] Keep `bun run package:check`, `bun test`, `bun run check`, `bun pm pack --dry-run`, and Changesets status green before release.
 - [ ] Verify trusted publishing and release workflow behavior after every changeset or package metadata change.

@@ -589,7 +589,7 @@ function drawMode(canvas: Canvas, model: AppModel) {
   const selectedMode = multiplayerModeForSelection(model.menuIndex)
   canvas.write(x + 4, y + height - 6, "GM worlds and AI-made content stay separate from the canonical story.", UI.muted, UI.panel)
   canvas.write(x + 4, y + height - 5, "Single Player runs start from New descent on the title screen.", UI.muted, UI.panel)
-  canvas.write(x + 4, y + height - 4, `Host local: bun run host -- --host 127.0.0.1 --mode ${selectedMode.id} --seed ${model.seed}`, UI.soft, UI.panel)
+  canvas.write(x + 4, y + height - 4, `Host local: opendungeon-host --host 127.0.0.1 --mode ${selectedMode.id} --seed ${model.seed}`, UI.soft, UI.panel)
   canvas.write(x + 4, y + height - 3, "Open another terminal tab with opendungeon join http://127.0.0.1:3737.", UI.muted, UI.panel)
   drawFooter(canvas, [
     ["Enter", "start"],
@@ -3284,7 +3284,7 @@ function drawDialog(canvas: Canvas, model: AppModel) {
     drawSettingRow(canvas, x + 4, y + 10, width - 8, "UI", `${model.uiHidden ? "hidden now" : "visible now"}; overlay ${onOff(model.settings.showUi)}; minimap ${onOff(model.settings.showMinimap)}`)
     drawSettingRow(canvas, x + 4, y + 12, width - 8, "Save path", saveDirectory())
     drawSettingRow(canvas, x + 4, y + 14, width - 8, "Cloud", "Supabase auth session stored outside saves")
-    drawSettingRow(canvas, x + 4, y + 16, width - 8, "Host", `bun run host -- --mode race --seed ${model.seed}`)
+    drawSettingRow(canvas, x + 4, y + 16, width - 8, "Host", `opendungeon-host --mode race --seed ${model.seed}`)
   }
 
   if (model.dialog === "inventory") {
