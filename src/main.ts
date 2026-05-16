@@ -380,6 +380,11 @@ renderer.keyInput.on("keypress", (key: KeyEvent) => {
 })
 
 function handleDialogKey(key: KeyEvent) {
+  if (model.dialog === "lobbyDisconnected") {
+    if (key.name === "escape" || key.name === "q" || key.name === "t" || isConfirmKey(key)) closeRunToTitle("Lobby host stopped. Returned to title.")
+    return
+  }
+
   if (model.dialog === "quit") {
     if (key.name === "s") {
       if (saveCurrentRun(true)) closeRunToTitle("Saved run and returned to title.")
@@ -1106,7 +1111,7 @@ function handleGameKey(key: KeyEvent) {
     if (before.x !== model.session.player.x || before.y !== model.session.player.y) {
       const direction = moveDirection(move.dx, move.dy)
       startPlayerMoveAnimation(direction)
-      sendLobbyAction("move", `Moved ${direction}`)
+      sendLobbyAction("move", `Moved ${direction}`, { direction })
     }
     if ((model.session.status as GameSession["status"]) === "victory" && model.session.hub.unlocked && !wasHubUnlocked) openVillageRoad("The final gate opens to the village.", Boolean(model.session.hub.lastCutsceneId))
   }
@@ -1973,11 +1978,23 @@ function connectLobby() {
     })
     socket.on("message", (message) => updateLobbyStatus(message.toString()))
     socket.on("close", () => {
-      if (lobbySocket === socket) lobbySocket = null
+      if (lobbySocket === socket) {
+        lobbySocket = null
+        lobbySocketUrl = ""
+      }
       lobbyConnectedPlayers = 0
+      appliedLobbyCommandIds.clear()
       model.remotePlayers = []
       model.coopGateStatus = ""
       clearCoopTutorialHold()
+      if (model.screen === "game" || model.screen === "village") {
+        const message = "Lobby host stopped. Multiplayer is disconnected; return to title and rejoin when the host is back."
+        model.session.log.unshift(message)
+        model.saveStatus = message
+        model.dialog = "lobbyDisconnected"
+        addToast(model.session, "Lobby disconnected", message, "warning")
+      }
+      refresh()
     })
     socket.on("error", () => {
       model.session.log.unshift("Lobby connection failed.")
@@ -2015,8 +2032,10 @@ function syncLobbyState() {
   )
 }
 
-function sendLobbyAction(actionType: LobbyActionType, label: string) {
+function sendLobbyAction(actionType: LobbyActionType, label: string, extraPayload: Record<string, string | number | boolean> = {}) {
   if (!lobbySocket || lobbySocket.readyState !== WebSocket.OPEN) return
+  const checkpoint = tutorialCoopCheckpoint(model.session)
+  const tutorialEnabled = model.session.tutorial.enabled && !model.session.tutorial.disabledAfterDeath && model.session.deaths === 0
   lobbySocket.send(
     JSON.stringify({
       type: "command",
@@ -2028,12 +2047,18 @@ function sendLobbyAction(actionType: LobbyActionType, label: string) {
       x: model.session.player.x,
       y: model.session.player.y,
       payload: {
+        ...extraPayload,
+        classId: model.session.hero.classId,
         screen: model.screen,
         floor: model.session.floor,
         turn: model.session.turn,
         hp: model.session.hp,
         x: model.session.player.x,
         y: model.session.player.y,
+        tutorialEnabled,
+        tutorialStage: checkpoint.stage,
+        tutorialReady: checkpoint.ready,
+        tutorialCompleted: checkpoint.completed,
       },
     }),
   )
@@ -2089,15 +2114,17 @@ function reconcileLocalSessionWithHostResult(command: Partial<LobbyCommandEntry>
   const result = command.result
   if (!result) return
   const accepted = result.accepted !== false
-  model.session.floor = Math.max(1, finiteHostInt(result.floor, model.session.floor))
-  model.session.hp = Math.max(0, finiteHostInt(result.hp, model.session.hp))
-  model.session.turn = Math.max(model.session.turn, finiteHostInt(result.turn, model.session.turn))
-  model.session.player = {
-    ...model.session.player,
-    x: finiteHostInt(result.x, model.session.player.x),
-    y: finiteHostInt(result.y, model.session.player.y),
+  if (accepted) {
+    model.session.floor = Math.max(1, finiteHostInt(result.floor, model.session.floor))
+    model.session.hp = Math.max(0, finiteHostInt(result.hp, model.session.hp))
+    model.session.turn = Math.max(model.session.turn, finiteHostInt(result.turn, model.session.turn))
+    model.session.player = {
+      ...model.session.player,
+      x: finiteHostInt(result.x, model.session.player.x),
+      y: finiteHostInt(result.y, model.session.player.y),
+    }
+    model.session.status = String(result.status || model.session.status) as GameSession["status"]
   }
-  model.session.status = String(result.status || model.session.status) as GameSession["status"]
 
   const message = `${accepted ? "Host applied" : "Host rejected"} ${command.type ?? "command"}: ${result.message}`
   if (model.session.log[0] !== message) model.session.log.unshift(message)

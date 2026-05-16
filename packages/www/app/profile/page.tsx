@@ -76,8 +76,8 @@ export default async function ProfilePage() {
           <h1>Profile</h1>
           {configured ? null : (
             <p data-slot="notice">
-              Supabase env vars are not configured yet. The website still
-              builds, but login and profile data stay disabled.
+              Account login is not configured for this environment yet. The
+              website still builds, but login and profile data stay disabled.
             </p>
           )}
           {configured && !user ? (

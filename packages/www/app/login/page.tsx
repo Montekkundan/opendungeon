@@ -22,16 +22,15 @@ export default async function LoginPage({ searchParams }: PageProps) {
       <div data-component="container">
         <Header />
         <article data-component="docs">
-          <p data-slot="eyebrow">Supabase</p>
+          <p data-slot="eyebrow">account</p>
           <h1>Login</h1>
           <p>
-            Use Supabase Auth to link a website profile to future cloud saves,
-            generated worlds, and lobby metadata.
+            Log in to link a website profile to future cloud saves, generated
+            worlds, and lobby metadata.
           </p>
           {configured ? null : (
             <p data-slot="notice">
-              Set NEXT_PUBLIC_SUPABASE_URL and
-              NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY to enable auth.
+              Account login is not configured for this environment yet.
             </p>
           )}
           {error ? <p data-slot="notice">{error}</p> : null}

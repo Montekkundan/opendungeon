@@ -1,13 +1,28 @@
 # Game mechanics
 
-opendungeon separates deterministic rules from presentation. Movement, combat rolls, loot, quest state, NPC interactions, and floor events all run through the game session layer so terminal UI, headless tests, and future network sync can share the same rules.
+opendungeon keeps the dungeon rules consistent across solo and co-op play. Movement, combat rolls, loot, quest state, NPC interactions, and floor events all resolve through the same game rules.
 
 ## Deterministic state
 
 - Dungeon floors are generated from a seed.
 - Legal movement can reveal fog, trigger traps, enter combat, pick up loot, or move the run to a new floor.
 - Saves preserve the active run, player stats, inventory, quest state, map discovery, and local metadata.
-- The headless runner can replay scripted actions and assert invariants without depending on terminal rendering.
+
+## Seeds
+
+A seed is the number used to build the dungeon. The same seed on the same game version should create the same starting floor shape, room placement, floor modifier, actor placement, and deterministic event placement. Player choices still matter after that: movement order, combat rolls, talent checks, purchases, inventory use, and quest choices can make two runs with the same seed diverge.
+
+Use seeds when you want to:
+
+- Reproduce a bug on the same dungeon.
+- Share a co-op lobby where every player starts from the same generated world.
+- Replay a challenge and compare decisions.
+
+In hosted multiplayer, the host command owns the seed:
+
+```txt
+opendungeon-host --host 0.0.0.0 --mode coop --seed 2423368 --port 3737
+```
 
 ## Interaction rules
 
@@ -29,10 +44,10 @@ The Book is split by category: story notes, people, and monsters. Monster entrie
 
 ## Failure and recovery
 
-The game should expose bad states clearly instead of silently losing progress. Save backups, export commands, deterministic seeds, and scripted smoke tests are all part of making failures recoverable.
+The game should expose bad states clearly instead of silently losing progress. Save backups, export commands, and replayable seeds are part of making failures recoverable.
 
 ## Planned polish
 
 - Better reduced-motion and camera settings.
 - More direct diagnostics for blocked multiplayer joins.
-- Richer checks around save import, cloud save drift, and AI-admin patch validation.
+- Richer checks around save import, cloud save drift, and GM patch validation.

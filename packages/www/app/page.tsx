@@ -1,7 +1,7 @@
 import { Command } from "@/components/command";
+import { InstallTabs } from "@/components/install-tabs";
 import { Footer, Header } from "@/components/site-chrome";
 import { gameModes } from "@/lib/game-modes";
-import { installCommand } from "@/lib/install-script";
 
 export default function Page() {
   return (
@@ -12,22 +12,16 @@ export default function Page() {
         <div data-component="content">
           <section data-component="hero">
             <div data-slot="hero-copy">
-              <h1>A terminal dungeon that remembers what you do</h1>
+              <h1>A terminal dungeon crawler</h1>
               <p>
-                Seeded runs stay deterministic, while validated AI content
-                patches add quests, bosses, loot, lore, and sprites.
+                Play solo or co-op from the same seed. Local runs stay
+                deterministic; GM worlds can add approved AI-assisted changes.
                 <span data-slot="br" />
-                Play locally first, then sync worlds through Supabase when you
-                are ready.
+                Install the CLI, start a descent, or host a lobby for friends.
               </p>
             </div>
 
-            <section aria-label="Install options" data-component="install">
-              <Command value={installCommand} />
-              <Command value="opendungeon" />
-              <Command value="opendungeon login test" />
-              <Command value="opendungeon --login github" />
-            </section>
+            <InstallTabs />
           </section>
 
           <section
@@ -48,8 +42,8 @@ export default function Page() {
               <h3>What is opendungeon?</h3>
               <p>
                 opendungeon is a terminal roguelike built with OpenTUI. The
-                engine owns the rules; the AI admin proposes validated world
-                config patches.
+                engine owns movement, combat, loot, quests, and village
+                progression.
               </p>
             </div>
             <ul>
@@ -63,9 +57,8 @@ export default function Page() {
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>AI-admin content</strong> Events and quests expand
-                  after milestone progress without breaking deterministic
-                  gameplay.
+                  <strong>GM worlds</strong> Logged-in GMs can approve
+                  world-specific changes without replacing the canonical story.
                 </div>
               </li>
               <li>
@@ -113,18 +106,17 @@ export default function Page() {
               aria-label="Local multiplayer commands"
               data-component="install"
             >
-              <Command value="bun run host -- --host 127.0.0.1 --mode coop --seed 2423368 --port 3737" />
-              <Command value="OPENDUNGEON_PLAYER_NAME=Mira bun run dev -- join http://127.0.0.1:3737" />
-              <Command value="OPENDUNGEON_PLAYER_NAME=Sol bun run dev -- join http://127.0.0.1:3737" />
+              <Command value="opendungeon-host --host 127.0.0.1 --mode coop --seed 2423368 --port 3737" />
+              <Command value="OPENDUNGEON_PLAYER_NAME=Mira opendungeon join http://127.0.0.1:3737" />
+              <Command value="OPENDUNGEON_PLAYER_NAME=Sol opendungeon join http://127.0.0.1:3737" />
             </section>
           </section>
 
           <section data-component="preview-copy">
-            <h3>Cloud-backed, local-playable</h3>
+            <h3>Accounts are optional</h3>
             <p>
-              Supabase handles auth and world storage. Vercel can host this
-              website and account flow. The current live co-op server still
-              needs the CLI host or a future Supabase Realtime adapter.
+              Play locally without logging in. Use an account for profile pages,
+              saved lobby metadata, and GM-created worlds.
             </p>
           </section>
         </div>

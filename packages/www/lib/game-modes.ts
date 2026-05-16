@@ -13,7 +13,7 @@ export const gameModes = [
     name: "Multiplayer",
     status: "co-op story",
     summary:
-      "The same authored story, rules, lore, and assets, with multiple users sharing the run and village like Stardew Valley co-op.",
+      "The same authored story, rules, lore, and assets, with multiple users sharing the run, village, homes, and permissions.",
     details:
       "The current CLI host is the first version of this path. A stronger authoritative sync model is still required for internet-scale play.",
   },
@@ -24,7 +24,7 @@ export const gameModes = [
     summary:
       "A Dungeon Master page where a logged-in GM watches players and uses AI-assisted tools to create world-specific lore, levels, quests, and sprites.",
     details:
-      "GM-created content is saved per world in Supabase and must stay separate from canonical single-player assets and story.",
+      "GM-created content is saved per world and must stay separate from canonical single-player assets and story.",
   },
 ] as const;
 

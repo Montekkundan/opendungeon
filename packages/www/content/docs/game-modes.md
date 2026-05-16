@@ -18,7 +18,7 @@ Use Single Player when you want the authored roguelike RPG: tutorial rooms, d20 
 
 ## Multiplayer
 
-Multiplayer uses the same authored story loop, mechanics, lore, and assets, but adds multiple players to the shared dungeon and village. The target feel is Stardew-style co-op: shared farm and village state, separate player houses, shared dungeon objectives, and permissions for storage, upgrades, and shop/farm work.
+Multiplayer uses the same authored story loop, mechanics, lore, and assets, but adds multiple players to the shared dungeon and village. The target feel is shared co-op progression: shared farm and village state, separate player houses, shared dungeon objectives, and permissions for storage, upgrades, and shop/farm work.
 
 The current CLI host is the first implementation. It can run same-laptop or LAN sessions, but internet-grade co-op still needs a stronger authoritative sync model.
 
@@ -26,11 +26,11 @@ Use Multiplayer when friends should play the same canonical run together. One lo
 
 ## Multiplayer with GM
 
-Multiplayer with GM is for a logged-in Dungeon Master or Game Master. The GM uses a website console to watch connected players, read action logs, prompt an AI assistant, preview tool-call output, generate small terminal-safe sprites, and approve validated changes before players receive them.
+Multiplayer with GM is for a logged-in Dungeon Master or Game Master. The GM uses a website console to watch connected players, read action logs, prompt an AI assistant, preview suggested changes, generate small terminal-safe sprites, and approve changes before players receive them.
 
-GM content belongs to a GM-created world in Supabase. New lore, room layouts, quests, monster variants, and generated assets must stay separate from the canonical Single Player story and from other users' worlds.
+GM content belongs to a GM-created world. New lore, room layouts, quests, monster variants, and generated assets must stay separate from the canonical Single Player story and from other users' worlds.
 
-Use Multiplayer with GM when the table wants D&D-style authorship: the GM can ask AI for lore, rooms, monster variants, quests, or sprite prompts, then approve safe patches into that GM world. This mode requires login, Supabase ownership, AI Gateway model calls, validated tool calls, and realtime delivery before it can be live.
+Use Multiplayer with GM when the table wants GM-led authorship: the GM can ask AI for lore, rooms, monster variants, quests, or sprite prompts, then approve safe patches into that GM world. This mode requires login, world ownership, validated AI output, and realtime delivery before it can be live.
 
 ## Current status
 
@@ -38,4 +38,4 @@ Use Multiplayer with GM when the table wants D&D-style authorship: the GM can as
 - `/gm` is a logged-in website shell for the future GM console.
 - The terminal client still owns the current live game loop.
 - Automated lobby smoke tests cover host startup, two guest players, spectator join, WebSocket state sync, disconnect, and result submission.
-- Realtime GM patches need Supabase world ownership, schema validation, an AI Gateway chat route, tool-call audit records, and a realtime delivery path before players can receive generated changes.
+- Realtime GM patches need world ownership, validation, approval history, and a realtime delivery path before players can receive generated changes.

@@ -45,10 +45,10 @@ export const wikiSections = [
     ],
   },
   {
-    title: "Cloud and AI admin",
+    title: "GM worlds and accounts",
     items: [
       "Supabase is the current auth and world-storage target for website profiles and future cloud saves.",
-      "AI-admin output is data-driven: validated world config patches, generated asset metadata, and readable run consequences.",
+      "AI-assisted output belongs to GM worlds: validated world config patches, generated asset metadata, and readable run consequences.",
       "Real-time shared-state tech is still separate from the website; the current game lobby server is a WebSocket host.",
     ],
   },

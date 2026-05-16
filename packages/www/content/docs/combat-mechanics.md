@@ -42,4 +42,4 @@ Combat is meant to read like a small tactical puzzle, closer to elemental matchu
 
 ## Headless checks
 
-Combat needs headless coverage for action legality, target selection, status expiry, flee results, death handling, and save consistency after a fight.
+Combat should keep making action legality, target selection, status expiry, flee results, death handling, and save consistency clear after each fight.
