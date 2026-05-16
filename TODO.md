@@ -183,7 +183,7 @@
 - [ ] Verify every major screen in Ghostty: title, character, settings, tutorial, game, combat, talent check, inventory, Book tabs, map, village, save manager, cloud, and multiplayer.
 - [x] Fix any UI text that truncates important instructions with `...`; action prompts should wrap or use a scrollable/detail panel.
 - [ ] Add status-effect and combat-animation variants for poison, burn, guard, flee, ambush, boss phases, natural 20, and natural 1.
-- [ ] Keep runtime art terminal-native; do not import high-resolution packs unless they sample cleanly into terminal cells.
+- [x] Keep runtime art terminal-native; do not import high-resolution packs unless they sample cleanly into terminal cells.
 
 ### Audio, Music, And SFX
 

@@ -95,6 +95,8 @@ export type ReferenceAssetWizardReport = {
   entries: ReferenceAssetWizardEntry[]
 }
 
+type TerminalPreview = ReferenceAssetWizardEntry["terminalPreview"]
+
 export function loadReferenceAssetImportManifest(path: string): ReferenceAssetImportManifest {
   const parsed = JSON.parse(readFileSync(path, "utf8")) as ReferenceAssetImportManifest
   const errors = validateReferenceAssetImportManifest(parsed)
@@ -187,6 +189,7 @@ export function buildReferenceAssetWizardReport(manifest: ReferenceAssetImportMa
     if (asset.sha256 && hash && hash !== asset.sha256.toLowerCase()) blockers.push(`hash mismatch expected ${asset.sha256}`)
 
     const terminalPreview = hash ? terminalPreviewSummary(source) : emptyPreview()
+    blockers.push(...terminalPreviewBlockers(terminalPreview))
     return {
       id: asset.id,
       kind: asset.kind,
@@ -297,4 +300,16 @@ function previewCell(colorCount: number, opaquePixels: number, transparentPixels
   if (transparentPixels > opaquePixels * 4) return "sparse"
   if (colorCount > 64) return "too-many-colors"
   return "terminal-readable"
+}
+
+function terminalPreviewBlockers(preview: TerminalPreview) {
+  const blockers: string[] = []
+  if (preview.sampleCell === "missing") return blockers
+  if (preview.opaquePixels === 0) blockers.push("terminal preview has no visible pixels")
+  if (preview.width > 192 || preview.height > 192) blockers.push("high-resolution source must be downsampled before runtime import")
+  if (preview.width > 512 || preview.height > 512) blockers.push("source image is too large for terminal import")
+  if (preview.colorCount > 64) blockers.push("too many colors for terminal-native sampling")
+  if (preview.sampleCell === "low-detail") blockers.push("terminal preview has too little detail")
+  if (preview.sampleCell === "sparse") blockers.push("terminal preview is too sparse")
+  return blockers
 }

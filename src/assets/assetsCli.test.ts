@@ -170,6 +170,42 @@ describe("assets CLI", () => {
     }
   })
 
+  test("blocks high-resolution art before runtime import", () => {
+    const root = mkdtempSync(join(tmpdir(), "opendungeon-reference-assets-"))
+    try {
+      const sourcePath = join(root, "large.png")
+      const manifestPath = join(root, "manifest.json")
+      writeFileSync(sourcePath, gradientPngBytes(256, 64))
+      writeFileSync(
+        manifestPath,
+        JSON.stringify({
+          version: 1,
+          source: { name: "Large art pack", url: "https://example.com/large-pack" },
+          assets: [
+            {
+              id: "large-candidate",
+              kind: "terrain-sheet",
+              source: "large.png",
+              target: "runtime/tiles/large-candidate.png",
+              license: { id: "CC0-1.0", sourceUrl: "https://example.com/large-pack/license" },
+              approved: true,
+              accessibilityScore: 90,
+            },
+          ],
+        }),
+      )
+
+      const report = runAssetsWizard(["--manifest", manifestPath, "--source-root", root, "--runtime-root", join(root, "runtime-root")])
+      expect(report.readyCount).toBe(0)
+      expect(report.pendingCount).toBe(1)
+      expect(report.entries[0]?.terminalPreview.width).toBe(256)
+      expect(report.entries[0]?.blockers).toContain("high-resolution source must be downsampled before runtime import")
+      expect(report.entries[0]?.blockers).toContain("too many colors for terminal-native sampling")
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   test("rejects unsafe reference asset manifests", () => {
     expect(
       validateReferenceAssetImportManifest({
@@ -208,5 +244,19 @@ function tinyPngBytes() {
     png.data[offset + 2] = pixel[2]
     png.data[offset + 3] = pixel[3]
   })
+  return new Uint8Array(PNG.sync.write(png))
+}
+
+function gradientPngBytes(width: number, height: number) {
+  const png = new PNG({ width, height })
+  for (let y = 0; y < png.height; y++) {
+    for (let x = 0; x < png.width; x++) {
+      const offset = (png.width * y + x) << 2
+      png.data[offset] = x % 256
+      png.data[offset + 1] = y % 256
+      png.data[offset + 2] = (x + y) % 256
+      png.data[offset + 3] = 255
+    }
+  }
   return new Uint8Array(PNG.sync.write(png))
 }
