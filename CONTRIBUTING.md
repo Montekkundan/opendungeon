@@ -130,8 +130,8 @@ terminal preview.
 1. Download the candidate pack outside the committed runtime folder.
 2. Record the source URL, license file or license URL, and reviewer notes in a
    manifest next to the downloaded source.
-3. Run a dry-run import and inspect the target paths, hashes, approval state,
-   and terminal accessibility score.
+3. Run the import wizard and inspect the license status, target paths, hashes,
+   terminal preview sample, approval state, and terminal accessibility score.
 4. Mark only approved files with `approved: true`, then run the real import.
 5. Add a focused test, screenshot note, or headless/UI check that proves the new
    pack improves a visible game surface.
@@ -169,6 +169,7 @@ Example manifest:
 Commands:
 
 ```txt
+opendungeon assets wizard --manifest /tmp/opendungeon-assets/example-pack/manifest.json --source-root /tmp/opendungeon-assets/example-pack
 opendungeon assets import --manifest /tmp/opendungeon-assets/example-pack/manifest.json --source-root /tmp/opendungeon-assets/example-pack --dry-run
 opendungeon assets import --manifest /tmp/opendungeon-assets/example-pack/manifest.json --source-root /tmp/opendungeon-assets/example-pack
 ```

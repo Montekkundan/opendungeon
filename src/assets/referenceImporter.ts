@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs"
 import { dirname, isAbsolute, normalize, resolve, sep } from "node:path"
+import { PNG } from "pngjs"
 import { assetPath } from "./spriteSampler.js"
 
 const acceptedReferenceLicenseIds = [
@@ -68,6 +69,30 @@ export type ImportedReferenceAsset = {
 export type ReferenceAssetImportResult = {
   dryRun: boolean
   imported: ImportedReferenceAsset[]
+}
+
+export type ReferenceAssetWizardEntry = ImportedReferenceAsset & {
+  kind?: ReferenceAssetEntry["kind"]
+  approvedForImport: boolean
+  licenseAccepted: boolean
+  terminalPreview: {
+    width: number
+    height: number
+    colorCount: number
+    transparentPixels: number
+    opaquePixels: number
+    sampleCell: string
+  }
+  blockers: string[]
+  notes?: string
+}
+
+export type ReferenceAssetWizardReport = {
+  sourceName?: string
+  sourceUrl?: string
+  readyCount: number
+  pendingCount: number
+  entries: ReferenceAssetWizardEntry[]
 }
 
 export function loadReferenceAssetImportManifest(path: string): ReferenceAssetImportManifest {
@@ -141,6 +166,53 @@ export function importReferenceAssets(manifest: ReferenceAssetImportManifest, op
   return { dryRun: Boolean(options.dryRun), imported }
 }
 
+export function buildReferenceAssetWizardReport(manifest: ReferenceAssetImportManifest, options: ReferenceAssetImportOptions = {}): ReferenceAssetWizardReport {
+  const errors = validateReferenceAssetImportManifest(manifest)
+  if (errors.length) throw new Error(`Invalid reference asset manifest: ${errors.join(" ")}`)
+
+  const sourceRoot = resolve(options.sourceRoot ?? process.cwd())
+  const runtimeRoot = resolve(options.runtimeRoot ?? assetPath("opendungeon-assets"))
+  const entries = manifest.assets.map((asset) => {
+    const source = resolveSource(sourceRoot, asset.source)
+    const target = resolveInside(runtimeRoot, safeRuntimeTarget(asset.target) || asset.target)
+    const licenseFile = asset.license.file ? resolveSource(sourceRoot, asset.license.file) : null
+    const blockers: string[] = []
+    if (!existsSync(source) || !statSync(source).isFile()) blockers.push(`missing source ${source}`)
+    if (licenseFile && (!existsSync(licenseFile) || !statSync(licenseFile).isFile())) blockers.push(`missing license file ${licenseFile}`)
+    if (asset.approved !== true) blockers.push("not approved")
+    if (asset.accessibilityScore === undefined) blockers.push("missing accessibility score")
+    if (asset.accessibilityScore !== undefined && asset.accessibilityScore < 70) blockers.push("accessibility score below 70")
+
+    const hash = blockers.some((blocker) => blocker.startsWith("missing source")) ? "" : sha256File(source)
+    if (asset.sha256 && hash && hash !== asset.sha256.toLowerCase()) blockers.push(`hash mismatch expected ${asset.sha256}`)
+
+    const terminalPreview = hash ? terminalPreviewSummary(source) : emptyPreview()
+    return {
+      id: asset.id,
+      kind: asset.kind,
+      source,
+      target,
+      licenseId: asset.license.id,
+      sha256: hash,
+      approved: asset.approved === true,
+      approvedForImport: blockers.length === 0,
+      licenseAccepted: acceptedReferenceLicenseIds.includes(asset.license.id as ReferenceAssetLicenseId),
+      accessibilityScore: asset.accessibilityScore,
+      terminalPreview,
+      blockers,
+      notes: asset.notes,
+    }
+  })
+
+  return {
+    sourceName: manifest.source?.name,
+    sourceUrl: manifest.source?.url,
+    readyCount: entries.filter((entry) => entry.approvedForImport).length,
+    pendingCount: entries.filter((entry) => !entry.approvedForImport).length,
+    entries,
+  }
+}
+
 function validateLicense(label: string, license: ReferenceAssetLicense | undefined, errors: string[]) {
   if (!license || typeof license !== "object") {
     errors.push(`${label} needs license metadata.`)
@@ -178,4 +250,51 @@ function resolveInside(root: string, target: string) {
 
 function sha256File(path: string) {
   return createHash("sha256").update(readFileSync(path)).digest("hex")
+}
+
+function terminalPreviewSummary(path: string) {
+  const png = PNG.sync.read(readFileSync(path))
+  const colors = new Set<string>()
+  let transparentPixels = 0
+  let opaquePixels = 0
+  for (let y = 0; y < png.height; y++) {
+    for (let x = 0; x < png.width; x++) {
+      const index = (png.width * y + x) << 2
+      const alpha = png.data[index + 3]
+      if (alpha < 36) {
+        transparentPixels += 1
+        continue
+      }
+      opaquePixels += 1
+      colors.add(`${png.data[index]},${png.data[index + 1]},${png.data[index + 2]}`)
+    }
+  }
+
+  return {
+    width: png.width,
+    height: png.height,
+    colorCount: colors.size,
+    transparentPixels,
+    opaquePixels,
+    sampleCell: previewCell(colors.size, opaquePixels, transparentPixels),
+  }
+}
+
+function emptyPreview() {
+  return {
+    width: 0,
+    height: 0,
+    colorCount: 0,
+    transparentPixels: 0,
+    opaquePixels: 0,
+    sampleCell: "missing",
+  }
+}
+
+function previewCell(colorCount: number, opaquePixels: number, transparentPixels: number) {
+  if (opaquePixels === 0) return "empty"
+  if (colorCount <= 3) return "low-detail"
+  if (transparentPixels > opaquePixels * 4) return "sparse"
+  if (colorCount > 64) return "too-many-colors"
+  return "terminal-readable"
 }

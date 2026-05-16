@@ -2,9 +2,11 @@ import { generateSpriteImage, type GeneratedImage } from "../cloud/aiGateway.js"
 import { storeGeneratedSpriteAsset, type StoredGeneratedAsset } from "../cloud/generatedAssets.js"
 import {
   importReferenceAssets,
+  buildReferenceAssetWizardReport,
   loadReferenceAssetImportManifest,
   type ReferenceAssetImportOptions,
   type ReferenceAssetImportResult,
+  type ReferenceAssetWizardReport,
 } from "./referenceImporter.js"
 import { generatedSpriteSampleSummary, type GeneratedSpriteSample } from "./generatedSpriteSampler.js"
 
@@ -38,6 +40,11 @@ export async function handleAssetsCommand(args: string[]): Promise<number | null
       const result = runAssetsImport(args.slice(2))
       console.log(formatAssetImportResult(result))
       return 0
+    }
+    if (args[1] === "wizard") {
+      const result = runAssetsWizard(args.slice(2))
+      console.log(formatAssetWizardReport(result))
+      return result.pendingCount > 0 ? 1 : 0
     }
 
     console.error(assetsCommandHelp())
@@ -73,6 +80,16 @@ export function runAssetsImport(args: string[]): ReferenceAssetImportResult {
   return importReferenceAssets(loadReferenceAssetImportManifest(manifestPath), options)
 }
 
+export function runAssetsWizard(args: string[]): ReferenceAssetWizardReport {
+  const manifestPath = valueAfter(args, "--manifest")
+  if (!manifestPath) throw new Error("Usage: opendungeon assets wizard --manifest <path> [--source-root <path>] [--runtime-root <path>]")
+  return buildReferenceAssetWizardReport(loadReferenceAssetImportManifest(manifestPath), {
+    sourceRoot: valueAfter(args, "--source-root"),
+    runtimeRoot: valueAfter(args, "--runtime-root"),
+    dryRun: true,
+  })
+}
+
 export function formatAssetGenerateResult(result: AssetGenerateResult) {
   if (result.dryRun) {
     return [`asset generate dry-run`, `assetId: ${result.assetId}`, `prompt: ${result.prompt}`].join("\n")
@@ -96,9 +113,24 @@ export function formatAssetImportResult(result: ReferenceAssetImportResult) {
   return [header, ...lines].join("\n")
 }
 
+export function formatAssetWizardReport(result: ReferenceAssetWizardReport) {
+  const title = result.sourceName ? `asset import wizard: ${result.sourceName}` : "asset import wizard"
+  const source = result.sourceUrl ? `source: ${result.sourceUrl}` : ""
+  const summary = `ready ${result.readyCount}, pending ${result.pendingCount}`
+  const lines = result.entries.map((asset) => {
+    const status = asset.approvedForImport ? "ready" : "pending"
+    const preview = `${asset.terminalPreview.width}x${asset.terminalPreview.height}, ${asset.terminalPreview.colorCount} colors, ${asset.terminalPreview.sampleCell}`
+    const accessibility = asset.accessibilityScore === undefined ? "a11y missing" : `a11y ${asset.accessibilityScore}/100`
+    const blockers = asset.blockers.length ? ` blockers: ${asset.blockers.join("; ")}` : ""
+    return `${asset.id}: ${status}, ${asset.licenseId}, ${accessibility}, ${preview}.${blockers}`
+  })
+  return [title, source, summary, ...lines].filter(Boolean).join("\n")
+}
+
 export function assetsCommandHelp() {
   return `Asset commands:
   opendungeon assets generate <asset-id> --prompt <prompt> [--dry-run]
+  opendungeon assets wizard --manifest <path> [--source-root <path>] [--runtime-root <path>]
   opendungeon assets import --manifest <path> [--source-root <path>] [--runtime-root <path>] [--dry-run] [--allow-unapproved]`
 }
 

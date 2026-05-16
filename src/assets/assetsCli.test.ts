@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { PNG } from "pngjs"
-import { formatAssetGenerateResult, formatAssetImportResult, runAssetsGenerate, runAssetsImport } from "./assetsCli.js"
+import { formatAssetGenerateResult, formatAssetImportResult, formatAssetWizardReport, runAssetsGenerate, runAssetsImport, runAssetsWizard } from "./assetsCli.js"
 import { validateReferenceAssetImportManifest } from "./referenceImporter.js"
 import { buildSpriteImagePrompt, loadSpriteGenerationSkill } from "./spriteGenerationSkill.js"
 
@@ -127,6 +127,44 @@ describe("assets CLI", () => {
       expect(() => runAssetsImport(["--manifest", manifestPath, "--source-root", root, "--runtime-root", join(root, "runtime-root")])).toThrow("is not approved")
       const localExperiment = runAssetsImport(["--manifest", manifestPath, "--source-root", root, "--runtime-root", join(root, "runtime-root"), "--allow-unapproved"])
       expect(localExperiment.imported[0]?.approved).toBe(false)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test("builds a content-pack wizard report with terminal preview blockers", () => {
+    const root = mkdtempSync(join(tmpdir(), "opendungeon-reference-assets-"))
+    try {
+      const sourcePath = join(root, "candidate.png")
+      const manifestPath = join(root, "manifest.json")
+      writeFileSync(sourcePath, tinyPngBytes())
+      writeFileSync(
+        manifestPath,
+        JSON.stringify({
+          version: 1,
+          source: { name: "Wizard pack", url: "https://example.com/wizard-pack" },
+          assets: [
+            {
+              id: "wizard-candidate",
+              kind: "terrain-sheet",
+              source: "candidate.png",
+              target: "runtime/tiles/wizard-candidate.png",
+              license: { id: "CC0-1.0", sourceUrl: "https://example.com/wizard-pack/license" },
+              approved: false,
+              accessibilityScore: 62,
+            },
+          ],
+        }),
+      )
+
+      const report = runAssetsWizard(["--manifest", manifestPath, "--source-root", root, "--runtime-root", join(root, "runtime-root")])
+      expect(report.readyCount).toBe(0)
+      expect(report.pendingCount).toBe(1)
+      expect(report.entries[0]?.terminalPreview.width).toBe(2)
+      expect(report.entries[0]?.blockers).toContain("not approved")
+      expect(report.entries[0]?.blockers).toContain("accessibility score below 70")
+      expect(formatAssetWizardReport(report)).toContain("asset import wizard: Wizard pack")
+      expect(formatAssetWizardReport(report)).toContain("pending, CC0-1.0, a11y 62/100")
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
