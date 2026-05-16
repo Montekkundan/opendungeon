@@ -131,6 +131,8 @@ test("host keeps co-op tutorial movement streams smooth per player", async () =>
     expect(miraFirst?.accepted).toBe(true)
     expect(miraSecond?.x).toBeGreaterThan(miraFirst?.x ?? 0)
     expect(solFirst).toMatchObject({ accepted: true, x: 13, y: 10 })
+    expect(moved.coopStates.find((state) => state.name === "Mira")).toMatchObject({ x: miraSecond?.x, y: 10 })
+    expect(moved.coopStates.find((state) => state.name === "Sol")).toMatchObject({ x: 13, y: 10 })
 
     mira.send(JSON.stringify({ type: "command", commandType: "move", label: "Moved nowhere", floor: 1, turn: 3, hp: 19, x: 10, y: 10, payload: {} }))
     const rejected = await waitForSnapshot(sol, (snapshot) => snapshot.commands.some((command) => command.label === "Moved nowhere"))
