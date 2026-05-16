@@ -59,7 +59,7 @@
     "changeset": "changeset",
     "version-packages": "changeset version && bun run sync-version && bun install --lockfile-only",
     "sync-version": "bun run scripts/sync-version.ts",
-    "release:npm": "npm publish --access public",
+    "release:npm": "bun run scripts/release-npm.ts",
     "package:release": "bun run scripts/package-release.ts",
     "package:check": "bun run check && bun test && bun run build:js && bun run package:install-smoke && bun pm pack --dry-run",
     "package:install-smoke": "bun run scripts/package-install-smoke.ts",
