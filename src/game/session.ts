@@ -46,6 +46,7 @@ export type MultiplayerMode = "solo" | "coop" | "race"
 export const heroClassIds = ["warden", "arcanist", "ranger", "duelist", "cleric", "engineer", "witch", "grave-knight"] as const
 export type HeroClass = (typeof heroClassIds)[number]
 const tutorialStartingWound = 6
+const tutorialGateHalfSpan = 3
 
 export type Hero = {
   name: string
@@ -2008,9 +2009,9 @@ function prepareTutorialArea(session: GameSession) {
     }
   }
 
-  setTile(session.dungeon, gateOne, "door")
-  setTile(session.dungeon, gateTwo, "door")
   session.tutorial.gatePoints = [gateOne, gateTwo]
+  closeTutorialGate(session, 0)
+  closeTutorialGate(session, 1)
   session.player = { x: x0 + Math.floor(roomW / 2), y: centerY }
   session.dungeon.playerStart = { ...session.player }
   session.dungeon.actors = session.dungeon.actors.filter((actor) => !pointInRect(actor.position, bounds))
@@ -2733,8 +2734,8 @@ function tutorialGateMessage(session: GameSession) {
 function tutorialGateMessageForPoint(session: GameSession, point: Point) {
   const tutorial = session.tutorial
   if (!tutorial.enabled || tutorial.completed || tutorial.disabledAfterDeath || session.deaths > 0) return null
-  const gateIndex = tutorial.gatePoints.findIndex((gate) => samePoint(gate, point))
-  if (gateIndex < 0 || tileAt(session.dungeon, point) !== "door") return null
+  const gateIndex = tutorialGateIndexForPoint(session, point)
+  if (gateIndex < 0) return null
   if (gateIndex === 0 && tutorial.stage === "movement") {
     const hold = tutorialGateHold(session, "movement")
     if (hold) return `Area I gate waits for ${formatCoopWaitingNames(hold.waitingNames)}.`
@@ -2750,7 +2751,27 @@ function tutorialGateMessageForPoint(session: GameSession, point: Point) {
 
 function openTutorialGate(session: GameSession, index: number) {
   const point = session.tutorial.gatePoints[index]
-  if (point && tileAt(session.dungeon, point) === "door") setTile(session.dungeon, point, "floor")
+  if (!point) return
+  for (let dy = -tutorialGateHalfSpan; dy <= tutorialGateHalfSpan; dy++) {
+    const gateTile = { x: point.x, y: point.y + dy }
+    const tile = tileAt(session.dungeon, gateTile)
+    if (tile === "door" || tile === "wall") setTile(session.dungeon, gateTile, "floor")
+  }
+}
+
+function closeTutorialGate(session: GameSession, index: number) {
+  const point = session.tutorial.gatePoints[index]
+  if (!point) return
+  for (let dy = -tutorialGateHalfSpan; dy <= tutorialGateHalfSpan; dy++) {
+    setTile(session.dungeon, { x: point.x, y: point.y + dy }, "door")
+  }
+}
+
+function tutorialGateIndexForPoint(session: GameSession, point: Point) {
+  if (tileAt(session.dungeon, point) !== "door") return -1
+  return session.tutorial.gatePoints.findIndex(
+    (gate) => point.x === gate.x && Math.abs(point.y - gate.y) <= tutorialGateHalfSpan,
+  )
 }
 
 function movementTutorialComplete(tutorial: RunTutorialState) {

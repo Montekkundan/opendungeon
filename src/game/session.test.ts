@@ -414,12 +414,22 @@ describe("game session", () => {
     expect(gateTwo).toBeDefined()
     expect(tileAt(session.dungeon, gateOne!)).toBe("door")
     expect(tileAt(session.dungeon, gateTwo!)).toBe("door")
+    const lowerGateOne = { x: gateOne!.x, y: gateOne!.y + 3 }
+    const lowerGateTwo = { x: gateTwo!.x, y: gateTwo!.y + 3 }
+    expect(tileAt(session.dungeon, lowerGateOne)).toBe("door")
+    expect(tileAt(session.dungeon, lowerGateTwo)).toBe("door")
 
     session.player = { x: gateOne!.x - 1, y: gateOne!.y }
     tryMove(session, 1, 0)
 
     expect(session.floor).toBe(1)
     expect(session.player).toEqual({ x: gateOne!.x - 1, y: gateOne!.y })
+    expect(session.log[0]).toContain("Area I gate is locked")
+
+    session.player = { x: lowerGateOne.x - 1, y: lowerGateOne.y }
+    tryMove(session, 1, 0)
+
+    expect(session.player).toEqual({ x: lowerGateOne.x - 1, y: lowerGateOne.y })
     expect(session.log[0]).toContain("Area I gate is locked")
 
     recordTutorialAction(session, "move-up")
@@ -431,6 +441,7 @@ describe("game session", () => {
     recordTutorialAction(session, "book")
     expect(session.tutorial.stage).toBe("npc-check")
     expect(tileAt(session.dungeon, gateOne!)).toBe("floor")
+    expect(tileAt(session.dungeon, lowerGateOne)).toBe("floor")
 
     const npc = session.dungeon.actors.find((actor) => actor.id === "tutorial-wound-surgeon")
     const enemy = session.dungeon.actors.find((actor) => actor.id === "tutorial-slime")
@@ -442,6 +453,7 @@ describe("game session", () => {
     recordTutorialAction(session, "talent-check")
     expect(session.tutorial.stage).toBe("combat")
     expect(tileAt(session.dungeon, gateTwo!)).toBe("floor")
+    expect(tileAt(session.dungeon, lowerGateTwo)).toBe("floor")
 
     recordTutorialAction(session, "combat-start")
     recordTutorialAction(session, "combat-end")
@@ -461,6 +473,7 @@ describe("game session", () => {
   test("co-op tutorial gates wait for party checkpoints before opening", () => {
     const session = createSession(1234, "coop", "ranger", "Mira", undefined, true)
     const [gateOne] = session.tutorial.gatePoints
+    const lowerGateOne = { x: gateOne!.x, y: gateOne!.y + 3 }
 
     setTutorialCoopGateHold(session, "movement", ["Sol"])
     recordTutorialAction(session, "move-up")
@@ -474,12 +487,14 @@ describe("game session", () => {
     expect(tutorialCoopCheckpoint(session)).toMatchObject({ stage: "movement", ready: true, completed: false })
     expect(session.tutorial.stage).toBe("movement")
     expect(tileAt(session.dungeon, gateOne!)).toBe("door")
+    expect(tileAt(session.dungeon, lowerGateOne)).toBe("door")
     expect(session.log[0]).toContain("waits for Sol")
 
     setTutorialCoopGateHold(session, null, [])
 
     expect(session.tutorial.stage).toBe("npc-check")
     expect(tileAt(session.dungeon, gateOne!)).toBe("floor")
+    expect(tileAt(session.dungeon, lowerGateOne)).toBe("floor")
   })
 
   test("death increments the run counter and disables the current tutorial", () => {
