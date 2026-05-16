@@ -1106,12 +1106,13 @@ function handleGameKey(key: KeyEvent) {
   if (move) {
     const before = { ...model.session.player }
     const wasHubUnlocked = model.session.hub.unlocked
+    const direction = moveDirection(move.dx, move.dy)
     tryMove(model.session, move.dx, move.dy)
-    if (before.x !== model.session.player.x || before.y !== model.session.player.y) {
-      const direction = moveDirection(move.dx, move.dy)
+    const moved = before.x !== model.session.player.x || before.y !== model.session.player.y
+    if (moved) {
       startPlayerMoveAnimation(direction)
-      sendLobbyAction("move", `Moved ${direction}`, { direction })
     }
+    if (isLobbyConnected()) sendLobbyAction("move", `Moved ${direction}`, { direction, localMoved: moved })
     if ((model.session.status as GameSession["status"]) === "victory" && model.session.hub.unlocked && !wasHubUnlocked) openVillageRoad("The final gate opens to the village.", Boolean(model.session.hub.lastCutsceneId))
   }
 }
@@ -2049,10 +2050,11 @@ function syncLobbyState() {
 }
 
 function sendLobbyAction(actionType: LobbyActionType, label: string, extraPayload: Record<string, string | number | boolean> = {}) {
-  if (!lobbySocket || lobbySocket.readyState !== WebSocket.OPEN) return
+  const socket = lobbySocket
+  if (!socket || socket.readyState !== WebSocket.OPEN) return
   const checkpoint = tutorialCoopCheckpoint(model.session)
   const tutorialEnabled = model.session.tutorial.enabled && !model.session.tutorial.disabledAfterDeath && model.session.deaths === 0
-  lobbySocket.send(
+  socket.send(
     JSON.stringify({
       type: "command",
       commandType: actionType,
@@ -2078,6 +2080,10 @@ function sendLobbyAction(actionType: LobbyActionType, label: string, extraPayloa
       },
     }),
   )
+}
+
+function isLobbyConnected() {
+  return lobbySocket?.readyState === WebSocket.OPEN
 }
 
 function updateLobbyStatus(text: string) {
