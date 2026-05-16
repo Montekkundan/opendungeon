@@ -63,6 +63,7 @@
     "package:release": "bun run scripts/package-release.ts",
     "package:check": "bun run check && bun test && bun run build:js && bun run package:install-smoke && bun pm pack --dry-run",
     "package:install-smoke": "bun run scripts/package-install-smoke.ts",
+    "hygiene:public": "bun run scripts/public-hygiene-check.ts",
     "verify:gameplay": "bun test src/game/session.test.ts src/ui/screens.test.ts src/net/host.smoke.test.ts && bun run headless -- --scenario smoke --assert && bun run headless -- --scenario first-clear-loop --assert",
     "verify:contributor": "bun run verify:gameplay && bun run www:verify && bun run package:check",
     "prepack": "bun run build:js",
