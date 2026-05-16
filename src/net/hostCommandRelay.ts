@@ -47,6 +47,7 @@ export class HostCommandRelay {
 
   apply(command: HostRelayCommand): LobbyCommandResult {
     const session = this.sessionFor(command)
+    this.hydrateFromClientSnapshot(session, command)
     const before = snapshot(session)
     try {
       switch (command.type) {
@@ -154,6 +155,20 @@ export class HostCommandRelay {
     return true
   }
 
+  private hydrateFromClientSnapshot(session: GameSession, command: HostRelayCommand) {
+    const turn = finitePayloadInt(command.payload.turn)
+    if (turn === null || turn < session.turn) return
+    const floor = finitePayloadInt(command.payload.floor)
+    const hp = finitePayloadInt(command.payload.hp)
+    const x = finitePayloadInt(command.payload.x)
+    const y = finitePayloadInt(command.payload.y)
+
+    if (floor !== null) session.floor = Math.max(1, floor)
+    if (hp !== null) session.hp = Math.max(0, hp)
+    session.turn = turn
+    if (x !== null && y !== null) session.player = { ...session.player, x, y }
+  }
+
   private result(session: GameSession, accepted: boolean, message: string): LobbyCommandResult {
     return {
       accepted,
@@ -221,6 +236,11 @@ function inventorySlotFromLabel(label: string) {
   const match = label.match(/slot (\d+)/)
   if (!match) return null
   return Math.max(0, Number(match[1]) - 1)
+}
+
+function finitePayloadInt(value: unknown) {
+  const number = Number(value)
+  return Number.isFinite(number) ? Math.floor(number) : null
 }
 
 function snapshot(session: GameSession) {

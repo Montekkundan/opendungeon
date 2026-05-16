@@ -17,6 +17,30 @@ describe("host command relay", () => {
     expect(result.message).toBeTruthy()
   })
 
+  test("hydrates host sessions from the latest client snapshot before applying commands", () => {
+    const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
+
+    const result = relay.apply({
+      label: "Moved east",
+      name: "Mira",
+      payload: { direction: "east", floor: 1, hp: 19, turn: 42, x: 5, y: 5 },
+      playerId: "mira",
+      type: "move",
+    })
+
+    expect(result).toMatchObject({ accepted: true, floor: 1, hp: 19, turn: 43, x: 6, y: 5 })
+  })
+
+  test("does not rewind host sessions from stale client snapshots", () => {
+    const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
+    const latest = relay.apply(command({ payload: { direction: "east", turn: 42, x: 5, y: 5 } }))
+
+    const stale = relay.apply(command({ payload: { direction: "east", turn: 1, x: 5, y: 5 } }))
+
+    expect(latest).toMatchObject({ accepted: true, turn: 43, x: 6, y: 5 })
+    expect(stale).toMatchObject({ accepted: true, turn: 44, x: 7, y: 5 })
+  })
+
   test("rejects malformed movement without mutating host state", () => {
     const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
     const before = relay.apply({
