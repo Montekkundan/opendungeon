@@ -90,3 +90,13 @@ References:
 ## Release path
 
 Changesets tracks package releases. Website changes can be deployed independently, but package versions still move through the repo release flow and generated changelog.
+
+Run the release checks before merging package-facing work:
+
+```txt
+bun run hygiene:public
+bun run release:verify
+bun run package:check
+```
+
+The release verifier keeps the main npm workflow on the expected path: package checks first, Changesets versioning, npm Trusted Publishing permissions, and a safe skip when the package version is already published.

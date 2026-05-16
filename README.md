@@ -120,12 +120,14 @@ Ghost-style server platforms can use `packaging/ghost/opendungeon` as the game t
 ```bash
 bun install --frozen-lockfile
 bun run verify:contributor
+bun run hygiene:public
+bun run release:verify
 bun run package:check
 bun run changeset
 git push origin main
 ```
 
-The main-branch npm workflow opens a Changesets version PR and enables auto-merge for it. Once branch rules are satisfied, that version PR merges and the follow-up main run publishes the new npm version through npm Trusted Publishing. For Bun players, publish to npm; Bun installs global packages from the npm registry, so there is no separate Bun registry step.
+The main-branch npm workflow opens a Changesets version PR and enables auto-merge for it. Once branch rules are satisfied, that version PR merges and the follow-up main run publishes the new npm version through npm Trusted Publishing. `bun run release:verify` checks that workflow shape locally, including the already-published version guard.
 
 ### Release
 

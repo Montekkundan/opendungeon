@@ -1,5 +1,10 @@
 # @montekkundan/opendungeon
 
+## Unreleased
+
+- Add local release and public-repo hygiene checks before package publishing.
+- Keep packaged audio compatible with npm-installed CLI runs.
+
 ## 0.1.6
 
 ### Patch Changes

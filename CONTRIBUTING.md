@@ -62,6 +62,18 @@ headless scenarios, the Next.js website verification, TypeScript, the full Bun
 test suite, compiled JS output, global npm/Bun install smoke, and package dry
 run readiness.
 
+Before pushing release-facing work, also run:
+
+```txt
+bun run hygiene:public
+bun run release:verify
+```
+
+`hygiene:public` fails on accidental committed env files, local save/checkpoint
+state, untracked public files, or server-secret-looking values. `release:verify`
+checks the main npm workflow still runs the package gate before Changesets,
+keeps npm Trusted Publishing permissions, and uses the duplicate-version guard.
+
 For website-only work:
 
 ```txt
