@@ -12,6 +12,8 @@ import {
   combatBalanceSnapshot,
   combatMatchupText,
   combatModifier,
+  combatRollCue,
+  combatRollVariant,
   combatSkills,
   combatTargets,
   compactTalentEffectTextForSkill,
@@ -32,6 +34,8 @@ import {
   skillCheckModifier,
   skillCheckOutcomeText,
   statusEffectsFor,
+  statusEffectCue,
+  statusEffectMarker,
   startingLoadout,
   talentEffectTextForSkill,
   talentSummariesForSession,
@@ -1972,6 +1976,7 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
   const selectedSkill = combatSkills[session.combat.selectedSkill]
   const selectedTarget = targets[session.combat.selectedTarget]
   const roll = session.combat.lastRoll
+  const rollVariant = combatRollVariant(roll)
   const playerStatus = formatStatusEffects(statusEffectsFor(session, "player"))
   const targetW = Math.max(26, Math.floor(width * 0.43))
   const actionX = x + targetW + 3
@@ -2034,26 +2039,43 @@ function drawCombatPanel(canvas: Canvas, session: GameSession, animation: DiceRo
   canvas.border(x + 2, detailY, detailW, 5, UI.edgeDim)
   const matchup = selectedTarget ? combatMatchupText(selectedSkill, selectedTarget.kind) : ""
   const talentText = talentEffectTextForSkill(session, selectedSkill)
+  const rollCue = combatRollCue(roll)
   const detail = roll?.skill === "Flee" ? "Escape check uses Dexterity, Luck, Endurance, and level." : `${selectedSkill.text} ${matchup}`.trim()
   const strategy = enemyStrategyText(session, selectedTarget, selectedSkill)
   const statusLine = playerStatus ? `You: ${playerStatus}` : session.combat.message
-  writeWrapped(canvas, x + 4, detailY + 1, detailW - 4, talentText ? [talentText, strategy, detail, statusLine] : [strategy, detail, statusLine], 3, UI.ink, UI.panel2)
+  writeWrapped(canvas, x + 4, detailY + 1, detailW - 4, talentText ? [talentText, strategy, rollCue, detail, statusLine] : [strategy, rollCue, detail, statusLine], 3, UI.ink, UI.panel2)
 
   const diceX = x + width - diceW - 3
   const diceY = detailY
-  const diceAccent = roll ? (roll.hit ? UI.focus : UI.hp) : UI.gold
+  const diceAccent =
+    rollVariant === "natural-20" || rollVariant === "flee-success" || rollVariant === "hit"
+      ? UI.focus
+      : rollVariant === "natural-1" || rollVariant === "flee-failed" || rollVariant === "miss"
+        ? UI.hp
+        : UI.gold
   canvas.fill(diceX, diceY, diceW, 5, " ", UI.panel2, UI.panel2)
   canvas.border(diceX, diceY, diceW, 5, diceAccent)
   drawD20Sprite(canvas, diceX + 1, diceY + 1, diceResult(session, animation), diceFrame(session, animation, settings.reduceMotion), 8, 3, settings.diceSkin, !settings.reduceMotion, animation)
   canvas.write(diceX + 10, diceY + 1, roll ? String(roll.d20).padStart(2, "0") : "d20", "#ffffff", UI.panel2)
   canvas.write(diceX + 2, diceY + 3, roll ? `${roll.total}/${roll.dc}` : statAbbreviations[selectedSkill.stat], "#ffffff", UI.panel2)
 
-  const footer = roll ? `${roll.skill} ${roll.hit ? (roll.skill === "Flee" ? "success" : "hit") : roll.skill === "Flee" ? "failed" : "miss"} ${roll.target}` : "Enter rolls selected skill. F attempts escape."
-  canvas.write(x + 2, y + height - 2, trim(footer, width - 4), UI.muted, UI.panel)
+  const footer = combatFooterText(rollVariant, roll, session)
+  canvas.write(x + 2, y + height - 2, trim(footer, width - 4), rollVariant === "natural-20" || rollVariant === "hit" || rollVariant === "flee-success" ? UI.focus : rollVariant === "none" ? UI.muted : UI.hp, UI.panel)
 }
 
 function formatStatusEffects(effects: ReturnType<typeof statusEffectsFor>) {
-  return effects.map((effect) => `${effect.label} ${effect.remainingTurns}`).join("  ")
+  return effects.map((effect) => `${statusEffectMarker(effect.id)} ${effect.label} ${effect.remainingTurns}`).join("  ")
+}
+
+function combatFooterText(variant: ReturnType<typeof combatRollVariant>, roll: GameSession["combat"]["lastRoll"], session: GameSession) {
+  if (!roll) return "Enter rolls selected skill. F attempts escape."
+  if (variant === "natural-20") return "NAT 20 critical. Open B Book if a weakness was discovered."
+  if (variant === "natural-1") return "NAT 1 failure. Modifiers cannot rescue this roll."
+  if (variant === "flee-success") return "Flee success. Reposition before enemies recover."
+  if (variant === "flee-failed") return "Flee failed. Guard, heal, or pick a better matchup."
+  const playerCue = statusEffectsFor(session, "player")[0]
+  if (playerCue) return statusEffectCue(playerCue)
+  return `${roll.skill} ${roll.hit ? "hit" : "miss"} ${roll.target}.`
 }
 
 function formatBiome(biome: string) {
@@ -3163,11 +3185,22 @@ function drawRunSaveManagerDialog(canvas: Canvas, model: AppModel, x: number, y:
 
 function playerAnimation(session: GameSession, moving = false): SpriteAnimationId {
   if (session.status === "dead") return "death"
-  if (session.combat.active) return session.combat.lastRoll?.hit ? "attack-melee" : "idle"
+  if (session.combat.active) {
+    const variant = combatRollVariant(session.combat.lastRoll)
+    if (variant === "flee-success") return "walk"
+    if (variant === "natural-20" || variant === "hit") return "attack-melee"
+    if (variant === "natural-1" || variant === "flee-failed") return "hurt"
+    return "idle"
+  }
   return moving ? "walk" : "idle"
 }
 
 function actorAnimation(selected: boolean, session: GameSession): SpriteAnimationId {
+  if (selected && session.combat.active) {
+    const variant = combatRollVariant(session.combat.lastRoll)
+    if (variant === "natural-20" || variant === "hit") return "hurt"
+    if (variant === "natural-1" || variant === "miss") return "shocked"
+  }
   if (selected) return "shocked"
   if (session.combat.active) return "idle"
   return "idle"

@@ -68,7 +68,7 @@ export type FloorModifier = {
 
 export type CombatSkillId = "strike" | "aimed-shot" | "arcane-burst" | "smite" | "shadow-hex" | "lucky-riposte"
 export type CombatAffinity = "physical" | "precision" | "arcane" | "holy" | "shadow" | "luck"
-export type StatusEffectId = "guarded" | "weakened" | "burning"
+export type StatusEffectId = "guarded" | "weakened" | "burning" | "poisoned"
 export type TalentId =
   | "iron-vow"
   | "shield-wall"
@@ -134,6 +134,41 @@ export type CombatRoll = {
   target: string
   affinity?: CombatAffinity
   matchup?: "weak" | "resisted" | "neutral"
+}
+
+export type CombatRollVariant = "none" | "natural-20" | "natural-1" | "flee-success" | "flee-failed" | "hit" | "miss"
+
+export function combatRollVariant(roll: CombatRoll | null | undefined): CombatRollVariant {
+  if (!roll) return "none"
+  if (roll.d20 === 20) return "natural-20"
+  if (roll.d20 === 1) return "natural-1"
+  if (roll.skill === "Flee") return roll.hit ? "flee-success" : "flee-failed"
+  return roll.hit ? "hit" : "miss"
+}
+
+export function combatRollCue(roll: CombatRoll | null | undefined) {
+  const variant = combatRollVariant(roll)
+  if (!roll || variant === "none") return "Enter rolls the selected move. F tries to escape."
+  if (variant === "natural-20") return `Natural 20: ${roll.skill} lands a critical result against ${roll.target}.`
+  if (variant === "natural-1") return `Natural 1: ${roll.skill} fails before modifiers can save it.`
+  if (variant === "flee-success") return `Flee succeeds: you slip initiative and the nearest enemies hesitate.`
+  if (variant === "flee-failed") return `Flee fails: enemies keep pressure and the round continues.`
+  if (variant === "hit") return `${roll.skill} hits ${roll.target}; ${roll.total}/${roll.dc} beats the difficulty.`
+  return `${roll.skill} misses ${roll.target}; ${roll.total}/${roll.dc} does not beat the difficulty.`
+}
+
+export function statusEffectMarker(id: StatusEffectId) {
+  if (id === "guarded") return "[G]"
+  if (id === "weakened") return "[W]"
+  if (id === "poisoned") return "[P]"
+  return "[B]"
+}
+
+export function statusEffectCue(effect: Pick<StatusEffect, "id" | "magnitude" | "remainingTurns">) {
+  if (effect.id === "guarded") return `${statusEffectMarker(effect.id)} Guarded reduces the next incoming hit by ${effect.magnitude}.`
+  if (effect.id === "weakened") return `${statusEffectMarker(effect.id)} Weakened lowers outgoing damage by ${effect.magnitude}.`
+  if (effect.id === "poisoned") return `${statusEffectMarker(effect.id)} Poison ticks for ${effect.magnitude} after each round.`
+  return `${statusEffectMarker(effect.id)} Burning ticks for ${effect.magnitude} after each round.`
 }
 
 export type CombatInitiativeEntry = {
@@ -4171,17 +4206,18 @@ function tickStatusEffects(session: GameSession) {
   if (!session.statusEffects?.length) return
 
   for (const effect of [...session.statusEffects]) {
-    if (effect.id !== "burning") continue
+    if (effect.id !== "burning" && effect.id !== "poisoned") continue
+    const verb = effect.id === "poisoned" ? "takes poison" : "burns"
     if (effect.targetId === "player") {
       session.hp -= effect.magnitude
-      session.log.unshift(`Burning deals ${effect.magnitude}.`)
+      session.log.unshift(`${effect.id === "poisoned" ? "Poison" : "Burning"} deals ${effect.magnitude}.`)
       continue
     }
 
     const actor = session.dungeon.actors.find((candidate) => candidate.id === effect.targetId)
     if (!actor) continue
     actor.hp -= effect.magnitude
-    session.log.unshift(`${label(actor.kind)} burns for ${effect.magnitude}.`)
+    session.log.unshift(`${label(actor.kind)} ${verb} for ${effect.magnitude}.`)
     if (actor.hp <= 0) defeatActor(session, actor)
   }
 
@@ -5221,12 +5257,13 @@ function removeStatusEffectsFor(session: GameSession, targetId: StatusEffect["ta
 }
 
 function isStatusEffectId(value: unknown): value is StatusEffectId {
-  return value === "guarded" || value === "weakened" || value === "burning"
+  return value === "guarded" || value === "weakened" || value === "burning" || value === "poisoned"
 }
 
 function statusEffectLabel(id: StatusEffectId) {
   if (id === "guarded") return "Guarded"
   if (id === "weakened") return "Weakened"
+  if (id === "poisoned") return "Poisoned"
   return "Burning"
 }
 

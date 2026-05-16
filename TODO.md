@@ -182,7 +182,7 @@
 - [x] Add accessibility controls for toast duration, toast density, UI scale, high-contrast palettes, reduced motion, minimap visibility, and camera FOV.
 - [ ] Verify every major screen in Ghostty: title, character, settings, tutorial, game, combat, talent check, inventory, Book tabs, map, village, save manager, cloud, and multiplayer.
 - [x] Fix any UI text that truncates important instructions with `...`; action prompts should wrap or use a scrollable/detail panel.
-- [ ] Add status-effect and combat-animation variants for poison, burn, guard, flee, ambush, boss phases, natural 20, and natural 1.
+- [x] Add status-effect and combat-animation variants for poison, burn, guard, flee, ambush, boss phases, natural 20, and natural 1. Combat rolls now expose explicit UI variants, status effects have readable markers/cues, poison is a first-class status, and combat sprites switch between attack, hurt, flee, and failure states.
 - [x] Keep runtime art terminal-native; do not import high-resolution packs unless they sample cleanly into terminal cells.
 
 ### Audio, Music, And SFX
@@ -232,4 +232,4 @@
 - [ ] Add local daily/weekly challenge boards with replay ghosts, fixed seeds, mutator bundles, and class-specific medals.
 - [x] Add accessibility controls for toast duration, toast density, UI scale, high-contrast palettes, and reduced combat animation.
 - [ ] Add village aftermath scenes after bosses where NPC dialogue, shop demand, crops, and portal-room visuals change.
-- [ ] Add status-effect and combat-animation variants for poison, burn, guard, flee, ambush, boss phases, and perfect rolls.
+- [x] Add status-effect and combat-animation variants for poison, burn, guard, flee, ambush, boss phases, and perfect rolls.

@@ -4,12 +4,15 @@ import {
   attemptFlee,
   cancelSkillCheck,
   combatModifier,
+  combatRollCue,
+  combatRollVariant,
   combatSkills,
   createSession,
   performCombatAction,
   resolveSkillCheck,
   selectSkill,
   statusEffectMagnitude,
+  statusEffectMarker,
   statusEffectsFor,
   tryMove,
   usePotion,
@@ -28,6 +31,44 @@ function startTwoEnemyFight(session: GameSession) {
 }
 
 describe("d20 combat and skill checks", () => {
+  test("labels combat roll variants for readable feedback", () => {
+    const baseRoll = {
+      d20: 20,
+      modifier: 2,
+      total: 22,
+      dc: 12,
+      hit: true,
+      critical: true,
+      stat: "strength" as const,
+      skill: "Strike",
+      target: "Ghoul",
+      affinity: "physical" as const,
+      matchup: "neutral" as const,
+    }
+
+    expect(combatRollVariant(baseRoll)).toBe("natural-20")
+    expect(combatRollCue(baseRoll)).toContain("Natural 20")
+    expect(combatRollVariant({ ...baseRoll, d20: 1, total: 3, hit: false, critical: false })).toBe("natural-1")
+    expect(combatRollCue({ ...baseRoll, d20: 1, total: 3, hit: false, critical: false })).toContain("Natural 1")
+    expect(combatRollVariant({ ...baseRoll, d20: 12, total: 14, skill: "Flee", target: "escape" })).toBe("flee-success")
+    expect(combatRollVariant({ ...baseRoll, d20: 8, total: 9, hit: false, critical: false, skill: "Flee", target: "escape" })).toBe("flee-failed")
+  })
+
+  test("supports poison as a visible status-effect variant", () => {
+    const session = createSession(1234)
+    applyStatusEffect(session, {
+      id: "poisoned",
+      targetId: "player",
+      label: "Poisoned",
+      remainingTurns: 2,
+      magnitude: 2,
+      source: "Test toxin",
+    })
+
+    expect(statusEffectMarker("poisoned")).toBe("[P]")
+    expect(statusEffectsFor(session, "player")[0]).toMatchObject({ id: "poisoned", label: "Poisoned" })
+  })
+
   test("resolves loot checks into inventory consequences", () => {
     const session = createSession(1234)
     const target = { x: session.player.x + 1, y: session.player.y }
