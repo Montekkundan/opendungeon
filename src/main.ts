@@ -266,7 +266,6 @@ const localGuestSessionId = crypto.randomUUID().slice(0, 8)
 const localLobbyClientId = crypto.randomUUID()
 const toastCreatedAt = new Map<string, number>()
 const sfxToastIds = new Set<string>()
-const toastTtlMs = 3200
 const audioController = new GameAudioController()
 let lastAudioSyncKey = ""
 
@@ -1499,8 +1498,14 @@ function changeCurrentSetting() {
     return
   }
   if (item.id === "controlScheme") model.settings.controlScheme = cycleValue(model.settings.controlScheme, ["hybrid", "arrows", "vim"])
-  if (item.id === "highContrast") model.settings.highContrast = !model.settings.highContrast
+  if (item.id === "contrastPalette") {
+    model.settings.contrastPalette = cycleValue(model.settings.contrastPalette, contrastPaletteOptions)
+    model.settings.highContrast = model.settings.contrastPalette !== "standard"
+  }
   if (item.id === "reduceMotion") model.settings.reduceMotion = !model.settings.reduceMotion
+  if (item.id === "uiScale") model.settings.uiScale = cycleValue(model.settings.uiScale, uiScaleOptions)
+  if (item.id === "toastDuration") model.settings.toastDuration = cycleValue(model.settings.toastDuration, toastDurationOptions)
+  if (item.id === "toastDensity") model.settings.toastDensity = cycleValue(model.settings.toastDensity, toastDensityOptions)
   if (item.id === "showUi") {
     model.settings.showUi = !model.settings.showUi
     model.uiHidden = !model.settings.showUi
@@ -1586,6 +1591,10 @@ function toggleRunUi() {
 }
 
 const mapScaleOptions: UserSettings["tileScale"][] = ["overview", "wide", "medium", "close"]
+const uiScaleOptions: UserSettings["uiScale"][] = ["compact", "normal", "large"]
+const toastDurationOptions: UserSettings["toastDuration"][] = ["short", "normal", "long"]
+const toastDensityOptions: UserSettings["toastDensity"][] = ["quiet", "normal", "verbose"]
+const contrastPaletteOptions: UserSettings["contrastPalette"][] = ["standard", "bright", "mono"]
 const volumeSteps = [0, 0.25, 0.5, 0.75, 1] as const
 
 function cycleVolume(value: number) {
@@ -1759,6 +1768,7 @@ function playTransitionAudio(kind: ScreenTransition["kind"], durationMs = transi
 
 function syncToastLifetimes() {
   const now = Date.now()
+  const toastTtlMs = toastTtlForSettings(model.settings)
   for (const toast of model.session.toasts) {
     if (!toastCreatedAt.has(toast.id)) {
       toastCreatedAt.set(toast.id, now)
@@ -1776,6 +1786,12 @@ function syncToastLifetimes() {
   for (const id of sfxToastIds) {
     if (!activeIds.has(id)) sfxToastIds.delete(id)
   }
+}
+
+function toastTtlForSettings(settings: UserSettings) {
+  if (settings.toastDuration === "short") return 1800
+  if (settings.toastDuration === "long") return 5600
+  return 3200
 }
 
 function playToastAudio(toast: RunToast) {

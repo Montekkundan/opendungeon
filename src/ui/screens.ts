@@ -292,7 +292,6 @@ export function bookEntriesForTab(session: GameSession, tabIndex: number) {
 const settingsOptions = [
   { id: "username", tab: "profile", name: "Player name", text: "Saved locally and later used by cloud sync.", control: "input" },
   { id: "showUi", tab: "profile", name: "Show UI", text: "Default overlay visibility for future runs.", control: "switch" },
-  { id: "showMinimap", tab: "profile", name: "Show minimap", text: "Default minimap visibility with quest objective marker.", control: "switch" },
   { id: "startWithTutorial", tab: "profile", name: "Start with tutorial", text: "Gate each new descent behind movement, NPC, check, and combat basics.", control: "switch" },
   { id: "runSeed", tab: "run", name: "Seed", text: "World seed for replaying this crawl.", control: "readonly" },
   { id: "runMode", tab: "run", name: "Mode", text: "Current multiplayer/run mode.", control: "readonly" },
@@ -301,8 +300,12 @@ const settingsOptions = [
   { id: "runAssets", tab: "run", name: "Assets", text: "Runtime art source for dungeon sprites.", control: "readonly" },
   { id: "runSaves", tab: "run", name: "Saves", text: "Local save directory for this profile.", control: "readonly" },
   { id: "controlScheme", tab: "access", name: "Control scheme", text: "Movement and menu navigation preference.", control: "tabs" },
-  { id: "highContrast", tab: "access", name: "High contrast", text: "Brighter borders and selected states.", control: "switch" },
+  { id: "uiScale", tab: "access", name: "UI scale", text: "Compact, normal, or larger quickbar controls.", control: "slider" },
+  { id: "toastDuration", tab: "access", name: "Toast duration", text: "How long combat and event notifications stay visible.", control: "slider" },
+  { id: "toastDensity", tab: "access", name: "Toast density", text: "How many notifications can stack at once.", control: "slider" },
+  { id: "contrastPalette", tab: "access", name: "Contrast palette", text: "Standard, brighter, or mono high-contrast colors.", control: "slider" },
   { id: "reduceMotion", tab: "access", name: "Reduce motion", text: "Quieter background and dice movement.", control: "switch" },
+  { id: "showMinimap", tab: "access", name: "Show minimap", text: "Default minimap visibility with quest objective marker.", control: "switch" },
   { id: "tileScale", tab: "visuals", name: "Camera FOV", text: "Wide shows more rooms; close keeps sprite detail.", control: "slider" },
   { id: "diceSkin", tab: "visuals", name: "Dice skin", text: "Faceted polyhedral dice color used in combat rolls.", control: "tabs" },
   { id: "backgroundFx", tab: "visuals", name: "Background FX", text: "How much title-screen dungeon rain appears.", control: "slider" },
@@ -761,6 +764,19 @@ function drawSettings(canvas: Canvas, model: AppModel) {
     if (detailH > 11) drawSettingRow(canvas, detailX + 3, listY + 11, detailW - 6, "Run", `${model.session.mode} floor ${model.session.floor}/${model.session.finalFloor}`)
     if (detailH > 13) drawSettingRow(canvas, detailX + 3, listY + 13, detailW - 6, "Assets", activeAssetPack.name)
     if (detailH > 15) canvas.write(detailX + 3, listY + 15, "Run facts live here now so the play HUD can stay quiet.", UI.soft, UI.panel)
+  } else if (activeTab.id === "access") {
+    drawMiniIcon(canvas, detailX + 3, listY + 3, "focus-gem", 8, 3)
+    if (detailH > 7) drawSettingRow(canvas, detailX + 3, listY + 7, detailW - 6, "Controls", controlMoveText(model.settings.controlScheme))
+    if (detailH > 9) drawSettingRow(canvas, detailX + 3, listY + 9, detailW - 6, "Toasts", `${model.settings.toastDuration} / ${model.settings.toastDensity}`)
+    if (detailH > 11) drawSettingRow(canvas, detailX + 3, listY + 11, detailW - 6, "Palette", `${model.settings.contrastPalette}; motion ${onOff(model.settings.reduceMotion)}`)
+    if (detailH > 13) drawSettingRow(canvas, detailX + 3, listY + 13, detailW - 6, "UI", `${model.settings.uiScale}; minimap ${onOff(model.settings.showMinimap)}`)
+    if (detailH > 15) canvas.write(detailX + 3, listY + 15, trim("Accessibility controls apply immediately.", detailW - 6), UI.soft, UI.panel)
+  } else if (activeTab.id === "visuals") {
+    drawMiniIcon(canvas, detailX + 3, listY + 3, "map", 8, 3)
+    if (detailH > 7) drawSettingRow(canvas, detailX + 3, listY + 7, detailW - 6, "Camera FOV", model.settings.tileScale)
+    if (detailH > 9) drawSettingRow(canvas, detailX + 3, listY + 9, detailW - 6, "Dice", diceSkinName(model.settings.diceSkin))
+    if (detailH > 11) drawSettingRow(canvas, detailX + 3, listY + 11, detailW - 6, "Backdrop", model.settings.backgroundFx)
+    if (detailH > 13) drawSettingRow(canvas, detailX + 3, listY + 13, detailW - 6, "Motion", onOff(model.settings.reduceMotion))
   } else if (activeTab.id === "audio") {
     drawMiniIcon(canvas, detailX + 3, listY + 3, "focus-gem", 8, 3)
     if (detailH > 7) drawSettingRow(canvas, detailX + 3, listY + 7, detailW - 6, "Track", model.screen === "game" ? "dungeon-loop" : "title-settings-loop")
@@ -872,13 +888,13 @@ function drawGame(canvas: Canvas, model: AppModel) {
   drawMap(canvas, session, model.debugView, model.settings, model.animationFrame, moveAnimation, model.cameraFocus ?? null, model.remotePlayers)
   if (!model.uiHidden) {
     drawHud(canvas, session, model.remotePlayers, model.coopGateStatus)
-    if (!model.debugView && model.settings.showMinimap) drawMinimap(canvas, session, model.remotePlayers)
+    if (!model.debugView && model.settings.showMinimap) drawMinimap(canvas, session, model.remotePlayers, model.settings)
     if (!model.debugView) drawQuickbar(canvas, session, model.diceRollAnimation, model.settings)
     if (session.combat.active) drawCombatPanel(canvas, session, model.diceRollAnimation, model.settings)
     if (session.conversation && !session.combat.active && !session.skillCheck) drawConversationPanel(canvas, session)
   }
   if (!model.debugView) drawTutorialCoach(canvas, session)
-  if (!model.uiHidden) drawToasts(canvas, session)
+  if (!model.uiHidden) drawToasts(canvas, session, model.settings)
   if (session.status !== "running") drawRunEnd(canvas, session)
   if (session.skillCheck) drawSkillCheckModal(canvas, session, model.diceRollAnimation, model.settings)
   if (session.levelUp) drawLevelUpModal(canvas, session, model.levelUpIndex)
@@ -1192,13 +1208,13 @@ function mapTileSize(canvas: Canvas, debugView: boolean, preference: UserSetting
   return { width: 10, height: 5 }
 }
 
-function drawMinimap(canvas: Canvas, session: GameSession, remotePlayers: RemotePlayerMarker[] = []) {
+function drawMinimap(canvas: Canvas, session: GameSession, remotePlayers: RemotePlayerMarker[] = [], settings?: UserSettings) {
   if (canvas.width < 96 || canvas.height < 28) return
   const width = Math.min(38, Math.max(32, Math.floor(canvas.width * 0.22)))
-  const availableHeight = canvas.height - gameQuickbarHeight(canvas) - gameHudHeight(canvas) - 4
+  const availableHeight = canvas.height - gameQuickbarHeight(canvas, settings) - gameHudHeight(canvas) - 4
   const height = Math.min(15, Math.max(11, Math.min(availableHeight, Math.floor(canvas.height * 0.28))))
   const x = 2
-  const y = canvas.height - gameQuickbarHeight(canvas) - height - 1
+  const y = canvas.height - gameQuickbarHeight(canvas, settings) - height - 1
   if (height < 10 || y <= gameHudHeight(canvas) + 1) return
 
   const bg = "#0b1218"
@@ -1778,18 +1794,20 @@ function drawTutorialCoach(canvas: Canvas, session: GameSession) {
   if (footerRows.length) writeRows(canvas, x + 2, y + height - footerRows.length - 1, width - 4, footerRows, UI.brass, "#0b1218")
 }
 
-function drawToasts(canvas: Canvas, session: GameSession) {
+function drawToasts(canvas: Canvas, session: GameSession, settings: UserSettings) {
   if (canvas.width < 72 || canvas.height < 24 || !session.toasts.length) return
-  const toasts = session.toasts.slice(0, 2)
+  const visibleCount = settings.toastDensity === "quiet" ? 1 : settings.toastDensity === "verbose" ? 3 : 2
+  const primaryRows = settings.toastDensity === "quiet" ? 2 : settings.toastDensity === "verbose" ? 4 : 3
+  const toasts = session.toasts.slice(0, visibleCount)
   const width = Math.min(64, Math.max(44, Math.floor(canvas.width * 0.46)))
   const x = session.combat.active ? 2 : canvas.width - width - 2
-  const bottomLimit = canvas.height - gameQuickbarHeight(canvas) - 1
+  const bottomLimit = canvas.height - gameQuickbarHeight(canvas, settings) - 1
   let y = Math.max(gameHudHeight(canvas) + 1, session.combat.active ? 2 : gameHudHeight(canvas) + 1)
 
   toasts.forEach((toast, index) => {
     const color = toastToneColor(toast.tone)
     const bg = index === 0 ? "#071014" : "#0b1218"
-    const bodyRows = index === 0 ? wrappedRows(toast.text, width - 7, 3) : [compactToastText(toast.text, width - 22)]
+    const bodyRows = index === 0 ? wrappedRows(toast.text, width - 7, primaryRows) : [compactToastText(toast.text, width - 22)]
     const height = index === 0 ? Math.max(3, bodyRows.length + 2) : 2
     if (y + height > bottomLimit) return
 
@@ -1869,7 +1887,7 @@ function visibleQuestList(session: GameSession) {
 }
 
 function drawQuickbar(canvas: Canvas, session: GameSession, animation: DiceRollAnimation | null | undefined, settings: UserSettings) {
-  const height = gameQuickbarHeight(canvas)
+  const height = gameQuickbarHeight(canvas, settings)
   if (!height) return
   const items: QuickbarItem[] = session.combat.active
     ? [
@@ -2207,9 +2225,12 @@ function gameHudHeight(canvas: Canvas) {
   return canvas.height < 28 ? 4 : 5
 }
 
-function gameQuickbarHeight(canvas: Canvas) {
+function gameQuickbarHeight(canvas: Canvas, settings?: UserSettings) {
   if (canvas.height < 30 || canvas.width < 90) return 0
-  return canvas.height >= 42 && canvas.width >= 120 ? 10 : 8
+  const base = canvas.height >= 42 && canvas.width >= 120 ? 10 : 8
+  if (settings?.uiScale === "compact") return Math.max(6, base - 2)
+  if (settings?.uiScale === "large") return Math.min(12, base + 2)
+  return base
 }
 
 function drawUiToggleHint(canvas: Canvas, hidden: boolean) {
@@ -3386,10 +3407,14 @@ function drawRunEnd(canvas: Canvas, session: GameSession) {
 function drawDungeonBackdrop(canvas: Canvas, seed: number, settings?: UserSettings) {
   const dotMod = settings?.backgroundFx === "dense" ? 17 : settings?.backgroundFx === "low" || settings?.reduceMotion ? 37 : 23
   const blockMod = settings?.backgroundFx === "dense" ? 43 : settings?.backgroundFx === "low" || settings?.reduceMotion ? 89 : 61
+  const palette = settings?.contrastPalette ?? (settings?.highContrast ? "bright" : "standard")
+  const bright = palette === "bright" || settings?.highContrast
+  const dotColor = palette === "mono" ? "#4b5563" : bright ? "#2e555b" : "#1f3438"
+  const blockColor = palette === "mono" ? "#2f3338" : bright ? "#222936" : "#181c22"
   for (let y = 0; y < canvas.height; y++) {
     for (let x = 0; x < canvas.width; x++) {
-      if ((x * 17 + y * 31 + seed) % dotMod === 0) canvas.write(x, y, "·", settings?.highContrast ? "#2e555b" : "#1f3438")
-      else if ((x * 7 + y * 13 + seed) % blockMod === 0) canvas.write(x, y, "█", settings?.highContrast ? "#222936" : "#181c22")
+      if ((x * 17 + y * 31 + seed) % dotMod === 0) canvas.write(x, y, "·", dotColor)
+      else if ((x * 7 + y * 13 + seed) % blockMod === 0) canvas.write(x, y, "█", blockColor)
     }
   }
 }
@@ -3469,7 +3494,10 @@ function settingValue(model: AppModel, id: (typeof settingsOptions)[number]["id"
   if (id === "runAssets") return activeAssetPack.name
   if (id === "runSaves") return saveDirectory()
   if (id === "controlScheme") return settings.controlScheme
-  if (id === "highContrast") return onOff(settings.highContrast)
+  if (id === "uiScale") return settings.uiScale
+  if (id === "toastDuration") return settings.toastDuration
+  if (id === "toastDensity") return settings.toastDensity
+  if (id === "contrastPalette") return settings.contrastPalette
   if (id === "reduceMotion") return onOff(settings.reduceMotion)
   if (id === "diceSkin") return diceSkinName(settings.diceSkin)
   if (id === "backgroundFx") return settings.backgroundFx
@@ -3485,6 +3513,10 @@ function settingValue(model: AppModel, id: (typeof settingsOptions)[number]["id"
 function settingSliderValues(id: SettingOption["id"]) {
   if (id === "tileScale") return ["overview", "wide", "medium", "close"]
   if (id === "backgroundFx") return ["low", "normal", "dense"]
+  if (id === "uiScale") return ["compact", "normal", "large"]
+  if (id === "toastDuration") return ["short", "normal", "long"]
+  if (id === "toastDensity") return ["quiet", "normal", "verbose"]
+  if (id === "contrastPalette") return ["standard", "bright", "mono"]
   if (id === "masterVolume" || id === "musicVolume" || id === "sfxVolume") return ["0%", "25%", "50%", "75%", "100%"]
   return ["off", "on"]
 }
@@ -3502,7 +3534,7 @@ function controlMoveText(scheme: UserSettings["controlScheme"]) {
 }
 
 function accessibilitySummary(settings: UserSettings) {
-  return `High contrast ${onOff(settings.highContrast)}. Reduce motion ${onOff(settings.reduceMotion)}.`
+  return `Palette ${settings.contrastPalette}. Motion ${settings.reduceMotion ? "reduced" : "normal"}. Toasts ${settings.toastDuration}/${settings.toastDensity}. UI ${settings.uiScale}.`
 }
 
 function formatPercent(value: number) {

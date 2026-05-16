@@ -179,7 +179,7 @@
 ### Assets, Accessibility, And UI Polish
 
 - [x] Add a content-pack import wizard with license checks, runtime folder placement, terminal preview sampling, and accessibility score.
-- [ ] Add accessibility controls for toast duration, toast density, UI scale, high-contrast palettes, reduced motion, minimap visibility, and camera FOV.
+- [x] Add accessibility controls for toast duration, toast density, UI scale, high-contrast palettes, reduced motion, minimap visibility, and camera FOV.
 - [ ] Verify every major screen in Ghostty: title, character, settings, tutorial, game, combat, talent check, inventory, Book tabs, map, village, save manager, cloud, and multiplayer.
 - [x] Fix any UI text that truncates important instructions with `...`; action prompts should wrap or use a scrollable/detail panel.
 - [ ] Add status-effect and combat-animation variants for poison, burn, guard, flee, ambush, boss phases, natural 20, and natural 1.
@@ -230,6 +230,6 @@
 - [x] Add a co-op permissions screen for houses, farm plots, storage, shop shelves, and shared upgrade spending.
 - [x] Add a content-pack import wizard with free-license checks, terminal preview sampling, and per-pack accessibility scores.
 - [ ] Add local daily/weekly challenge boards with replay ghosts, fixed seeds, mutator bundles, and class-specific medals.
-- [ ] Add accessibility controls for toast duration, toast density, UI scale, high-contrast palettes, and reduced combat animation.
+- [x] Add accessibility controls for toast duration, toast density, UI scale, high-contrast palettes, and reduced combat animation.
 - [ ] Add village aftermath scenes after bosses where NPC dialogue, shop demand, crops, and portal-room visuals change.
 - [ ] Add status-effect and combat-animation variants for poison, burn, guard, flee, ambush, boss phases, and perfect rolls.

@@ -6,6 +6,10 @@ import { defaultDiceSkin, diceSkinIds, type DiceSkinId } from "../assets/diceSki
 export type ControlScheme = "hybrid" | "arrows" | "vim"
 export type BackgroundFx = "low" | "normal" | "dense"
 export type TileScalePreference = "overview" | "wide" | "medium" | "close"
+export type ToastDurationPreference = "short" | "normal" | "long"
+export type ToastDensityPreference = "quiet" | "normal" | "verbose"
+export type UiScalePreference = "compact" | "normal" | "large"
+export type ContrastPalettePreference = "standard" | "bright" | "mono"
 
 export type UserSettings = {
   username: string
@@ -13,7 +17,11 @@ export type UserSettings = {
   cloudProvider: "local" | "github"
   controlScheme: ControlScheme
   highContrast: boolean
+  contrastPalette: ContrastPalettePreference
   reduceMotion: boolean
+  uiScale: UiScalePreference
+  toastDuration: ToastDurationPreference
+  toastDensity: ToastDensityPreference
   showUi: boolean
   showMinimap: boolean
   startWithTutorial: boolean
@@ -42,7 +50,11 @@ export const defaultSettings: UserSettings = {
   cloudProvider: "local",
   controlScheme: "hybrid",
   highContrast: false,
+  contrastPalette: "standard",
   reduceMotion: false,
+  uiScale: "normal",
+  toastDuration: "normal",
+  toastDensity: "normal",
   showUi: true,
   showMinimap: true,
   startWithTutorial: true,
@@ -97,13 +109,18 @@ function ensureProfileDirectory() {
 
 function normalizeSettings(settings: Partial<UserSettings>): UserSettings {
   const hasAudioSchema = hasStoredAudioSchema(settings)
+  const contrastPalette = asContrastPalette(settings.contrastPalette, settings.highContrast)
   return {
     username: cleanName(settings.username, defaultSettings.username),
     githubUsername: cleanName(settings.githubUsername, ""),
     cloudProvider: settings.cloudProvider === "github" ? "github" : "local",
     controlScheme: asControlScheme(settings.controlScheme),
-    highContrast: Boolean(settings.highContrast),
+    highContrast: Boolean(settings.highContrast) || contrastPalette !== "standard",
+    contrastPalette,
     reduceMotion: Boolean(settings.reduceMotion),
+    uiScale: asUiScale(settings.uiScale),
+    toastDuration: asToastDuration(settings.toastDuration),
+    toastDensity: asToastDensity(settings.toastDensity),
     showUi: settings.showUi !== false,
     showMinimap: settings.showMinimap !== false,
     startWithTutorial: settings.startWithTutorial !== false,
@@ -141,6 +158,23 @@ function asTileScale(value: unknown): TileScalePreference {
   if (value === "overview" || value === "wide" || value === "medium" || value === "close") return value
   if (value === "auto" || value === "large") return "medium"
   return defaultSettings.tileScale
+}
+
+function asToastDuration(value: unknown): ToastDurationPreference {
+  return value === "short" || value === "long" || value === "normal" ? value : defaultSettings.toastDuration
+}
+
+function asToastDensity(value: unknown): ToastDensityPreference {
+  return value === "quiet" || value === "verbose" || value === "normal" ? value : defaultSettings.toastDensity
+}
+
+function asUiScale(value: unknown): UiScalePreference {
+  return value === "compact" || value === "large" || value === "normal" ? value : defaultSettings.uiScale
+}
+
+function asContrastPalette(value: unknown, highContrast: unknown): ContrastPalettePreference {
+  if (value === "bright" || value === "mono" || value === "standard") return value
+  return highContrast ? "bright" : defaultSettings.contrastPalette
 }
 
 function asDiceSkin(value: unknown): DiceSkinId {

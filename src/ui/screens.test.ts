@@ -55,7 +55,7 @@ describe("terminal renderer snapshots", () => {
       width: 100,
       height: 32,
       model: modelFor("settings", createSession(4321), { settingsTabIndex: 3 }),
-      expectedHash: "fa8553aa",
+      expectedHash: "e7657fd9",
       requiredText: ["Settings", "Visuals", "Camera FOV"],
     },
     {
@@ -253,6 +253,21 @@ test("audio settings use portable shortcuts and keep panel copy bounded", () => 
   expect(text).toContain("OpenTUI audio starts when enabled.")
   expect(text).not.toContain(["F", "8"].join(""))
   expect(text).not.toContain("function")
+})
+
+test("access settings expose readability controls", () => {
+  const output = draw(modelFor("settings", createSession(4321), { settingsTabIndex: 2 }), 136, 44)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("UI scale")
+  expect(text).toContain("Toast duration")
+  expect(text).toContain("Toast density")
+  expect(text).toContain("Contrast palette")
+  expect(text).toContain("Reduce motion")
+  expect(text).toContain("Accessibility controls apply")
+
+  const scrolledText = screenText(draw(modelFor("settings", createSession(4321), { settingsTabIndex: 2, settingsIndex: 6 }), 136, 44).chunks)
+  expect(scrolledText).toContain("Show minimap")
 })
 
 test("new descent story scene shows branch choices and cutscene controls", () => {
