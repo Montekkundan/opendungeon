@@ -1,10 +1,10 @@
 # Core loop
 
-The core loop is exploration, decision, consequence, and recovery. The player moves through a seeded dungeon, discovers events, resolves danger, and carries run state forward through local saves.
+The core loop is exploration, decision, consequence, and recovery. The player moves through a replayable dungeon layout, discovers events, resolves danger, and carries run state forward through local saves.
 
 ## Run start
 
-A run begins from a seed, player build, and starting state. The seed controls floor shape, placement, and deterministic content. The player state controls stats, focus, inventory, quest flags, and map discovery.
+A run begins from a dungeon code, player build, and starting state. The code controls floor shape, placement, and deterministic content. The player state controls stats, focus, inventory, quest flags, and map discovery.
 
 ## Exploration
 

@@ -173,6 +173,7 @@
 - [x] Add website browser verification for home, docs, changelog, create, create invite, login, and profile pages at desktop and mobile widths.
 - [x] Finish `/create` and `/create/[id]` copy so it clearly says what the website can do now and what still needs a running host.
 - [x] Add a website feature section for local one-laptop multiplayer, guest sessions, and signed-in duplicate-run blocking.
+- [x] Simplify product-facing seed language into player-facing "dungeon code" copy while keeping the technical flag documented for host commands.
 - [x] Keep the changelog page sourced from Changesets and release notes, and add a changeset for every user-visible gameplay/website change.
 
 ### Assets, Accessibility, And UI Polish

@@ -26,11 +26,11 @@ const fontRetro = Press_Start_2P({
 export const metadata: Metadata = {
   title: "opendungeon | Terminal dungeon crawler",
   description:
-    "A terminal roguelike with seeded dungeon runs, local saves, multiplayer hosting, and GM-created worlds.",
+    "A terminal roguelike with local saves, multiplayer hosting, replayable dungeon layouts, and GM-created worlds.",
   openGraph: {
     title: "opendungeon",
     description:
-      "A terminal roguelike with seeded dungeon runs, co-op hosting, and GM-created worlds.",
+      "A terminal roguelike with local saves, co-op hosting, and GM-created worlds.",
     type: "website",
   },
 };

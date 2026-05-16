@@ -14,8 +14,8 @@ export default function Page() {
             <div data-slot="hero-copy">
               <h1>A terminal dungeon crawler</h1>
               <p>
-                Play solo or co-op from the same seed. Local runs stay
-                deterministic; GM worlds can add approved AI-assisted changes.
+                Play solo or co-op in the same dungeon layout. Local runs stay
+                consistent; GM worlds can add approved AI-assisted changes.
                 <span data-slot="br" />
                 Install the CLI, start a descent, or host a lobby for friends.
               </p>
@@ -50,8 +50,8 @@ export default function Page() {
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>Seeded worlds</strong> Share a seed and replay the
-                  same dungeon layout.
+                  <strong>Dungeon codes</strong> Share a short code to replay
+                  the same dungeon layout.
                 </div>
               </li>
               <li>

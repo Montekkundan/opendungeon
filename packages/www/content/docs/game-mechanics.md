@@ -4,21 +4,23 @@ opendungeon keeps the dungeon rules consistent across solo and co-op play. Movem
 
 ## Deterministic state
 
-- Dungeon floors are generated from a seed.
+- Dungeon floors are generated from a dungeon code.
 - Legal movement can reveal fog, trigger traps, enter combat, pick up loot, or move the run to a new floor.
 - Saves preserve the active run, player stats, inventory, quest state, map discovery, and local metadata.
 
-## Seeds
+## Dungeon codes
 
-A seed is the number used to build the dungeon. The same seed on the same game version should create the same starting floor shape, room placement, floor modifier, actor placement, and deterministic event placement. Player choices still matter after that: movement order, combat rolls, talent checks, purchases, inventory use, and quest choices can make two runs with the same seed diverge.
+A dungeon code is the number behind a run. It lets you replay the same starting layout or share that layout with friends. You do not need to understand the code to play; it is mostly there for co-op, challenges, and bug reports.
 
-Use seeds when you want to:
+The same code on the same game version should create the same starting floor shape, room placement, floor modifier, actor placement, and deterministic event placement. Player choices still matter after that: movement order, combat rolls, talent checks, purchases, inventory use, and quest choices can make two runs with the same code diverge.
+
+Use dungeon codes when you want to:
 
 - Reproduce a bug on the same dungeon.
 - Share a co-op lobby where every player starts from the same generated world.
 - Replay a challenge and compare decisions.
 
-In hosted multiplayer, the host command owns the seed:
+In hosted multiplayer, the host command owns the dungeon code:
 
 ```txt
 opendungeon-host --host 0.0.0.0 --mode coop --seed 2423368 --port 3737
