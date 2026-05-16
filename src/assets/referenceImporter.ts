@@ -31,10 +31,20 @@ export type ReferenceAssetEntry = {
   target: string
   sha256?: string
   license: ReferenceAssetLicense
+  approved?: boolean
+  accessibilityScore?: number
+  notes?: string
 }
 
 export type ReferenceAssetImportManifest = {
   version: 1
+  source?: {
+    name?: string
+    url?: string
+    downloadedTo?: string
+    reviewedBy?: string
+    notes?: string
+  }
   assets: ReferenceAssetEntry[]
 }
 
@@ -42,6 +52,7 @@ export type ReferenceAssetImportOptions = {
   sourceRoot?: string
   runtimeRoot?: string
   dryRun?: boolean
+  allowUnapproved?: boolean
 }
 
 export type ImportedReferenceAsset = {
@@ -50,6 +61,8 @@ export type ImportedReferenceAsset = {
   target: string
   licenseId: string
   sha256: string
+  approved: boolean
+  accessibilityScore?: number
 }
 
 export type ReferenceAssetImportResult = {
@@ -81,6 +94,8 @@ export function validateReferenceAssetImportManifest(manifest: Partial<Reference
     if (!asset?.source || typeof asset.source !== "string") errors.push(`${label} needs a source path.`)
     if (!safeRuntimeTarget(asset?.target)) errors.push(`${label} target must stay under runtime/.`)
     if (asset?.sha256 && !/^[a-f0-9]{64}$/i.test(asset.sha256)) errors.push(`${label} sha256 must be 64 hex chars.`)
+    if (asset?.approved !== undefined && typeof asset.approved !== "boolean") errors.push(`${label} approved must be true or false.`)
+    if (asset?.accessibilityScore !== undefined && !validAccessibilityScore(asset.accessibilityScore)) errors.push(`${label} accessibilityScore must be 0-100.`)
     validateLicense(label, asset?.license, errors)
   })
 
@@ -102,6 +117,7 @@ export function importReferenceAssets(manifest: ReferenceAssetImportManifest, op
 
     if (!existsSync(source) || !statSync(source).isFile()) throw new Error(`Reference asset ${asset.id} source is missing: ${source}`)
     if (licenseFile && (!existsSync(licenseFile) || !statSync(licenseFile).isFile())) throw new Error(`Reference asset ${asset.id} license file is missing: ${licenseFile}`)
+    if (!options.dryRun && !options.allowUnapproved && asset.approved !== true) throw new Error(`Reference asset ${asset.id} is not approved. Run a dry-run review first or pass --allow-unapproved for local experiments.`)
 
     const hash = sha256File(source)
     if (asset.sha256 && hash !== asset.sha256.toLowerCase()) throw new Error(`Reference asset ${asset.id} hash mismatch: expected ${asset.sha256}, got ${hash}`)
@@ -112,6 +128,8 @@ export function importReferenceAssets(manifest: ReferenceAssetImportManifest, op
       target,
       licenseId: asset.license.id,
       sha256: hash,
+      approved: asset.approved === true,
+      accessibilityScore: asset.accessibilityScore,
     })
 
     if (!options.dryRun) {
@@ -141,6 +159,10 @@ function safeRuntimeTarget(target: unknown) {
 
 function safeId(value: unknown) {
   return typeof value === "string" && /^[a-zA-Z0-9._-]+$/.test(value)
+}
+
+function validAccessibilityScore(value: unknown) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 100
 }
 
 function resolveSource(sourceRoot: string, path: string) {

@@ -120,6 +120,62 @@ Guest sessions are allowed to run side by side on the same laptop. If your norma
 OPENDUNGEON_AUTH_DIR="$(mktemp -d)" OPENDUNGEON_PLAYER_NAME=Guest bun run dev -- join http://127.0.0.1:3737
 ```
 
+## Asset Intake
+
+Use this lane for free sprite/audio packs before adding files under
+`assets/opendungeon-assets/runtime`. Keep downloaded source packs in a temporary
+folder or local cache, then import only the runtime-sized files that survive a
+terminal preview.
+
+1. Download the candidate pack outside the committed runtime folder.
+2. Record the source URL, license file or license URL, and reviewer notes in a
+   manifest next to the downloaded source.
+3. Run a dry-run import and inspect the target paths, hashes, approval state,
+   and terminal accessibility score.
+4. Mark only approved files with `approved: true`, then run the real import.
+5. Add a focused test, screenshot note, or headless/UI check that proves the new
+   pack improves a visible game surface.
+
+Example manifest:
+
+```json
+{
+  "version": 1,
+  "source": {
+    "name": "Example CC0 dungeon pack",
+    "url": "https://example.com/example-cc0-dungeon-pack",
+    "downloadedTo": "/tmp/opendungeon-assets/example-pack",
+    "reviewedBy": "local-agent",
+    "notes": "Sampled at terminal cell size before import."
+  },
+  "assets": [
+    {
+      "id": "example-terminal-tiles",
+      "kind": "terrain-sheet",
+      "source": "tiles.png",
+      "target": "runtime/tiles/example-terminal-tiles.png",
+      "license": {
+        "id": "CC0-1.0",
+        "sourceUrl": "https://example.com/example-cc0-dungeon-pack/license"
+      },
+      "approved": true,
+      "accessibilityScore": 86,
+      "notes": "Readable wall/floor contrast in Ghostty at the default scale."
+    }
+  ]
+}
+```
+
+Commands:
+
+```txt
+opendungeon assets import --manifest /tmp/opendungeon-assets/example-pack/manifest.json --source-root /tmp/opendungeon-assets/example-pack --dry-run
+opendungeon assets import --manifest /tmp/opendungeon-assets/example-pack/manifest.json --source-root /tmp/opendungeon-assets/example-pack
+```
+
+Real imports reject unapproved entries. Use `--allow-unapproved` only for local
+experiments that will not be committed.
+
 Signed-in sessions use a local active-run lock. Starting the same signed-in account twice should be blocked with a message that says the account is already in a game and names the terminal app, such as Ghostty. You can override the terminal label while testing that path:
 
 ```txt

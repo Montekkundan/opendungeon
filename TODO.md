@@ -43,7 +43,7 @@
 - [x] Download only free assets with usable licenses, record license/source notes, and import only packs that look good after terminal sampling rather than just in browser previews.
 - [x] Use Helium/Computer Use for asset browsing and cmux or the local terminal to inspect the running game UI with `bun dev` when deciding whether an asset pack actually fits.
 - [x] Used Helium/Computer Use to browse itch.io asset searches such as `https://itch.io/search?q=18x18`; downloaded the free CC0 Bountiful Bits pack, saved license/source notes, imported the civilized sheet, and sampled it for dungeon door/hazard sprites.
-- [ ] Build a repeatable free-asset intake lane: download to a temporary source folder, write a reference import manifest, run `opendungeon assets import --manifest <path> --dry-run`, import only approved sheets under `assets/opendungeon-assets/runtime`, then add screenshot/test evidence that the pack improves the game.
+- [x] Build a repeatable free-asset intake lane: download to a temporary source folder, write a reference import manifest, run `opendungeon assets import --manifest <path> --dry-run`, import only approved sheets under `assets/opendungeon-assets/runtime`, then add screenshot/test evidence that the pack improves the game.
 - [x] Add simple terminal-safe screen transitions with fade/slat overlays for current menu changes and portal-style game entry/load.
 - [x] Add dedicated portal-room and village arrival animations once those screens exist.
 - [x] Add physical note collectibles as dungeon objects that feed the Book tab.

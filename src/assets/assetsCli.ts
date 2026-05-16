@@ -68,6 +68,7 @@ export function runAssetsImport(args: string[]): ReferenceAssetImportResult {
     sourceRoot: valueAfter(args, "--source-root"),
     runtimeRoot: valueAfter(args, "--runtime-root"),
     dryRun: args.includes("--dry-run"),
+    allowUnapproved: args.includes("--allow-unapproved"),
   }
   return importReferenceAssets(loadReferenceAssetImportManifest(manifestPath), options)
 }
@@ -87,14 +88,18 @@ export function formatAssetGenerateResult(result: AssetGenerateResult) {
 
 export function formatAssetImportResult(result: ReferenceAssetImportResult) {
   const header = result.dryRun ? "asset import dry-run" : "assets imported"
-  const lines = result.imported.map((asset) => `${asset.id}: ${asset.target} (${asset.licenseId}, ${asset.sha256.slice(0, 12)})`)
+  const lines = result.imported.map((asset) => {
+    const approval = asset.approved ? "approved" : "pending"
+    const accessibility = asset.accessibilityScore === undefined ? "" : `, a11y ${asset.accessibilityScore}/100`
+    return `${asset.id}: ${asset.target} (${asset.licenseId}, ${approval}${accessibility}, ${asset.sha256.slice(0, 12)})`
+  })
   return [header, ...lines].join("\n")
 }
 
 export function assetsCommandHelp() {
   return `Asset commands:
   opendungeon assets generate <asset-id> --prompt <prompt> [--dry-run]
-  opendungeon assets import --manifest <path> [--source-root <path>] [--runtime-root <path>] [--dry-run]`
+  opendungeon assets import --manifest <path> [--source-root <path>] [--runtime-root <path>] [--dry-run] [--allow-unapproved]`
 }
 
 function promptFromArgs(args: string[]) {

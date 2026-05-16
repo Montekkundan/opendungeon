@@ -74,6 +74,8 @@ describe("assets CLI", () => {
               target: "runtime/dice/d20-project-owned.png",
               sha256: createHash("sha256").update("project-owned-png-bytes").digest("hex"),
               license: { id: "project-owned", file: "source/license.txt" },
+              approved: true,
+              accessibilityScore: 92,
             },
           ],
         }),
@@ -82,11 +84,49 @@ describe("assets CLI", () => {
       const dryRun = runAssetsImport(["--manifest", manifestPath, "--source-root", root, "--runtime-root", targetRoot, "--dry-run"])
       expect(dryRun.dryRun).toBe(true)
       expect(dryRun.imported[0]?.licenseId).toBe("project-owned")
+      expect(dryRun.imported[0]?.approved).toBe(true)
+      expect(dryRun.imported[0]?.accessibilityScore).toBe(92)
       expect(existsSync(join(targetRoot, "runtime/dice/d20-project-owned.png"))).toBe(false)
 
       const result = runAssetsImport(["--manifest", manifestPath, "--source-root", root, "--runtime-root", targetRoot])
       expect(readFileSync(join(targetRoot, "runtime/dice/d20-project-owned.png"), "utf8")).toBe("project-owned-png-bytes")
       expect(formatAssetImportResult(result)).toContain("assets imported")
+      expect(formatAssetImportResult(result)).toContain("approved, a11y 92/100")
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test("requires explicit approval for real reference asset imports", () => {
+    const root = mkdtempSync(join(tmpdir(), "opendungeon-reference-assets-"))
+    try {
+      const sourcePath = join(root, "asset.png")
+      const manifestPath = join(root, "manifest.json")
+      writeFileSync(sourcePath, "candidate-png-bytes")
+      writeFileSync(
+        manifestPath,
+        JSON.stringify({
+          version: 1,
+          source: { name: "test pack", url: "https://example.com/test-pack" },
+          assets: [
+            {
+              id: "candidate",
+              kind: "item-sheet",
+              source: "asset.png",
+              target: "runtime/icons/candidate.png",
+              license: { id: "CC0-1.0", sourceUrl: "https://example.com/test-pack/license" },
+              approved: false,
+              accessibilityScore: 80,
+            },
+          ],
+        }),
+      )
+
+      const dryRun = runAssetsImport(["--manifest", manifestPath, "--source-root", root, "--runtime-root", join(root, "runtime-root"), "--dry-run"])
+      expect(formatAssetImportResult(dryRun)).toContain("pending, a11y 80/100")
+      expect(() => runAssetsImport(["--manifest", manifestPath, "--source-root", root, "--runtime-root", join(root, "runtime-root")])).toThrow("is not approved")
+      const localExperiment = runAssetsImport(["--manifest", manifestPath, "--source-root", root, "--runtime-root", join(root, "runtime-root"), "--allow-unapproved"])
+      expect(localExperiment.imported[0]?.approved).toBe(false)
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
@@ -101,12 +141,14 @@ describe("assets CLI", () => {
             id: "bad-license",
             source: "asset.png",
             target: "../outside.png",
+            accessibilityScore: 101,
             license: { id: "unknown-commercial" },
           },
         ],
       }),
     ).toEqual([
       "bad-license target must stay under runtime/.",
+      "bad-license accessibilityScore must be 0-100.",
       "bad-license uses unsupported license unknown-commercial.",
       "bad-license needs a sourceUrl or license file.",
     ])
