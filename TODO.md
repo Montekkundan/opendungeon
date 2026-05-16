@@ -208,7 +208,7 @@
 - [x] Remove or isolate Bun-only assumptions from the globally installed `opendungeon` package so Windows/macOS/Linux users can run the published CLI reliably. Runtime audio now uses Node `fs` instead of `Bun.file`, and user-facing multiplayer copy points to `opendungeon-host`; Bun-only release/dev scripts remain contributor tooling.
 - [x] Add install smoke coverage for npm global install on macOS, Linux, and Windows, including `opendungeon --help`, `opendungeon doctor`, and a short run start.
 - [x] Keep `bun run package:check`, `bun test`, `bun run check`, `bun pm pack --dry-run`, and Changesets status green before release. Verified on 2026-05-16 with `bun run package:check`: typecheck/build passed, 230 tests passed, npm+bun install smoke passed, and dry pack produced the expected package. `bun run changeset status --since main` reports a patch bump for `@montekkundan/opendungeon`.
-- [ ] Verify trusted publishing and release workflow behavior after every changeset or package metadata change.
+- [x] Verify trusted publishing and release workflow behavior after every changeset or package metadata change. Added `bun run release:verify` and included it in `bun run package:check` so the main workflow keeps Changesets versioning, npm Trusted Publishing permissions, package checks before publish, and the already-published npm guard.
 - [x] Audit public repo hygiene before pushing: no `.env.local`, local saves, active-run locks, Supabase secrets, or accidental checkpoint artifacts. Added `bun run hygiene:public` to fail on tracked env files, local run/checkpoint state, untracked public files, and server-side secret-looking values before pushing.
 - [ ] Update `README.md`, website docs, and `CHANGELOG.md` for each release-facing change.
 
