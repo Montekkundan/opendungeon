@@ -4,6 +4,7 @@ import type { SynthProfile } from "./sfxSynth.js"
 
 export type AudioTrackId = "title-settings" | "dungeon"
 export type AudioGroupId = "music" | "sfx" | "ui"
+export type AudioLicenseId = "project-owned" | "CC0-1.0" | "CC-BY-3.0" | "CC-BY-4.0" | "MIT"
 
 export type AudioTrackManifestEntry = {
   id: AudioTrackId
@@ -13,9 +14,23 @@ export type AudioTrackManifestEntry = {
   loop: boolean
   defaultVolume: number
   use: string
-  licenseId: "project-owned" | "CC0-1.0" | "CC-BY-3.0" | "CC-BY-4.0" | "MIT"
+  licenseId: AudioLicenseId
   source: string
   canonical: boolean
+}
+
+export type WorldAudioManifestEntry = {
+  id: string
+  worldId: string
+  title: string
+  group: AudioGroupId
+  storagePath: string
+  loop: boolean
+  defaultVolume: number
+  use: string
+  licenseId: AudioLicenseId
+  source: string
+  canonical: false
 }
 
 export type AudioEventId =
@@ -100,6 +115,8 @@ export const audioManifest = {
 }
 
 export const plannedAudioEvents = audioManifest.events.map((event) => event.id)
+export const canonicalAudioTrackIds = audioManifest.tracks.map((track) => track.id)
+export const canonicalAudioEventIds = audioManifest.events.map((event) => event.id)
 
 export function audioTrack(id: AudioTrackId) {
   return audioManifest.tracks.find((track) => track.id === id) ?? null
@@ -116,6 +133,10 @@ export function audioRuntimePath(file: string) {
 export function audioTrackRuntimePath(id: AudioTrackId) {
   const track = audioTrack(id)
   return track ? audioRuntimePath(track.file) : ""
+}
+
+export function worldAudioStoragePrefix(worldId: string) {
+  return `worlds/${worldId}/audio/`
 }
 
 export function validateAudioManifest() {
@@ -139,6 +160,39 @@ export function validateAudioManifest() {
     if (!existsSync(event.source)) errors.push(`${event.id} missing license/source note ${event.source}.`)
     if (event.synth.steps.length === 0) errors.push(`${event.id} has no synth steps.`)
   }
+  return errors
+}
+
+export function validateWorldAudioManifest(entries: WorldAudioManifestEntry[]) {
+  const errors: string[] = []
+  const ids = new Set<string>()
+  const canonicalTrackIds = new Set(canonicalAudioTrackIds)
+  const canonicalEventIds = new Set(canonicalAudioEventIds)
+  const canonicalFiles = new Set(audioManifest.tracks.map((track) => track.file))
+
+  for (const entry of entries) {
+    if (ids.has(entry.id)) errors.push(`${entry.id} duplicates a world audio id.`)
+    ids.add(entry.id)
+    if (!entry.id.trim()) errors.push("World audio entries need a stable id.")
+    if (canonicalTrackIds.has(entry.id as AudioTrackId) || canonicalEventIds.has(entry.id as AudioEventId)) {
+      errors.push(`${entry.id} reuses a canonical audio id.`)
+    }
+    if (!entry.worldId.trim()) errors.push(`${entry.id} needs a world id.`)
+    if (!audioManifest.groups.includes(entry.group)) errors.push(`${entry.id} uses unknown group ${entry.group}.`)
+    if (entry.defaultVolume < 0 || entry.defaultVolume > 1) errors.push(`${entry.id} has an invalid default volume.`)
+    if (entry.canonical !== false) errors.push(`${entry.id} must be marked non-canonical.`)
+    if (!entry.source.trim()) errors.push(`${entry.id} needs a source or license note.`)
+
+    const prefix = worldAudioStoragePrefix(entry.worldId)
+    if (!entry.storagePath.startsWith(prefix)) errors.push(`${entry.id} must use world-scoped audio storage under ${prefix}.`)
+    if (entry.storagePath.includes("opendungeon-assets/runtime/audio") || entry.storagePath.startsWith("assets/")) {
+      errors.push(`${entry.id} must not point at canonical runtime audio assets.`)
+    }
+    if (canonicalFiles.has(entry.storagePath.split("/").at(-1) ?? "")) {
+      errors.push(`${entry.id} must not reuse a canonical soundtrack filename.`)
+    }
+  }
+
   return errors
 }
 

@@ -25,7 +25,7 @@ The long-term loop is: read what players did, draft a possible change, review it
 
 The GM console should use a chat-style workflow. The model can propose lore, level changes, sprite prompts, and asset ideas, but each output should be validated, previewed, and stored under the GM-created world before players see it.
 
-Generated GM content must not mix with canonical Single Player story or assets. Treat the GM world as the ownership boundary for generated lore, rooms, monsters, quests, and sprites.
+Generated GM content must not mix with canonical Single Player story or assets. Treat the GM world as the ownership boundary for generated lore, rooms, monsters, quests, sprites, music, and SFX.
 
 Current shape:
 

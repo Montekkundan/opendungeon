@@ -200,7 +200,7 @@
 - [ ] Source more free audio from itch.io/OpenGameArt/Kenney/related free-audio sites for teleportation, UI, combat, loot, village, and ambient effects; only import packs with clear commercial-use licenses such as CC0, CC-BY, MIT, or project-owned terms.
 - [ ] Use Helium/Computer Use for browsing audio packs and keep the same intake discipline as sprites: download to temp/cache, record source/license, audition samples, normalize filenames, import approved files under `assets/opendungeon-assets/runtime/audio`, and add tests or a manifest check.
 - [x] Add an audio manifest that lists track id, source file, intended screens/events, loop flag, volume defaults, license id/source, and whether it is canonical single-player content or GM/world-specific generated content.
-- [ ] Make GM/generated-world audio separate from canonical assets: AI/GM worlds can add custom music/SFX per world in Supabase, but those files must not replace the Single Player soundtrack.
+- [x] Make GM/generated-world audio separate from canonical assets: AI/GM worlds can add custom music/SFX per world in Supabase, but those files must not replace the Single Player soundtrack.
 
 ### Packaging, Release, And Cross-Platform Validation
 
