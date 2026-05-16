@@ -222,6 +222,15 @@ test("pause dialog keeps mode notes out of the action stack", () => {
   expect(text).not.toContain("Race mode keeps")
 })
 
+test("lobby disconnect dialog tells multiplayer clients to return to title", () => {
+  const output = draw(modelFor("game", createSession(1234, "coop"), { dialog: "lobbyDisconnected" }), 100, 32)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("LOBBY DISCONNECTED")
+  expect(text).toContain("The lobby host is offline.")
+  expect(text).toContain("Return to title")
+})
+
 test("cloud profile screen draws account once and names local-only action clearly", () => {
   const output = draw(
     modelFor("cloud", createSession(1234), {
