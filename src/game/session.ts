@@ -1430,7 +1430,7 @@ export function refreshVillageSchedules(session: GameSession) {
     cartographer: "shows a relationship scene about routes nobody else sees",
     guildmaster: "opens a relationship scene about why the final gate matters",
   }
-  const bossMemory = session.inventory.find((item) => item.endsWith(" memory"))
+  const bossMemory = villageBossMemory(session)
   session.hub.village.schedules = villageNpcIds.map((npc) => {
     const route = routes[npc][phase]
     const trust = session.hub.trust[npc]
@@ -1505,7 +1505,8 @@ export function visitVillageLocation(session: GameSession, id: VillageLocationId
     return `${trust.name} trust ${trust.level}.`
   }
   playLocalCutscene(session, "village-unlock")
-  pushSessionMessage(session, "The portal room steadies the next descent.")
+  const bossMemory = villageBossMemory(session)
+  pushSessionMessage(session, bossMemory ? `The portal room echoes with ${bossMemory}. The next descent is marked.` : "The portal room steadies the next descent.")
   return "portal"
 }
 
@@ -3527,7 +3528,9 @@ function applyBossAftermath(session: GameSession, kind: Actor["kind"]) {
   const shopDemand = `Aftermath: customers want boss memories and relic loot after ${bossName} fell.`
   session.hub.village.shopLog.unshift(shopDemand)
   session.hub.village.shopLog = session.hub.village.shopLog.slice(0, 8)
-  session.hub.relationshipLog.unshift(`${bossName} aftermath changed village demand and cartographer routes.`)
+  const cropPulse = Math.max(1, Math.min(3, session.floor + 1))
+  session.hub.farm.ready = clamp(session.hub.farm.ready + cropPulse, 0, session.hub.farm.plots + session.hub.farm.sprinklers + cropPulse)
+  session.hub.relationshipLog.unshift(`${bossName} aftermath changed village demand, portal light, and ${cropPulse} farm crop${cropPulse === 1 ? "" : "s"}.`)
   trimHubLog(session.hub)
   session.hub.village.schedules = session.hub.village.schedules.map((schedule) => {
     if (schedule.npc === "cartographer") return { ...schedule, text: "Venn is marking the boss aftermath route near the portal." }
@@ -3537,11 +3540,15 @@ function applyBossAftermath(session: GameSession, kind: Actor["kind"]) {
   rememberKnowledge(session, {
     id: `boss-aftermath-${kind}-floor-${session.floor}`,
     title: `${bossName} Aftermath`,
-    text: `${bossName} changed the village economy. Memory collectors pay more attention to boss memories, Cartographer trust rises, and the next market visit should test relic and memory demand.`,
+    text: `${bossName} changed the village economy. Memory collectors pay more attention to boss memories, the portal room glows differently, farm crops wake early, and the next market visit should test relic and memory demand.`,
     kind: "hub",
     floor: session.floor,
   })
   addToast(session, "Village aftermath", "Boss memory demand changed. Visit the market or Book.", "info")
+}
+
+function villageBossMemory(session: GameSession) {
+  return session.inventory.find((item) => item.endsWith(" memory")) ?? null
 }
 
 function defeatMessage(kind: Actor["kind"]) {

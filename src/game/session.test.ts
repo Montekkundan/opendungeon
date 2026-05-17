@@ -674,6 +674,11 @@ describe("game session", () => {
     expect(session.inventory[0]).toContain("memory")
     expect(session.hub.village.shopLog[0]).toContain("boss memories")
     expect(session.hub.village.customers.some((customer) => customer.taste === "memory")).toBe(true)
+    expect(session.hub.farm.ready).toBeGreaterThan(0)
+    expect(session.hub.relationshipLog[0]).toContain("portal light")
+    unlockHub(session)
+    expect(visitVillageLocation(session, "portal")).toBe("portal")
+    expect(session.log[0]).toContain("portal room echoes")
     expect(session.knowledge.some((entry) => entry.id === "boss-aftermath-grave-root-boss-floor-1" && entry.text.includes("village economy"))).toBe(true)
   })
 

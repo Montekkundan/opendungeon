@@ -256,5 +256,5 @@
 - [x] Add a content-pack import wizard with free-license checks, terminal preview sampling, and per-pack accessibility scores.
 - [ ] Add local daily/weekly challenge boards with replay ghosts, fixed seeds, mutator bundles, and class-specific medals.
 - [x] Add accessibility controls for toast duration, toast density, UI scale, high-contrast palettes, and reduced combat animation.
-- [ ] Add village aftermath scenes after bosses where NPC dialogue, shop demand, crops, and portal-room visuals change.
+- [x] Add village aftermath scenes after bosses where NPC dialogue, shop demand, crops, and portal-room visuals change.
 - [x] Add status-effect and combat-animation variants for poison, burn, guard, flee, ambush, boss phases, and perfect rolls.

@@ -909,6 +909,7 @@ function drawGame(canvas: Canvas, model: AppModel) {
 function drawVillage(canvas: Canvas, model: AppModel) {
   const session = model.session
   const hub = session.hub
+  const bossMemory = villageBossMemory(session)
   drawDungeonBackdrop(canvas, session.seed + 80, model.settings)
   const { x, y, width, height } = centeredPanelBounds(canvas, 116, 36)
   drawPanel(canvas, x, y, width, height, "Village", UI.focus)
@@ -926,6 +927,9 @@ function drawVillage(canvas: Canvas, model: AppModel) {
   const locationH = 12
   drawPanel(canvas, sideX, mapY, sideW, locationH, selected.label, UI.gold)
   writeWrapped(canvas, sideX + 3, mapY + 2, sideW - 6, [selected.text], 3, UI.ink, UI.panel)
+  if (bossMemory && hub.village.selectedLocation === "portal") {
+    writeWrapped(canvas, sideX + 3, mapY + 5, sideW - 6, [`Echoing with ${bossMemory}.`], 1, UI.focus, UI.panel)
+  }
   writeWrapped(canvas, sideX + 3, mapY + 6, sideW - 6, [`Coins ${hub.coins}  Loot sold ${hub.lootSold}`], 1, UI.soft, UI.panel)
   writeWrapped(canvas, sideX + 3, mapY + 7, sideW - 6, [`Pack ${hub.contentPacks.active}  Perm ${hub.village.selectedPermission} ${hub.village.permissions[hub.village.selectedPermission]}`], 1, UI.soft, UI.panel)
   writeWrapped(canvas, sideX + 3, mapY + 8, sideW - 6, [`Day ${hub.calendar.day} ${hub.calendar.phase} ${hub.calendar.weather}. ${hub.calendar.festival}`], 1, UI.brass, UI.panel)
@@ -1002,6 +1006,7 @@ function drawVillage(canvas: Canvas, model: AppModel) {
 
 function drawVillageMap(canvas: Canvas, model: AppModel, x: number, y: number, width: number, height: number) {
   const hub = model.session.hub
+  const bossMemory = villageBossMemory(model.session)
   canvas.fill(x, y, width, height, " ", "#17241d", "#17241d")
   for (let row = 0; row < height; row++) {
     for (let col = 0; col < width; col++) {
@@ -1028,7 +1033,7 @@ function drawVillageMap(canvas: Canvas, model: AppModel, x: number, y: number, w
     const location = villageLocations[id]
     const { px, py } = villagePointToScreen(x, y, width, height, cellW, cellH, location.position)
     const selected = hub.village.selectedLocation === id
-    drawVillageBuilding(canvas, px, py, id, selected, villageLocationBuilt(hub, id))
+    drawVillageBuilding(canvas, px, py, id, selected, villageLocationBuilt(hub, id), hub, bossMemory !== null)
   })
 
   hub.village.schedules.forEach((schedule, index) => {
@@ -1084,7 +1089,16 @@ function drawVillageTree(canvas: Canvas, x: number, y: number) {
   canvas.write(x + 1, y + 1, "│", "#8f5f3b", "#17241d")
 }
 
-function drawVillageBuilding(canvas: Canvas, x: number, y: number, id: VillageLocationId, selected: boolean, built: boolean) {
+function drawVillageBuilding(
+  canvas: Canvas,
+  x: number,
+  y: number,
+  id: VillageLocationId,
+  selected: boolean,
+  built: boolean,
+  hub: GameSession["hub"],
+  bossAftermath: boolean,
+) {
   const style = villageBuildingStyle(id, built)
   const w = id === "portal" ? 7 : 8
   const h = id === "farm" ? 4 : 5
@@ -1096,9 +1110,19 @@ function drawVillageBuilding(canvas: Canvas, x: number, y: number, id: VillageLo
     canvas.write(left + Math.max(1, Math.floor(w / 2)), top + 3, villageLocations[id].glyph, UI.brass, "#2d2f31")
   } else if (id === "portal") {
     drawMiniIcon(canvas, left + 1, top + 1, "stairs", 5, 2)
-    canvas.border(left, top, w, h, selected ? UI.gold : UI.cyan)
+    if (bossAftermath) {
+      canvas.write(left, top + 1, "*", UI.focus, "#101820")
+      canvas.write(left + w - 1, top + 1, "*", UI.focus, "#101820")
+      canvas.write(left + 2, top + 3, "echo", UI.focus, "#101820")
+    }
+    canvas.border(left, top, w, h, selected ? UI.gold : bossAftermath ? UI.focus : UI.cyan)
   } else if (id === "farm") {
     for (let row = 0; row < h; row++) canvas.fill(left, top + row, w, 1, row % 2 === 0 ? "·" : " ", "#7aaa7b", "#244532")
+    if (bossAftermath || hub.farm.ready > 0) {
+      canvas.write(left + 1, top + 1, "*", UI.gold, "#244532")
+      canvas.write(left + w - 2, top + 2, "*", UI.gold, "#244532")
+    }
+    if (hub.farm.ready > 0) canvas.write(left + 2, top + 2, "ripe", UI.gold, "#244532")
     canvas.write(left + Math.floor(w / 2), top + 1, villageLocations[id].glyph, selected ? UI.gold : UI.focus, "#244532")
   } else {
     canvas.fill(left, top + 1, w, 1, " ", style.roof, style.roof)
@@ -1106,6 +1130,10 @@ function drawVillageBuilding(canvas: Canvas, x: number, y: number, id: VillageLo
     canvas.write(left + Math.floor(w / 2), top + 3, villageLocations[id].glyph, selected ? "#101820" : style.accent, selected ? UI.gold : style.body)
     canvas.border(left, top, w, h, selected ? UI.gold : style.accent)
   }
+}
+
+function villageBossMemory(session: GameSession) {
+  return session.inventory.find((item) => item.endsWith(" memory")) ?? null
 }
 
 function villageBuildingStyle(id: VillageLocationId, built: boolean) {

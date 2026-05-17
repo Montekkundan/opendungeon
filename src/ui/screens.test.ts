@@ -384,6 +384,20 @@ test("village panels wrap long location and market copy", () => {
   expect(text).not.toContain("Customers test prices for dungeon lo…")
 })
 
+test("village map renders boss aftermath cues for portal and farm", () => {
+  const session = createSession(1234, "solo", "ranger", "Mira")
+  unlockHub(session)
+  session.inventory.unshift("Grave Root memory")
+  session.hub.stations.farm.built = true
+  session.hub.farm.ready = 2
+
+  const output = draw(modelFor("village", session), 120, 40)
+  const text = screenText(output.chunks)
+
+  expect(text).toContain("Echoing")
+  expect(text).toContain("ripe")
+})
+
 test("quickbar does not expose gold as a dead G action", () => {
   const output = draw(modelFor("game", createSession(1234)), 120, 40)
   const text = screenText(output.chunks)
