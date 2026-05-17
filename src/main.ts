@@ -2035,6 +2035,8 @@ function syncLobbyState() {
         floor: model.session.floor,
         turn: model.session.turn,
         hp: model.session.hp,
+        focus: model.session.focus,
+        xp: model.session.xp,
         level: model.session.level,
         unspentStatPoints: model.session.levelUp ? 1 : 0,
         inventoryCount: model.session.inventory.length,
@@ -2140,8 +2142,11 @@ function reconcileLocalSessionWithHostResult(command: Partial<LobbyCommandEntry>
   const accepted = result.accepted !== false
   if (accepted) {
     model.session.floor = Math.max(1, finiteHostInt(result.floor, model.session.floor))
+    model.session.focus = Math.max(0, finiteHostInt(result.focus, model.session.focus))
     model.session.hp = Math.max(0, finiteHostInt(result.hp, model.session.hp))
     model.session.gold = Math.max(0, finiteHostInt(result.gold, model.session.gold))
+    model.session.xp = Math.max(0, finiteHostInt(result.xp, model.session.xp))
+    model.session.level = Math.max(1, finiteHostInt(result.level, model.session.level))
     model.session.turn = Math.max(model.session.turn, finiteHostInt(result.turn, model.session.turn))
     model.session.player = {
       ...model.session.player,

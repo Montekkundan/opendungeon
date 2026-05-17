@@ -14,6 +14,7 @@ describe("host command relay", () => {
     })
 
     expect(result).toMatchObject({ accepted: true, floor: 1, status: "running" })
+    expect(result).toMatchObject({ focus: 11, level: 1, xp: 0, tutorialStage: "complete" })
     expect(result.message).toBeTruthy()
   })
 
@@ -95,6 +96,7 @@ describe("host command relay", () => {
 
     expect(result.accepted).toBe(true)
     expect(result.message).toContain("Area I gate opens")
+    expect(result).toMatchObject({ tutorialReady: false, tutorialStage: "npc-check" })
   })
 
   test("applies village movement and next descent commands on the host", () => {
@@ -160,6 +162,7 @@ describe("host command relay", () => {
     expect(selected.message).toContain("Aimed Shot")
     expect(rolled.accepted).toBe(true)
     expect(rolled.turn).toBeGreaterThan(selected.turn)
+    expect(rolled).toMatchObject({ focus: expect.any(Number), level: 1, tutorialStage: "combat", xp: expect.any(Number) })
   })
 
   test("uses explicit talent-check payloads without label parsing", () => {

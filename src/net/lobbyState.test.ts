@@ -109,12 +109,20 @@ describe("multiplayer lobby state", () => {
       },
       result: {
         accepted: true,
+        focus: 10,
         floor: 1,
+        gold: 7,
         hp: 18,
+        inventoryCount: 4,
+        level: 2,
         message: "Mira moved east.",
         status: "running",
+        tutorialCompleted: false,
+        tutorialReady: true,
+        tutorialStage: "movement",
         turn: 3,
         x: 6,
+        xp: 9,
         y: 5,
       },
     })
@@ -132,7 +140,20 @@ describe("multiplayer lobby state", () => {
     expect(command.payload.unsafe).toBe("script")
     expect(snapshot.commands[0]).toMatchObject({ id: command.id, playerId: "p1" })
     expect(snapshot.actions[0]).toMatchObject({ label: "Moved east", name: "Mira", type: "move" })
-    expect(snapshot.coopStates[0]).toMatchObject({ hp: 18, saveRevision: 3, turn: 3, x: 6, y: 5 })
+    expect(snapshot.coopStates[0]).toMatchObject({
+      focus: 10,
+      gold: 7,
+      hp: 18,
+      inventoryCount: 4,
+      level: 2,
+      saveRevision: 3,
+      tutorialReady: true,
+      tutorialStage: "movement",
+      turn: 3,
+      x: 6,
+      xp: 9,
+      y: 5,
+    })
   })
 
   test("exposes the latest host-owned authoritative command result", () => {

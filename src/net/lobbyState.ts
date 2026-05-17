@@ -34,6 +34,8 @@ export type CoopSyncState = {
   floor: number
   turn: number
   hp: number
+  focus: number
+  xp: number
   level: number
   unspentStatPoints: number
   inventoryCount: number
@@ -51,9 +53,9 @@ export type CoopSyncState = {
 
 type CoopSyncInput = Omit<
   CoopSyncState,
-  "name" | "updatedAt" | "level" | "unspentStatPoints" | "inventoryCount" | "gold" | "saveRevision" | "connected" | "classId" | "tutorialStage" | "tutorialReady" | "tutorialCompleted"
+  "name" | "updatedAt" | "focus" | "xp" | "level" | "unspentStatPoints" | "inventoryCount" | "gold" | "saveRevision" | "connected" | "classId" | "tutorialStage" | "tutorialReady" | "tutorialCompleted"
 > &
-  Partial<Pick<CoopSyncState, "level" | "unspentStatPoints" | "inventoryCount" | "gold" | "saveRevision" | "connected" | "classId" | "tutorialStage" | "tutorialReady" | "tutorialCompleted">>
+  Partial<Pick<CoopSyncState, "focus" | "xp" | "level" | "unspentStatPoints" | "inventoryCount" | "gold" | "saveRevision" | "connected" | "classId" | "tutorialStage" | "tutorialReady" | "tutorialCompleted">>
 
 export type CombatTurnState = {
   active: boolean
@@ -125,9 +127,15 @@ export type LobbyCommandResult = {
   floor: number
   turn: number
   hp: number
+  focus?: number
+  xp?: number
+  level?: number
   combatActive?: boolean
   inventoryCount?: number
   gold?: number
+  tutorialStage?: string
+  tutorialReady?: boolean
+  tutorialCompleted?: boolean
   x: number
   y: number
   status: string
@@ -227,6 +235,8 @@ export class MultiplayerLobbyState {
       floor: positiveInt(input.floor),
       turn: positiveInt(input.turn),
       hp: positiveInt(input.hp),
+      focus: positiveInt(input.focus),
+      xp: positiveInt(input.xp),
       level: Math.max(1, positiveInt(input.level) || 1),
       unspentStatPoints: positiveInt(input.unspentStatPoints),
       inventoryCount: positiveInt(input.inventoryCount),
@@ -460,13 +470,19 @@ export class MultiplayerLobbyState {
       connected: true,
       floor: result.floor,
       combatActive: result.combatActive ?? state.combatActive,
+      focus: result.focus ?? state.focus,
       gold: result.gold ?? state.gold,
       hp: result.hp,
       inventoryCount: result.inventoryCount ?? state.inventoryCount,
+      level: result.level ?? state.level,
       saveRevision: Math.max(state.saveRevision, result.turn),
       turn: Math.max(state.turn, result.turn),
+      tutorialCompleted: result.tutorialCompleted ?? state.tutorialCompleted,
+      tutorialReady: result.tutorialReady ?? state.tutorialReady,
+      tutorialStage: result.tutorialStage ? cleanTutorialStage(result.tutorialStage) : state.tutorialStage,
       updatedAt,
       x: result.x,
+      xp: result.xp ?? state.xp,
       y: result.y,
     })
   }
@@ -554,11 +570,17 @@ function normalizeCommandResult(value: unknown, fallback: Record<string, string 
     accepted: record.accepted !== false,
     combatActive: typeof record.combatActive === "boolean" ? record.combatActive : typeof fallback.combatActive === "boolean" ? fallback.combatActive : undefined,
     floor: positiveInt(record.floor ?? fallback.floor),
+    focus: record.focus !== undefined || fallback.focus !== undefined ? positiveInt(record.focus ?? fallback.focus) : undefined,
     hp: positiveInt(record.hp ?? fallback.hp),
+    level: record.level !== undefined || fallback.level !== undefined ? Math.max(1, positiveInt(record.level ?? fallback.level) || 1) : undefined,
     message: cleanActionLabel(record.message || "Command accepted."),
     status: String(record.status || "running").replace(/[^\w -]/g, "").slice(0, 24) || "running",
+    tutorialCompleted: typeof record.tutorialCompleted === "boolean" ? record.tutorialCompleted : typeof fallback.tutorialCompleted === "boolean" ? fallback.tutorialCompleted : undefined,
+    tutorialReady: typeof record.tutorialReady === "boolean" ? record.tutorialReady : typeof fallback.tutorialReady === "boolean" ? fallback.tutorialReady : undefined,
+    tutorialStage: record.tutorialStage !== undefined || fallback.tutorialStage !== undefined ? cleanTutorialStage(record.tutorialStage ?? fallback.tutorialStage) : undefined,
     turn: positiveInt(record.turn ?? fallback.turn),
     x: integer(record.x ?? fallback.x),
+    xp: record.xp !== undefined || fallback.xp !== undefined ? positiveInt(record.xp ?? fallback.xp) : undefined,
     y: integer(record.y ?? fallback.y),
   }
   if (record.gold !== undefined || fallback.gold !== undefined) result.gold = positiveInt(record.gold ?? fallback.gold)

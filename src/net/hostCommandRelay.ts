@@ -22,6 +22,7 @@ import {
   selectSkill,
   sellLootToVillage,
   tryMove,
+  tutorialCoopCheckpoint,
   unlockHub,
   usePotion,
   visitVillageLocation,
@@ -31,6 +32,7 @@ import {
   type InventoryActionId,
   type MultiplayerMode,
   type TutorialActionId,
+  type TutorialStageId,
 } from "../game/session.js"
 import type { LobbyCommandResult, LobbyCommandType } from "./lobbyState.js"
 
@@ -251,20 +253,28 @@ export class HostCommandRelay {
     if (hp !== null) session.hp = Math.max(0, hp)
     session.turn = turn
     if (x !== null && y !== null) session.player = { ...session.player, x, y }
+    hydrateTutorialFromPayload(session, command.payload)
   }
 
   private result(session: GameSession, accepted: boolean, message: string): LobbyCommandResult {
+    const checkpoint = tutorialCoopCheckpoint(session)
     return {
       accepted,
       combatActive: session.combat.active,
       floor: session.floor,
+      focus: session.focus,
       gold: session.gold,
       hp: session.hp,
       inventoryCount: session.inventory.length,
+      level: session.level,
       message,
       status: session.status,
+      tutorialCompleted: checkpoint.completed,
+      tutorialReady: checkpoint.ready,
+      tutorialStage: checkpoint.stage,
       turn: session.turn,
       x: session.player.x,
+      xp: session.xp,
       y: session.player.y,
     }
   }
@@ -274,6 +284,46 @@ function tutorialEnabledFromPayload(payload: HostRelayCommand["payload"]) {
   if (payload.tutorialEnabled === true) return true
   if (payload.tutorialEnabled === false) return false
   return payload.tutorialStage === "movement" || payload.tutorialStage === "npc-check" || payload.tutorialStage === "combat"
+}
+
+function hydrateTutorialFromPayload(session: GameSession, payload: HostRelayCommand["payload"]) {
+  if (payload.tutorialEnabled === false) {
+    session.tutorial.enabled = false
+    session.tutorial.completed = true
+    session.tutorial.stage = "complete"
+    return
+  }
+
+  const stage = tutorialStageFromPayload(payload.tutorialStage)
+  if (!stage || tutorialStageRank(stage) < tutorialStageRank(session.tutorial.stage)) return
+  session.tutorial.enabled = true
+  session.tutorial.stage = stage
+  session.tutorial.completed = stage === "complete" || payload.tutorialCompleted === true
+
+  if (stage === "npc-check" || stage === "combat" || stage === "complete") {
+    session.tutorial.movedUp = true
+    session.tutorial.movedDown = true
+    session.tutorial.movedLeft = true
+    session.tutorial.movedRight = true
+    session.tutorial.openedBook = true
+    session.tutorial.openedInventory = true
+    session.tutorial.openedQuests = true
+  }
+  if (stage === "combat" || stage === "complete") {
+    session.tutorial.talkedToNpc = true
+    session.tutorial.handledTalentCheck = true
+  }
+}
+
+function tutorialStageFromPayload(value: unknown): TutorialStageId | null {
+  return value === "movement" || value === "npc-check" || value === "combat" || value === "complete" ? value : null
+}
+
+function tutorialStageRank(stage: TutorialStageId) {
+  if (stage === "movement") return 0
+  if (stage === "npc-check") return 1
+  if (stage === "combat") return 2
+  return 3
 }
 
 function classIdFromPayload(value: unknown): HeroClass {
@@ -386,18 +436,42 @@ function finitePayloadInt(value: unknown) {
 
 function snapshot(session: GameSession) {
   return {
+    combat: structuredClone(session.combat),
+    conversation: structuredClone(session.conversation),
     floor: session.floor,
+    focus: session.focus,
+    gold: session.gold,
     hp: session.hp,
+    inventory: [...session.inventory],
+    level: session.level,
+    levelUp: structuredClone(session.levelUp),
+    log: [...session.log],
     player: { ...session.player },
+    skillCheck: structuredClone(session.skillCheck),
     status: session.status,
+    talents: [...session.talents],
     turn: session.turn,
+    tutorial: structuredClone(session.tutorial),
+    xp: session.xp,
   }
 }
 
 function restore(session: GameSession, state: ReturnType<typeof snapshot>) {
+  session.combat = state.combat
+  session.conversation = state.conversation
   session.floor = state.floor
+  session.focus = state.focus
+  session.gold = state.gold
   session.hp = state.hp
+  session.inventory = state.inventory
+  session.level = state.level
+  session.levelUp = state.levelUp
+  session.log = state.log
   session.player = state.player
+  session.skillCheck = state.skillCheck
   session.status = state.status
+  session.talents = state.talents
   session.turn = state.turn
+  session.tutorial = state.tutorial
+  session.xp = state.xp
 }
