@@ -893,6 +893,7 @@ describe("game session", () => {
 
     expect(active.cadence).toBe("weekly")
     expect(active.seed).toBe(2_026_051)
+    expect(active.ghostTrail[0]?.event).toBe("start")
     expect(active.mutators.length).toBeGreaterThan(1)
     expect(next.hub.activeMutators).toEqual(expect.arrayContaining(active.mutators))
     expect(next.knowledge.some((entry) => entry.id === "challenge-weekly-2026051")).toBe(true)
@@ -903,8 +904,13 @@ describe("game session", () => {
     next.gold = 30
     const entry = recordChallengeResult(next)
 
-    expect(entry?.replayKey).toBe(active.replayKey)
-    expect(entry?.score).toBeGreaterThan(0)
+    expect(entry).not.toBeNull()
+    if (!entry) throw new Error("challenge result was not recorded")
+    expect(entry.replayKey).toBe(active.replayKey)
+    expect(entry.score).toBeGreaterThan(0)
+    expect(entry.ghostTrail.length).toBeGreaterThan(1)
+    expect(next.hub.challengeBoard.classMedals.ranger).toBe(entry.medal)
+    expect(next.hub.challengeBoard.replayGhosts[0]?.summary).toContain("Mira ranger")
     expect(next.hub.challengeBoard.activeRun).toBeNull()
     expect(next.hub.challengeBoard.leaderboard[0]?.name).toBe("Mira")
   })

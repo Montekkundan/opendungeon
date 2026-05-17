@@ -965,26 +965,37 @@ function drawVillage(canvas: Canvas, model: AppModel) {
   }
   const dashboard = hub.balanceDashboard
   const balanceY = marketH > 11 ? marketY + 10 : marketY + 6
+  let detailY = balanceY + 2
   if (!compactMarket) {
     canvas.write(sideX + 3, balanceY, trim(`Balance ${dashboard.runs} runs  ${session.hero.classId} ${dashboard.classWinRate[session.hero.classId] ?? 0}%`, sideW - 6), UI.soft, UI.panel)
     canvas.write(sideX + 3, balanceY + 1, trim(`Gold ${dashboard.averageGold}  Hub coins ${dashboard.averageHubCoins}  Pace ${dashboard.upgradePacing}%`, sideW - 6), UI.soft, UI.panel)
   }
   const challenge = hub.challengeBoard.leaderboard[0]
-  if (challenge && marketH > 12) canvas.write(sideX + 3, balanceY + 2, trim(`Challenge ${challenge.cadence} ${challenge.medal} ${challenge.score} ${challenge.replayKey}`, sideW - 6), UI.gold, UI.panel)
+  const classMedal = hub.challengeBoard.classMedals[session.hero.classId] ?? "none"
+  const ghost = hub.challengeBoard.replayGhosts[0]
+  if (challenge && marketH > 12) {
+    writeWrapped(canvas, sideX + 3, detailY, sideW - 6, [`Challenge ${challenge.cadence} ${challenge.medal} score ${challenge.score}. ${session.hero.classId} medal ${classMedal}.`], 2, UI.gold, UI.panel)
+    detailY += 2
+  }
+  if (ghost && marketH > 14) {
+    writeWrapped(canvas, sideX + 3, detailY, sideW - 6, [`Ghost ${ghost.summary}`], 2, UI.focus, UI.panel)
+    detailY += 2
+  }
   if (!compactMarket && marketH > 14) {
     const permissions = hub.village.permissions
     writeWrapped(
       canvas,
       sideX + 3,
-      balanceY + 3,
+      detailY,
       sideW - 6,
       [`Perms homes ${permissions.houses}, farm ${permissions.farm}, storage ${permissions.storage}, shop ${permissions.shop}, upgrades ${permissions.upgrades}.`],
       2,
       UI.soft,
       UI.panel,
     )
+    detailY += 2
   }
-  if (dashboard.notes[0] && marketH > 16) writeWrapped(canvas, sideX + 3, balanceY + 5, sideW - 6, [dashboard.notes[0]], marketH - 16, UI.muted, UI.panel)
+  if (dashboard.notes[0] && marketH > 16) writeWrapped(canvas, sideX + 3, detailY, sideW - 6, [dashboard.notes[0]], Math.max(1, marketY + marketH - detailY - 1), UI.muted, UI.panel)
 
   if (model.saveStatus) writeWrapped(canvas, x + 4, y + height - 5, width - 8, [model.saveStatus], 2, UI.focus, UI.panel)
   drawFooter(canvas, [
@@ -3148,12 +3159,16 @@ function drawHubDialog(canvas: Canvas, model: AppModel, x: number, y: number, wi
   const weapon = model.session.equipment.weapon
   const mutators = hub.activeMutators.length ? hub.activeMutators.map(runMutatorShortLabel).join(", ") : "none"
   const challenge = hub.challengeBoard.activeRun ?? hub.challengeBoard.leaderboard[0]
+  const classMedal = hub.challengeBoard.classMedals[model.session.hero.classId] ?? "none"
+  const ghost = hub.challengeBoard.replayGhosts[0]
   canvas.write(rightX + 2, trustY + 8, trim(`Food ${food}`, rightW - 4), UI.ink, UI.panel)
   canvas.write(rightX + 2, trustY + 9, trim(`Weapon ${weapon?.name ?? "none"}  dmg +${weapon?.bonusDamage ?? 0}`, rightW - 4), UI.ink, UI.panel)
   canvas.write(rightX + 2, trustY + 10, trim(`Mutators ${mutators}`, rightW - 4), UI.soft, UI.panel)
   if (challenge) canvas.write(rightX + 2, trustY + 11, trim(`Challenge ${challenge.cadence} seed ${challenge.seed}`, rightW - 4), UI.gold, UI.panel)
-  if (!hub.unlocked) canvas.write(rightX + 2, trustY + 12, trim("Clear the dungeon or recover a deed to open village building.", rightW - 4), UI.gold, UI.panel)
-  else canvas.write(rightX + 2, trustY + 12, trim("Keys: 1 smith, 2 kitchen, 3 sell, 4 food, 5 farm, 6 weapon, 7 quest, 8 hard.", rightW - 4), UI.gold, UI.panel)
+  canvas.write(rightX + 2, trustY + 12, trim(`${model.session.hero.classId} medal ${classMedal}`, rightW - 4), UI.gold, UI.panel)
+  if (ghost) canvas.write(rightX + 2, trustY + 13, trim(`Ghost ${ghost.name} ${ghost.medal} ${ghost.score}`, rightW - 4), UI.focus, UI.panel)
+  if (!hub.unlocked) canvas.write(rightX + 2, trustY + 14, trim("Clear the dungeon or recover a deed to open village building.", rightW - 4), UI.gold, UI.panel)
+  else canvas.write(rightX + 2, trustY + 14, trim("Keys: 1 smith, 2 kitchen, 3 sell, 4 food, 5 farm, 6 weapon, 7 quest, 8 hard.", rightW - 4), UI.gold, UI.panel)
 }
 
 function drawCutsceneDialog(canvas: Canvas, model: AppModel, x: number, y: number, width: number, height: number) {

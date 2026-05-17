@@ -254,7 +254,7 @@
 - [ ] Add cooking and crafting recipes that combine dungeon loot, farm crops, and trust unlocks into next-run food, bombs, tools, and charms.
 - [x] Add a co-op permissions screen for houses, farm plots, storage, shop shelves, and shared upgrade spending.
 - [x] Add a content-pack import wizard with free-license checks, terminal preview sampling, and per-pack accessibility scores.
-- [ ] Add local daily/weekly challenge boards with replay ghosts, fixed seeds, mutator bundles, and class-specific medals.
+- [x] Add local daily/weekly challenge boards with replay ghosts, fixed seeds, mutator bundles, and class-specific medals.
 - [x] Add accessibility controls for toast duration, toast density, UI scale, high-contrast palettes, and reduced combat animation.
 - [x] Add village aftermath scenes after bosses where NPC dialogue, shop demand, crops, and portal-room visuals change.
 - [x] Add status-effect and combat-animation variants for poison, burn, guard, flee, ambush, boss phases, and perfect rolls.

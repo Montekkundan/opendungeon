@@ -491,6 +491,15 @@ export type ChallengeRunMetadata = {
   mutators: RunMutatorId[]
   startedAtTurn: number
   replayKey: string
+  ghostTrail: ChallengeReplayPoint[]
+}
+
+export type ChallengeReplayPoint = {
+  turn: number
+  floor: number
+  x: number
+  y: number
+  event: string
 }
 
 export type ChallengeLeaderboardEntry = ChallengeRunMetadata & {
@@ -504,9 +513,24 @@ export type ChallengeLeaderboardEntry = ChallengeRunMetadata & {
   medal: ChallengeMedal
 }
 
+export type ChallengeReplayGhost = {
+  replayKey: string
+  name: string
+  classId: HeroClass
+  cadence: ChallengeCadence
+  seed: number
+  medal: ChallengeMedal
+  score: number
+  status: "running" | "dead" | "victory"
+  summary: string
+  trail: ChallengeReplayPoint[]
+}
+
 export type ChallengeBoardState = {
   activeRun: ChallengeRunMetadata | null
   leaderboard: ChallengeLeaderboardEntry[]
+  classMedals: Record<HeroClass, ChallengeMedal>
+  replayGhosts: ChallengeReplayGhost[]
 }
 
 export type VillageShopSale = {
@@ -1335,6 +1359,7 @@ export function applyChallengeRun(session: GameSession, cadence: ChallengeCadenc
     mutators,
     startedAtTurn: session.turn,
     replayKey,
+    ghostTrail: [challengeReplayPoint(session, "start")],
   }
   applyMutatorPressure(session)
   applyStrategicDescentPressure(session)
@@ -1354,6 +1379,7 @@ export function recordChallengeResult(session: GameSession) {
   session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
   const active = session.hub.challengeBoard.activeRun
   if (!active) return null
+  recordChallengeTrail(session, "finish")
   const score = challengeScore(session, active)
   const entry: ChallengeLeaderboardEntry = {
     ...active,
@@ -1370,11 +1396,66 @@ export function recordChallengeResult(session: GameSession) {
   if (existingIndex >= 0) session.hub.challengeBoard.leaderboard.splice(existingIndex, 1, entry)
   else session.hub.challengeBoard.leaderboard.unshift(entry)
   session.hub.challengeBoard.leaderboard = session.hub.challengeBoard.leaderboard.sort((left, right) => right.score - left.score || left.turns - right.turns).slice(0, 12)
+  session.hub.challengeBoard.classMedals[entry.classId] = betterChallengeMedal(session.hub.challengeBoard.classMedals[entry.classId], entry.medal)
+  const ghost = challengeReplayGhostFor(entry)
+  const ghostIndex = session.hub.challengeBoard.replayGhosts.findIndex((candidate) => candidate.replayKey === ghost.replayKey && candidate.name === ghost.name)
+  if (ghostIndex >= 0) session.hub.challengeBoard.replayGhosts.splice(ghostIndex, 1, ghost)
+  else session.hub.challengeBoard.replayGhosts.unshift(ghost)
+  session.hub.challengeBoard.replayGhosts = session.hub.challengeBoard.replayGhosts.slice(0, 12)
   session.hub.relationshipLog.unshift(`${entry.cadence} challenge ${entry.medal} medal: ${entry.score} score.`)
   trimHubLog(session.hub)
-  addToast(session, "Challenge recorded", `${entry.medal} medal, score ${entry.score}.`, entry.medal === "gold" ? "success" : "info")
+  addToast(session, "Challenge recorded", `${entry.medal} medal, score ${entry.score}. Ghost saved.`, entry.medal === "gold" ? "success" : "info")
   session.hub.challengeBoard.activeRun = null
   return entry
+}
+
+function recordChallengeTrail(session: GameSession, event: string) {
+  const active = session.hub.challengeBoard.activeRun
+  if (!active) return
+  const point = challengeReplayPoint(session, event)
+  const previous = active.ghostTrail.at(-1)
+  if (previous && previous.turn === point.turn && previous.floor === point.floor && previous.x === point.x && previous.y === point.y && previous.event === point.event) return
+  active.ghostTrail.push(point)
+  if (active.ghostTrail.length > 48) active.ghostTrail = [active.ghostTrail[0]!, ...active.ghostTrail.slice(-47)]
+}
+
+function challengeReplayPoint(session: GameSession, event: string): ChallengeReplayPoint {
+  return {
+    turn: Math.max(0, Math.floor(session.turn)),
+    floor: Math.max(1, Math.floor(session.floor)),
+    x: clamp(Math.floor(session.player.x), 1, 999),
+    y: clamp(Math.floor(session.player.y), 1, 999),
+    event: cleanId(event || "move"),
+  }
+}
+
+function challengeReplayGhostFor(entry: ChallengeLeaderboardEntry): ChallengeReplayGhost {
+  const start = entry.ghostTrail[0]
+  const end = entry.ghostTrail.at(-1)
+  const path = start && end ? `F${start.floor}:${start.x},${start.y}->F${end.floor}:${end.x},${end.y}` : `F${entry.floor}`
+  return {
+    replayKey: entry.replayKey,
+    name: entry.name,
+    classId: entry.classId,
+    cadence: entry.cadence,
+    seed: entry.seed,
+    medal: entry.medal,
+    score: entry.score,
+    status: entry.status,
+    summary: `${entry.name} ${entry.classId} ${entry.medal} ${entry.score} ${path}`,
+    trail: entry.ghostTrail.slice(0, 48),
+  }
+}
+
+function betterChallengeMedal(current: ChallengeMedal | undefined, next: ChallengeMedal): ChallengeMedal {
+  return challengeMedalRank(next) > challengeMedalRank(current ?? "none") ? next : (current ?? "none")
+}
+
+function challengeMedalRank(medal: ChallengeMedal) {
+  if (medal === "gold") return 3
+  if (medal === "silver") return 2
+  if (medal === "bronze") return 1
+  return 0
 }
 
 function challengeScore(session: GameSession, active: ChallengeRunMetadata) {
@@ -2268,6 +2349,7 @@ export function tryMove(session: GameSession, dx: number, dy: number) {
   }
 
   session.player = next
+  recordChallengeTrail(session, "move")
   recordTutorialAction(session, tutorialMoveAction(dx, dy))
 
   if (tile === "door") {
@@ -4045,6 +4127,7 @@ function descend(session: GameSession) {
   session.floorModifier = floorModifierFor(session.seed, session.floor)
   applyStrategicDescentPressure(session)
   session.player = { ...session.dungeon.playerStart }
+  recordChallengeTrail(session, `floor-${session.floor}`)
   session.visible = new Set()
   session.seen = new Set()
   session.hp = Math.min(session.maxHp, session.hp + 3)
@@ -4858,9 +4941,13 @@ function normalizeBalanceDashboardState(value: unknown, fallback: BalanceDashboa
 
 function normalizeChallengeBoardState(value: unknown, fallback: ChallengeBoardState): ChallengeBoardState {
   const source = value && typeof value === "object" ? (value as Partial<ChallengeBoardState>) : {}
+  const leaderboard = normalizeChallengeLeaderboard(source.leaderboard, fallback.leaderboard)
+  const replayGhosts = normalizeChallengeReplayGhosts(source.replayGhosts, fallback.replayGhosts)
   return {
     activeRun: normalizeChallengeRunMetadata(source.activeRun),
-    leaderboard: normalizeChallengeLeaderboard(source.leaderboard, fallback.leaderboard),
+    leaderboard,
+    classMedals: normalizeChallengeClassMedals(source.classMedals, fallback.classMedals),
+    replayGhosts: replayGhosts.length ? replayGhosts : leaderboard.map(challengeReplayGhostFor).slice(0, 12),
   }
 }
 
@@ -4877,6 +4964,7 @@ function normalizeChallengeRunMetadata(value: unknown): ChallengeRunMetadata | n
     mutators: normalizeRunMutators(source.mutators),
     startedAtTurn: Math.max(0, Math.floor(Number(source.startedAtTurn) || 0)),
     replayKey: cleanId(source.replayKey || `${source.cadence}-${seed}-${classId}`),
+    ghostTrail: normalizeChallengeReplayTrail(source.ghostTrail),
   }
 }
 
@@ -4901,6 +4989,52 @@ function normalizeChallengeLeaderboard(value: unknown, fallback: ChallengeLeader
     ]
   })
   return rows.sort((left, right) => right.score - left.score || left.turns - right.turns).slice(0, 12)
+}
+
+function normalizeChallengeReplayTrail(value: unknown, fallback: ChallengeReplayPoint[] = []): ChallengeReplayPoint[] {
+  if (!Array.isArray(value)) return fallback.slice(0, 48)
+  const trail = value.flatMap((item) => {
+    const source = item && typeof item === "object" ? (item as Partial<ChallengeReplayPoint>) : null
+    if (!source) return []
+    return [
+      {
+        turn: Math.max(0, Math.floor(Number(source.turn) || 0)),
+        floor: Math.max(1, Math.floor(Number(source.floor) || 1)),
+        x: clamp(Math.floor(Number(source.x) || 1), 1, 999),
+        y: clamp(Math.floor(Number(source.y) || 1), 1, 999),
+        event: cleanId(source.event || "move"),
+      },
+    ]
+  })
+  return trail.slice(0, 48)
+}
+
+function normalizeChallengeReplayGhosts(value: unknown, fallback: ChallengeReplayGhost[]): ChallengeReplayGhost[] {
+  if (!Array.isArray(value)) return fallback.slice(0, 12)
+  const ghosts = value.flatMap((item) => {
+    const source = item && typeof item === "object" ? (item as Partial<ChallengeReplayGhost>) : null
+    if (!source || !isChallengeCadence(source.cadence) || !isHeroClass(source.classId)) return []
+    return [
+      {
+        replayKey: cleanId(source.replayKey || `${source.cadence}-${Number(source.seed) || 1}-${source.classId}`),
+        name: cleanHeroName(source.name || "Crawler"),
+        classId: source.classId,
+        cadence: source.cadence,
+        seed: Math.max(1, Math.floor(Number(source.seed) || 1)),
+        medal: isChallengeMedal(source.medal) ? source.medal : "none",
+        score: Math.max(0, Math.floor(Number(source.score) || 0)),
+        status: isRunStatus(source.status) ? source.status : "running",
+        summary: cleanBookText(source.summary || "Saved challenge ghost", 140),
+        trail: normalizeChallengeReplayTrail(source.trail),
+      },
+    ]
+  })
+  return ghosts.slice(0, 12)
+}
+
+function normalizeChallengeClassMedals(value: unknown, fallback: Record<HeroClass, ChallengeMedal>) {
+  const source = value && typeof value === "object" ? (value as Partial<Record<HeroClass, ChallengeMedal>>) : {}
+  return Object.fromEntries(heroClassIds.map((id) => [id, isChallengeMedal(source[id]) ? source[id] : fallback[id] ?? "none"])) as Record<HeroClass, ChallengeMedal>
 }
 
 function normalizeHeroClassScores(value: unknown, fallback: Record<HeroClass, number>) {
@@ -5110,7 +5244,13 @@ function createChallengeBoardState(): ChallengeBoardState {
   return {
     activeRun: null,
     leaderboard: [],
+    classMedals: createChallengeClassMedalState(),
+    replayGhosts: [],
   }
+}
+
+function createChallengeClassMedalState() {
+  return Object.fromEntries(heroClassIds.map((id) => [id, "none"])) as Record<HeroClass, ChallengeMedal>
 }
 
 function sellValue(item: string) {
