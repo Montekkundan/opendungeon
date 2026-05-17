@@ -156,6 +156,45 @@ describe("multiplayer lobby state", () => {
     })
   })
 
+  test("rolls co-op sync state back to the host result when a command is rejected", () => {
+    let now = 60
+    const lobby = new MultiplayerLobbyState({ mode: "coop", seed: 1234, now: () => now++ })
+    lobby.join("p1", "Mira")
+    lobby.updateCoopState({ playerId: "p1", floor: 1, turn: 4, hp: 19, x: 6, y: 5, combatActive: false })
+
+    const command = lobby.recordCommand({
+      playerId: "p1",
+      type: "move",
+      label: "Moved through closed gate",
+      floor: 1,
+      turn: 9,
+      hp: 14,
+      x: 99,
+      y: 99,
+      payload: {},
+      result: {
+        accepted: false,
+        floor: 1,
+        hp: 19,
+        message: "Move command needs a direction.",
+        status: "running",
+        turn: 4,
+        x: 6,
+        y: 5,
+      },
+    })
+
+    expect(command.accepted).toBe(false)
+    expect(lobby.snapshot().coopStates[0]).toMatchObject({
+      floor: 1,
+      hp: 19,
+      saveRevision: 4,
+      turn: 4,
+      x: 6,
+      y: 5,
+    })
+  })
+
   test("exposes the latest host-owned authoritative command result", () => {
     let now = 70
     const lobby = new MultiplayerLobbyState({ mode: "coop", seed: 1234, now: () => now++ })

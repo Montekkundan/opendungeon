@@ -134,7 +134,10 @@ test("host keeps co-op tutorial movement streams smooth per player", async () =>
     expect(moved.coopStates.find((state) => state.name === "Mira")).toMatchObject({ x: miraSecond?.x, y: 10 })
     expect(moved.coopStates.find((state) => state.name === "Sol")).toMatchObject({ x: 13, y: 10 })
 
-    mira.send(JSON.stringify({ type: "command", commandType: "move", label: "Moved nowhere", floor: 1, turn: 3, hp: 19, x: 10, y: 10, payload: {} }))
+    mira.send(JSON.stringify({ type: "sync", state: syncState("ranger", 1, 99, 99, "movement", false, { turn: 99 }) }))
+    await waitForSnapshot(sol, (snapshot) => snapshot.coopStates.find((state) => state.name === "Mira")?.x === 99)
+
+    mira.send(JSON.stringify({ type: "command", commandType: "move", label: "Moved nowhere", floor: 1, turn: 100, hp: 19, x: 99, y: 99, payload: {} }))
     const rejected = await waitForSnapshot(sol, (snapshot) => snapshot.commands.some((command) => command.label === "Moved nowhere"))
     expect(rejected.commands.find((command) => command.label === "Moved nowhere")?.result.accepted).toBe(false)
     expect(rejected.coopStates.find((state) => state.name === "Mira")).toMatchObject({ x: miraSecond?.x, y: miraSecond?.y })
@@ -243,7 +246,7 @@ function waitForSnapshot(socket: WebSocket, predicate: (snapshot: LobbySnapshot)
   })
 }
 
-function syncState(classId: string, floor: number, x: number, y: number, tutorialStage: string, tutorialReady: boolean) {
+function syncState(classId: string, floor: number, x: number, y: number, tutorialStage: string, tutorialReady: boolean, overrides: Record<string, string | number | boolean> = {}) {
   return {
     classId,
     floor,
@@ -260,6 +263,7 @@ function syncState(classId: string, floor: number, x: number, y: number, tutoria
     tutorialStage,
     tutorialReady,
     tutorialCompleted: false,
+    ...overrides,
   }
 }
 

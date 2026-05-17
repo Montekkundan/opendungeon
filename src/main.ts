@@ -92,7 +92,7 @@ import { acquireLocalRunLock, releaseLocalRunLock, terminalAppName, type LocalRu
 import { debugOverlaysEnabled } from "./system/debugFlags.js"
 import { checkInternetConnectivity } from "./net/connectivity.js"
 import { lobbyInviteErrorMessage, lobbyInviteMismatchNotice, lobbyJoinUsageMessage, normalizeLobbyBaseUrl } from "./net/hostConfig.js"
-import type { CoopSyncState, LobbyActionType, LobbyCommandEntry, LobbySnapshot } from "./net/lobbyState.js"
+import type { CoopSyncState, LobbyActionType, LobbyCommandEntry, LobbyCommandResult, LobbySnapshot } from "./net/lobbyState.js"
 import { checkForUpdate, checkingUpdateStatus, handleUpdateCommand } from "./system/updateCheck.js"
 import { easeInOutQuart, lerp } from "./shared/numeric.js"
 import { transitionDurationForKind } from "./ui/teleportAnimation.js"
@@ -2154,26 +2154,31 @@ function reconcileLocalSessionWithHostResult(command: Partial<LobbyCommandEntry>
   const result = command.result
   if (!result) return
   const accepted = result.accepted !== false
-  if (accepted) {
-    model.session.floor = Math.max(1, finiteHostInt(result.floor, model.session.floor))
-    model.session.focus = Math.max(0, finiteHostInt(result.focus, model.session.focus))
-    model.session.hp = Math.max(0, finiteHostInt(result.hp, model.session.hp))
-    model.session.gold = Math.max(0, finiteHostInt(result.gold, model.session.gold))
-    model.session.xp = Math.max(0, finiteHostInt(result.xp, model.session.xp))
-    model.session.level = Math.max(1, finiteHostInt(result.level, model.session.level))
-    model.session.turn = Math.max(model.session.turn, finiteHostInt(result.turn, model.session.turn))
-    model.session.player = {
-      ...model.session.player,
-      x: finiteHostInt(result.x, model.session.player.x),
-      y: finiteHostInt(result.y, model.session.player.y),
-    }
-    model.session.status = String(result.status || model.session.status) as GameSession["status"]
+  if (accepted || command.playerId === localLobbyClientId) {
+    applyHostResultToLocalSession(result, accepted)
   }
 
   const message = `${accepted ? "Host applied" : "Host rejected"} ${command.type ?? "command"}: ${result.message}`
   if (model.session.log[0] !== message) model.session.log.unshift(message)
   while (model.session.log.length > 8) model.session.log.pop()
   if (!accepted) addToast(model.session, "Host rejected", result.message, "warning")
+}
+
+function applyHostResultToLocalSession(result: LobbyCommandResult, accepted: boolean) {
+  model.session.floor = Math.max(1, finiteHostInt(result.floor, model.session.floor))
+  model.session.focus = Math.max(0, finiteHostInt(result.focus, model.session.focus))
+  model.session.hp = Math.max(0, finiteHostInt(result.hp, model.session.hp))
+  model.session.gold = Math.max(0, finiteHostInt(result.gold, model.session.gold))
+  model.session.xp = Math.max(0, finiteHostInt(result.xp, model.session.xp))
+  model.session.level = Math.max(1, finiteHostInt(result.level, model.session.level))
+  const hostTurn = finiteHostInt(result.turn, model.session.turn)
+  model.session.turn = accepted ? Math.max(model.session.turn, hostTurn) : hostTurn
+  model.session.player = {
+    ...model.session.player,
+    x: finiteHostInt(result.x, model.session.player.x),
+    y: finiteHostInt(result.y, model.session.player.y),
+  }
+  model.session.status = String(result.status || model.session.status) as GameSession["status"]
 }
 
 function finiteHostInt(value: unknown, fallback: number) {

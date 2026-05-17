@@ -462,7 +462,26 @@ export class MultiplayerLobbyState {
     const state = this.coopStates.get(playerId)
     if (!state) return
     if (!result.accepted) {
-      this.coopStates.set(playerId, { ...state, connected: true, updatedAt })
+      this.coopStates.set(playerId, {
+        ...state,
+        connected: true,
+        floor: result.floor,
+        combatActive: result.combatActive ?? state.combatActive,
+        focus: result.focus ?? state.focus,
+        gold: result.gold ?? state.gold,
+        hp: result.hp,
+        inventoryCount: result.inventoryCount ?? state.inventoryCount,
+        level: result.level ?? state.level,
+        saveRevision: Math.max(state.saveRevision, result.turn),
+        turn: result.turn,
+        tutorialCompleted: result.tutorialCompleted ?? state.tutorialCompleted,
+        tutorialReady: result.tutorialReady ?? state.tutorialReady,
+        tutorialStage: result.tutorialStage ? cleanTutorialStage(result.tutorialStage) : state.tutorialStage,
+        updatedAt,
+        x: result.x,
+        xp: result.xp ?? state.xp,
+        y: result.y,
+      })
       return
     }
     this.coopStates.set(playerId, {

@@ -61,9 +61,9 @@ export class HostCommandRelay {
 
   apply(command: HostRelayCommand): LobbyCommandResult {
     const session = this.sessionFor(command)
-    this.hydrateFromClientSnapshot(session, command)
     const before = snapshot(session)
     try {
+      this.hydrateFromClientSnapshot(session, command)
       switch (command.type) {
         case "move":
           this.applyMove(session, command)
