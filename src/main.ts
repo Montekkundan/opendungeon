@@ -2187,11 +2187,43 @@ function applyHostResultToLocalSession(result: LobbyCommandResult, accepted: boo
   model.session.combat.active = result.combatActive ?? model.session.combat.active
   model.session.combat.round = Math.max(0, finiteHostInt(result.combatRound, model.session.combat.round))
   if (result.combatMessage) model.session.combat.message = result.combatMessage
+  applyHostTutorialResult(result)
 }
 
 function finiteHostInt(value: unknown, fallback: number) {
   const number = Number(value)
   return Number.isFinite(number) ? Math.floor(number) : fallback
+}
+
+function applyHostTutorialResult(result: LobbyCommandResult) {
+  const stage = cleanRemoteTutorialStage(result.tutorialStage)
+  const tutorial = model.session.tutorial
+  if (result.tutorialCompleted || stage === "complete") {
+    tutorial.completed = true
+    tutorial.stage = "complete"
+    tutorial.coopGateHold = null
+    return
+  }
+  if (tutorialStageRank(stage) < tutorialStageRank(tutorial.stage)) return
+  tutorial.enabled = true
+  tutorial.stage = stage as typeof tutorial.stage
+  if (stage === "npc-check" || stage === "combat" || result.tutorialReady) {
+    tutorial.movedUp = true
+    tutorial.movedDown = true
+    tutorial.movedLeft = true
+    tutorial.movedRight = true
+    tutorial.openedInventory = true
+    tutorial.openedQuests = true
+    tutorial.openedBook = true
+  }
+  if (stage === "combat" || (stage === "npc-check" && result.tutorialReady)) {
+    tutorial.talkedToNpc = true
+    tutorial.handledTalentCheck = true
+  }
+  if (stage === "combat" && result.tutorialReady) {
+    tutorial.combatStarted = true
+    tutorial.combatFinished = true
+  }
 }
 
 function applyGmPatchesFromSnapshot(snapshot: Partial<LobbySnapshot>) {
