@@ -1,21 +1,33 @@
 import {
   attemptFlee,
+  buildHubStation,
   cancelSkillCheck,
   chooseConversationOption,
   createSession,
+  craftVillageRecipe,
+  createNextDescentSession,
+  cycleCoopVillagePermission,
+  customizeVillageHouse,
   dismissSkillCheck,
   isHeroClass,
   interactWithWorld,
+  moveVillagePlayer,
   performCombatAction,
   performInventoryAction,
+  prepareFood,
   recordTutorialAction,
   rest,
+  runVillageShopSale,
   resolveSkillCheck,
   selectSkill,
+  sellLootToVillage,
   tryMove,
+  unlockHub,
   usePotion,
+  visitVillageLocation,
   type HeroClass,
   type GameSession,
+  type HubStationId,
   type InventoryActionId,
   type MultiplayerMode,
   type TutorialActionId,
@@ -64,7 +76,8 @@ export class HostCommandRelay {
           this.applyInventory(session, command)
           break
         case "village":
-          return this.result(session, true, "Village command recorded for shared meta-progression.")
+          this.applyVillage(session, command)
+          break
       }
     } catch (error) {
       restore(session, before)
@@ -146,6 +159,57 @@ export class HostCommandRelay {
       const result = performInventoryAction(session, index, action)
       if (!result.used && action !== "inspect") throw new Error(result.message)
     }
+  }
+
+  private applyVillage(session: GameSession, command: HostRelayCommand) {
+    if (!session.hub.unlocked) unlockHub(session, "Co-op village command opened the shared road.")
+    const label = command.label.toLowerCase()
+    const action = String(command.payload.villageAction || "").toLowerCase()
+    if (action === "move") {
+      const dx = finitePayloadInt(command.payload.dx) ?? 0
+      const dy = finitePayloadInt(command.payload.dy) ?? 0
+      moveVillagePlayer(session, dx, dy)
+      return
+    }
+    if (label.includes("started next descent")) {
+      const nextSeed = finitePayloadInt(command.payload.nextSeed) ?? this.seed + 1
+      Object.assign(session, createNextDescentSession(session, nextSeed))
+      return
+    }
+    const station = hubStationFromLabel(label)
+    if (station) {
+      buildHubStation(session, station)
+      return
+    }
+    if (label.includes("sold loot") || label.includes("checked market with no loot")) {
+      sellLootToVillage(session)
+      return
+    }
+    if (label.includes("prepared food")) {
+      prepareFood(session)
+      return
+    }
+    if (label.includes("crafted") || label.includes("checked crafting")) {
+      craftVillageRecipe(session)
+      return
+    }
+    if (label.includes("ran market sale") || label.includes("checked market sale")) {
+      runVillageShopSale(session)
+      return
+    }
+    if (label.includes("customized")) {
+      customizeVillageHouse(session, command.playerId)
+      return
+    }
+    if (label.includes("permission")) {
+      cycleCoopVillagePermission(session)
+      return
+    }
+    if (label.includes("visited village location")) {
+      visitVillageLocation(session)
+      return
+    }
+    session.log.unshift(command.label)
   }
 
   private applyTutorialUiAction(session: GameSession, label: string) {
@@ -236,6 +300,14 @@ function inventorySlotFromLabel(label: string) {
   const match = label.match(/slot (\d+)/)
   if (!match) return null
   return Math.max(0, Number(match[1]) - 1)
+}
+
+function hubStationFromLabel(label: string): HubStationId | null {
+  if (label.includes("blacksmith")) return "blacksmith"
+  if (label.includes("kitchen")) return "kitchen"
+  if (label.includes("farm")) return "farm"
+  if (label.includes("upgrade")) return "upgrade-bench"
+  return null
 }
 
 function finitePayloadInt(value: unknown) {

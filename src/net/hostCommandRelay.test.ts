@@ -96,6 +96,26 @@ describe("host command relay", () => {
     expect(result.accepted).toBe(true)
     expect(result.message).toContain("Area I gate opens")
   })
+
+  test("applies village movement and next descent commands on the host", () => {
+    const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
+
+    const moved = relay.apply(command({
+      label: "Moved in village to market",
+      payload: { villageAction: "move", dx: 1, dy: 0 },
+      type: "village",
+    }))
+    const next = relay.apply(command({
+      label: "Started next descent with current dungeon code",
+      payload: { nextSeed: 2423370 },
+      type: "village",
+    }))
+
+    expect(moved).toMatchObject({ accepted: true, status: "running" })
+    expect(moved.message).toContain("closest on the village road")
+    expect(next).toMatchObject({ accepted: true, floor: 1, status: "running" })
+    expect(next.message).toContain("next descent")
+  })
 })
 
 function command(overrides: Partial<Parameters<HostCommandRelay["apply"]>[0]> = {}): Parameters<HostCommandRelay["apply"]>[0] {

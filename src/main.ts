@@ -610,7 +610,7 @@ function handleHubKey(key: KeyEvent) {
 function handleVillageKey(key: KeyEvent) {
   if (key.name === "g") {
     model.seed = seedForVillageDescent(model.villageSeedMode, model.seed, randomSeed)
-    sendLobbyAction("village", `Started next descent with ${villageSeedPlanText(model.villageSeedMode, model.seed)}`)
+    sendLobbyAction("village", `Started next descent with ${villageSeedPlanText(model.villageSeedMode, model.seed)}`, { nextSeed: model.seed })
     startVillageDescent()
     return
   }
@@ -702,7 +702,7 @@ function handleVillageKey(key: KeyEvent) {
   if (move) {
     const selected = moveVillagePlayer(model.session, move.dx, move.dy)
     model.saveStatus = `${selected.replace(/-/g, " ")} selected.`
-    sendLobbyAction("move", `Moved in village to ${selected.replace(/-/g, " ")}`)
+    sendLobbyAction("village", `Moved in village to ${selected.replace(/-/g, " ")}`, { villageAction: "move", dx: move.dx, dy: move.dy })
   }
 }
 
