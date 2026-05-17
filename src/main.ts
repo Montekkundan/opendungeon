@@ -1169,15 +1169,16 @@ function handleCombatKey(key: KeyEvent) {
     return
   }
   if (/^[1-6]$/.test(key.name)) {
-    selectSkill(model.session, Number(key.name) - 1)
-    sendLobbyAction("combat", `Selected combat skill ${key.name}`)
+    const skillIndex = Number(key.name) - 1
+    selectSkill(model.session, skillIndex)
+    sendLobbyAction("combat", `Selected combat skill ${key.name}`, { combatAction: "select-skill", combatSkillIndex: skillIndex })
     return
   }
   if (key.name === "f") {
     playAudioEvent("d20-roll")
     const roll = attemptFlee(model.session)
     if (roll) startDiceRollAnimation(roll.d20)
-    sendLobbyAction("combat", `Tried to flee${roll ? ` d20=${roll.d20}` : ""}`)
+    sendLobbyAction("combat", `Tried to flee${roll ? ` d20=${roll.d20}` : ""}`, { combatAction: "flee" })
     return
   }
   if (isConfirmKey(key)) {
@@ -1186,7 +1187,7 @@ function handleCombatKey(key: KeyEvent) {
     performCombatAction(model.session)
     const nextRoll = model.session.combat.lastRoll
     if (nextRoll && nextRoll !== previousRoll) startDiceRollAnimation(nextRoll.d20)
-    sendLobbyAction("combat", nextRoll && nextRoll !== previousRoll ? `Rolled combat d20=${nextRoll.d20}` : "Resolved combat action")
+    sendLobbyAction("combat", nextRoll && nextRoll !== previousRoll ? `Rolled combat d20=${nextRoll.d20}` : "Resolved combat action", { combatAction: "roll" })
   }
 }
 

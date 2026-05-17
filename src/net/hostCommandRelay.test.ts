@@ -136,6 +136,31 @@ describe("host command relay", () => {
     expect(rejected).toMatchObject({ accepted: false, gold: 0, inventoryCount: 2 })
     expect(rejected.message).toContain("Empty slot")
   })
+
+  test("uses explicit combat payloads and returns host combat state", () => {
+    const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
+    const start = relay.apply(command({
+      label: "Moved east",
+      payload: { direction: "east", hp: 19, turn: 1, tutorialEnabled: true, tutorialStage: "combat", x: 29, y: 6 },
+    }))
+    const selected = relay.apply(command({
+      label: "Selected combat skill",
+      payload: { combatAction: "select-skill", combatSkillIndex: 1, hp: start.hp, turn: start.turn, x: start.x, y: start.y },
+      type: "combat",
+    }))
+    const rolled = relay.apply(command({
+      label: "Resolved combat action",
+      payload: { combatAction: "roll", hp: selected.hp, turn: selected.turn, x: selected.x, y: selected.y },
+      type: "combat",
+    }))
+
+    expect(start).toMatchObject({ accepted: true, combatActive: true })
+    expect(start.message).toContain("Combat starts")
+    expect(selected).toMatchObject({ accepted: true, combatActive: true, turn: start.turn })
+    expect(selected.message).toContain("Aimed Shot")
+    expect(rolled.accepted).toBe(true)
+    expect(rolled.turn).toBeGreaterThan(selected.turn)
+  })
 })
 
 function command(overrides: Partial<Parameters<HostCommandRelay["apply"]>[0]> = {}): Parameters<HostCommandRelay["apply"]>[0] {

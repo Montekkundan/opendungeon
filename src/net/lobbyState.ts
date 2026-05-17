@@ -125,6 +125,7 @@ export type LobbyCommandResult = {
   floor: number
   turn: number
   hp: number
+  combatActive?: boolean
   inventoryCount?: number
   gold?: number
   x: number
@@ -458,6 +459,7 @@ export class MultiplayerLobbyState {
       ...state,
       connected: true,
       floor: result.floor,
+      combatActive: result.combatActive ?? state.combatActive,
       gold: result.gold ?? state.gold,
       hp: result.hp,
       inventoryCount: result.inventoryCount ?? state.inventoryCount,
@@ -550,6 +552,7 @@ function normalizeCommandResult(value: unknown, fallback: Record<string, string 
   const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {}
   const result: LobbyCommandResult = {
     accepted: record.accepted !== false,
+    combatActive: typeof record.combatActive === "boolean" ? record.combatActive : typeof fallback.combatActive === "boolean" ? fallback.combatActive : undefined,
     floor: positiveInt(record.floor ?? fallback.floor),
     hp: positiveInt(record.hp ?? fallback.hp),
     message: cleanActionLabel(record.message || "Command accepted."),

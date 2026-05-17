@@ -128,13 +128,16 @@ export class HostCommandRelay {
 
   private applyCombat(session: GameSession, command: HostRelayCommand) {
     const label = command.label.toLowerCase()
-    const skillIndex = combatSkillIndex(label)
-    if (skillIndex !== null) {
+    const action = combatActionFromPayload(command.payload.combatAction)
+    const skillIndex = combatSkillIndexFromPayload(command.payload.combatSkillIndex) ?? combatSkillIndex(label)
+    if (action === "select-skill" || skillIndex !== null) {
       if (!session.combat.active) throw new Error("No active combat for skill selection.")
+      if (skillIndex === null) throw new Error("Combat skill selection needs a skill index.")
       selectSkill(session, skillIndex)
+      session.log.unshift(session.combat.message)
       return
     }
-    if (label.includes("flee")) {
+    if (action === "flee" || label.includes("flee")) {
       if (!attemptFlee(session)) throw new Error("No active combat to flee.")
       return
     }
@@ -236,6 +239,7 @@ export class HostCommandRelay {
   private result(session: GameSession, accepted: boolean, message: string): LobbyCommandResult {
     return {
       accepted,
+      combatActive: session.combat.active,
       floor: session.floor,
       gold: session.gold,
       hp: session.hp,
@@ -286,6 +290,16 @@ function combatSkillIndex(label: string) {
   const match = label.match(/skill (\d+)/)
   if (!match) return null
   return Math.max(0, Number(match[1]) - 1)
+}
+
+function combatActionFromPayload(value: unknown) {
+  if (value === "select-skill" || value === "flee" || value === "roll" || value === "resolve") return value
+  return null
+}
+
+function combatSkillIndexFromPayload(value: unknown) {
+  const index = finitePayloadInt(value)
+  return index !== null && index >= 0 ? index : null
 }
 
 function inventoryActionFromLabel(label: string): InventoryActionId | null {
