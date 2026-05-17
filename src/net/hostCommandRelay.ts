@@ -186,48 +186,48 @@ export class HostCommandRelay {
   private applyVillage(session: GameSession, command: HostRelayCommand) {
     if (!session.hub.unlocked) unlockHub(session, "Co-op village command opened the shared road.")
     const label = command.label.toLowerCase()
-    const action = String(command.payload.villageAction || "").toLowerCase()
+    const action = villageActionFromPayload(command.payload.villageAction)
     if (action === "move") {
       const dx = finitePayloadInt(command.payload.dx) ?? 0
       const dy = finitePayloadInt(command.payload.dy) ?? 0
       moveVillagePlayer(session, dx, dy)
       return
     }
-    if (label.includes("started next descent")) {
+    if (action === "next-descent" || label.includes("started next descent")) {
       const nextSeed = finitePayloadInt(command.payload.nextSeed) ?? this.seed + 1
       Object.assign(session, createNextDescentSession(session, nextSeed))
       return
     }
-    const station = hubStationFromLabel(label)
+    const station = hubStationFromPayload(command.payload.station) ?? hubStationFromLabel(label)
     if (station) {
       buildHubStation(session, station)
       return
     }
-    if (label.includes("sold loot") || label.includes("checked market with no loot")) {
+    if (action === "sell-loot" || label.includes("sold loot") || label.includes("checked market with no loot")) {
       sellLootToVillage(session)
       return
     }
-    if (label.includes("prepared food")) {
+    if (action === "prepare-food" || label.includes("prepared food")) {
       prepareFood(session)
       return
     }
-    if (label.includes("crafted") || label.includes("checked crafting")) {
+    if (action === "craft" || label.includes("crafted") || label.includes("checked crafting")) {
       craftVillageRecipe(session)
       return
     }
-    if (label.includes("ran market sale") || label.includes("checked market sale")) {
+    if (action === "market-sale" || label.includes("ran market sale") || label.includes("checked market sale")) {
       runVillageShopSale(session)
       return
     }
-    if (label.includes("customized")) {
+    if (action === "customize-house" || label.includes("customized")) {
       customizeVillageHouse(session, command.playerId)
       return
     }
-    if (label.includes("permission")) {
+    if (action === "cycle-permission" || label.includes("permission")) {
       cycleCoopVillagePermission(session)
       return
     }
-    if (label.includes("visited village location")) {
+    if (action === "visit-location" || label.includes("visited village location")) {
       visitVillageLocation(session)
       return
     }
@@ -421,11 +421,34 @@ function inventorySlotFromPayload(value: unknown) {
   return index !== null && index >= 0 ? index : null
 }
 
+function villageActionFromPayload(value: unknown) {
+  if (
+    value === "move" ||
+    value === "next-descent" ||
+    value === "build-station" ||
+    value === "sell-loot" ||
+    value === "prepare-food" ||
+    value === "craft" ||
+    value === "market-sale" ||
+    value === "customize-house" ||
+    value === "cycle-permission" ||
+    value === "visit-location"
+  ) {
+    return value
+  }
+  return null
+}
+
 function hubStationFromLabel(label: string): HubStationId | null {
   if (label.includes("blacksmith")) return "blacksmith"
   if (label.includes("kitchen")) return "kitchen"
   if (label.includes("farm")) return "farm"
   if (label.includes("upgrade")) return "upgrade-bench"
+  return null
+}
+
+function hubStationFromPayload(value: unknown): HubStationId | null {
+  if (value === "blacksmith" || value === "kitchen" || value === "farm" || value === "upgrade-bench") return value
   return null
 }
 

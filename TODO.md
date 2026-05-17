@@ -146,6 +146,7 @@
 - [x] Add explicit combat command payloads and host combat-active results so selected skills, flee attempts, and rolls no longer depend on command-label parsing.
 - [x] Add explicit interaction and tutorial command payloads for tutorial journals, talent-check controls, and NPC conversation actions so host replay no longer relies only on visible interaction labels.
 - [x] Broadcast host-owned resource and tutorial progress fields in command results so clients and GM/player state can render authoritative focus, XP, level, gate readiness, inventory, and gold after accepted commands.
+- [x] Add explicit village command payloads for station building, market sales, food prep, crafting, house customization, permissions, visits, movement, and next descent so co-op village replay no longer depends on visible website or terminal labels.
 - [ ] Finish the accepted command stream into a fully host-rendered command relay: clients should render authoritative host state/results for movement, combat, loot, village, and tutorial progression instead of keeping parallel local simulation as the primary source of truth.
 - [x] Verify signed-in duplicate-run locking in Ghostty and another terminal app: local active-run locks block the same signed-in account and hosted lobbies reject duplicate signed-in account identities, while separate guest auth dirs remain allowed.
 - [x] Make game modes explicit everywhere: Single Player, Multiplayer, and Multiplayer with GM. Avoid mixing race/sync/dev-host concepts with the authored story loop.

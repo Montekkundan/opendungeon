@@ -610,7 +610,7 @@ function handleHubKey(key: KeyEvent) {
 function handleVillageKey(key: KeyEvent) {
   if (key.name === "g") {
     model.seed = seedForVillageDescent(model.villageSeedMode, model.seed, randomSeed)
-    sendLobbyAction("village", `Started next descent with ${villageSeedPlanText(model.villageSeedMode, model.seed)}`, { nextSeed: model.seed })
+    sendLobbyAction("village", `Started next descent with ${villageSeedPlanText(model.villageSeedMode, model.seed)}`, { villageAction: "next-descent", nextSeed: model.seed })
     startVillageDescent()
     return
   }
@@ -623,28 +623,28 @@ function handleVillageKey(key: KeyEvent) {
     buildHubStation(model.session, "blacksmith")
     playAudioEvent("village-build")
     model.saveStatus = model.session.log[0] ?? "Blacksmith checked."
-    sendLobbyAction("village", "Checked or built the blacksmith")
+    sendLobbyAction("village", "Checked or built the blacksmith", { villageAction: "build-station", station: "blacksmith" })
     return
   }
   if (key.name === "3") {
     const coins = sellLootToVillage(model.session)
     playAudioEvent(coins > 0 ? "item-pickup" : "menu-cancel")
     model.saveStatus = coins > 0 ? `Sold loot for ${coins} coins.` : model.session.log[0] ?? "No loot to sell."
-    sendLobbyAction("village", coins > 0 ? `Sold loot for ${coins} coins` : "Checked market with no loot to sell")
+    sendLobbyAction("village", coins > 0 ? `Sold loot for ${coins} coins` : "Checked market with no loot to sell", { villageAction: "sell-loot" })
     return
   }
   if (key.name === "4") {
     prepareFood(model.session)
     playAudioEvent("village-build")
     model.saveStatus = model.session.log[0] ?? "Food prepared."
-    sendLobbyAction("village", "Prepared food")
+    sendLobbyAction("village", "Prepared food", { villageAction: "prepare-food" })
     return
   }
   if (key.name === "r") {
     const craft = craftVillageRecipe(model.session)
     playAudioEvent(craft ? "village-build" : "menu-cancel")
     model.saveStatus = craft?.message ?? model.session.log[0] ?? "No recipe ready."
-    sendLobbyAction("village", craft ? `Crafted ${craft.item}` : "Checked crafting recipes")
+    sendLobbyAction("village", craft ? `Crafted ${craft.item}` : "Checked crafting recipes", { villageAction: "craft" })
     return
   }
   if (key.name === "escape") {
@@ -660,19 +660,19 @@ function handleVillageKey(key: KeyEvent) {
     const sale = runVillageShopSale(model.session)
     playAudioEvent(sale ? "item-pickup" : "menu-cancel")
     model.saveStatus = sale?.reaction ?? model.session.log[0] ?? "No market sale."
-    sendLobbyAction("village", sale ? `Ran market sale: ${sale.reaction}` : "Checked market sale")
+    sendLobbyAction("village", sale ? `Ran market sale: ${sale.reaction}` : "Checked market sale", { villageAction: "market-sale" })
     return
   }
   if (key.name === "h") {
     const house = customizeVillageHouse(model.session)
     model.saveStatus = `${house.name} customized.`
-    sendLobbyAction("village", `Customized ${house.name}`)
+    sendLobbyAction("village", `Customized ${house.name}`, { villageAction: "customize-house" })
     return
   }
   if (key.name === "p") {
     const result = cycleCoopVillagePermission(model.session)
     model.saveStatus = result.message
-    sendLobbyAction("village", result.message)
+    sendLobbyAction("village", result.message, { villageAction: "cycle-permission" })
     return
   }
   if (key.name === "c") {
@@ -695,7 +695,7 @@ function handleVillageKey(key: KeyEvent) {
     const result = visitVillageLocation(model.session)
     model.saveStatus = String(result)
     if (model.session.hub.lastCutsceneId && model.session.hub.lastCutsceneId !== previousCutsceneId) model.dialog = "cutscene"
-    sendLobbyAction("village", `Visited village location: ${result}`)
+    sendLobbyAction("village", `Visited village location: ${result}`, { villageAction: "visit-location" })
     return
   }
   const move = movementForKey(key, model.settings)

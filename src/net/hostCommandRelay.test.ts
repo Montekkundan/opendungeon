@@ -103,13 +103,13 @@ describe("host command relay", () => {
     const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
 
     const moved = relay.apply(command({
-      label: "Moved in village to market",
+      label: "Client changed village cursor",
       payload: { villageAction: "move", dx: 1, dy: 0 },
       type: "village",
     }))
     const next = relay.apply(command({
-      label: "Started next descent with current dungeon code",
-      payload: { nextSeed: 2423370 },
+      label: "Client launched a run",
+      payload: { villageAction: "next-descent", nextSeed: 2423370 },
       type: "village",
     }))
 
@@ -117,6 +117,38 @@ describe("host command relay", () => {
     expect(moved.message).toContain("closest on the village road")
     expect(next).toMatchObject({ accepted: true, floor: 1, status: "running" })
     expect(next.message).toContain("next descent")
+  })
+
+  test("uses explicit village payloads without label parsing", () => {
+    const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
+
+    const built = relay.apply(command({
+      label: "Client activated village command",
+      payload: { villageAction: "build-station", station: "blacksmith" },
+      type: "village",
+    }))
+    const sold = relay.apply(command({
+      label: "Client activated village command",
+      payload: { villageAction: "sell-loot" },
+      type: "village",
+    }))
+    const prepared = relay.apply(command({
+      label: "Client activated village command",
+      payload: { villageAction: "prepare-food" },
+      type: "village",
+    }))
+    const permission = relay.apply(command({
+      label: "Client activated village command",
+      payload: { villageAction: "cycle-permission" },
+      type: "village",
+    }))
+
+    expect(built).toMatchObject({ accepted: true, gold: expect.any(Number), inventoryCount: expect.any(Number) })
+    expect(built.message).toMatch(/Blacksmith|already/i)
+    expect(sold).toMatchObject({ accepted: true })
+    expect(prepared).toMatchObject({ accepted: true })
+    expect(permission).toMatchObject({ accepted: true })
+    expect(permission.message).toMatch(/permission|owner|friends/i)
   })
 
   test("uses explicit inventory payloads and returns host item counts", () => {
