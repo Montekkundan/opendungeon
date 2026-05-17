@@ -18,7 +18,7 @@ Usage:
   bun run headless -- --protocol
 
 Options:
-  --scenario <name>      Built-in scenario: smoke, combat, combat-skills, area-combat, boss-phase, status-effects, reaction-block, character-name, starting-loadout, biome, trap, secret-door, floor-modifier, skill-check, note-collectible, collectible-variety, first-clear-loop, save-load, save-management, auth-local, auth-expired, map-generation, npc-event, npc-conversation, merchant, level-up-talent, dialogue-options, full-run
+  --scenario <name>      Built-in scenario: smoke, new-player-journey, combat, combat-skills, area-combat, boss-phase, status-effects, reaction-block, character-name, starting-loadout, biome, trap, secret-door, floor-modifier, skill-check, note-collectible, collectible-variety, first-clear-loop, save-load, save-management, auth-local, auth-expired, map-generation, npc-event, npc-conversation, merchant, level-up-talent, dialogue-options, full-run
   --script <path>        JSONL scenario file
   --seed <number>        Deterministic seed
   --mode <mode>          solo | coop | race. solo is Single Player, coop is Multiplayer, race is a challenge variant.
