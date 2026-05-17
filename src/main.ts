@@ -98,7 +98,7 @@ import { acquireLocalRunLock, releaseLocalRunLock, terminalAppName, type LocalRu
 import { debugOverlaysEnabled } from "./system/debugFlags.js"
 import { checkInternetConnectivity } from "./net/connectivity.js"
 import { lobbyInviteErrorMessage, lobbyInviteMismatchNotice, lobbyJoinUsageMessage, normalizeLobbyBaseUrl } from "./net/hostConfig.js"
-import type { CoopSyncState, LobbyActionType, LobbyCommandEntry, LobbyCommandResult, LobbyHubSnapshot, LobbySnapshot } from "./net/lobbyState.js"
+import type { CoopSyncState, LobbyActionType, LobbyCommandEntry, LobbyCommandResult, LobbyHubSnapshot, LobbyProgressSnapshot, LobbySnapshot } from "./net/lobbyState.js"
 import { checkForUpdate, checkingUpdateStatus, handleUpdateCommand } from "./system/updateCheck.js"
 import { easeInOutQuart, lerp } from "./shared/numeric.js"
 import { transitionDurationForKind } from "./ui/teleportAnimation.js"
@@ -2194,6 +2194,7 @@ function applyHostResultToLocalSession(result: LobbyCommandResult, accepted: boo
   model.session.combat.round = Math.max(0, finiteHostInt(result.combatRound, model.session.combat.round))
   if (result.combatMessage) model.session.combat.message = result.combatMessage
   applyHostHubSnapshot(result.hub)
+  applyHostProgressSnapshot(result.progress)
   applyHostTutorialResult(result)
 }
 
@@ -2256,6 +2257,61 @@ function applyHostHubSnapshot(hubSnapshot: LobbyHubSnapshot | undefined) {
     season: hubSnapshot.calendar.season as typeof hub.calendar.season,
     weather: hubSnapshot.calendar.weather as typeof hub.calendar.weather,
   }
+}
+
+function applyHostProgressSnapshot(progress: LobbyProgressSnapshot | undefined) {
+  if (!progress) return
+  model.session.talents = progress.talents.slice(0, 16) as typeof model.session.talents
+  model.session.levelUp = progress.levelUp
+    ? {
+        choices: progress.levelUp.choices.map((choice) => ({ ...choice })) as NonNullable<typeof model.session.levelUp>["choices"],
+        level: Math.max(1, finiteHostInt(progress.levelUp.level, model.session.level)),
+      }
+    : null
+  model.session.equipment = {}
+  for (const item of progress.equipment) {
+    if (item.slot !== "weapon" && item.slot !== "armor" && item.slot !== "relic") continue
+    if (item.rarity !== "common" && item.rarity !== "uncommon" && item.rarity !== "rare" && item.rarity !== "legendary") continue
+    model.session.equipment[item.slot] = {
+      activeText: item.activeText,
+      bonusDamage: Math.max(0, finiteHostInt(item.bonusDamage, 0)),
+      id: item.id,
+      name: item.name,
+      rarity: item.rarity,
+      slot: item.slot,
+      statBonuses: item.statBonuses as typeof model.session.stats,
+    }
+  }
+  model.session.knowledge = progress.knowledge
+    .filter((entry) => entry.kind === "memory" || entry.kind === "note" || entry.kind === "npc" || entry.kind === "tutorial" || entry.kind === "hub" || entry.kind === "monster")
+    .map((entry) => ({
+      discoveredAtTurn: Math.max(0, finiteHostInt(entry.discoveredAtTurn, 0)),
+      floor: entry.floor === undefined ? undefined : Math.max(1, finiteHostInt(entry.floor, model.session.floor)),
+      id: entry.id,
+      kind: entry.kind as typeof model.session.knowledge[number]["kind"],
+      text: entry.text,
+      title: entry.title,
+    }))
+  model.session.toasts = progress.toasts
+    .filter((toast) => toast.tone === "info" || toast.tone === "success" || toast.tone === "warning" || toast.tone === "danger")
+    .map((toast) => ({
+      id: toast.id,
+      text: toast.text,
+      title: toast.title,
+      tone: toast.tone as RunToast["tone"],
+      turn: Math.max(0, finiteHostInt(toast.turn, model.session.turn)),
+    }))
+  model.session.statusEffects = progress.statusEffects
+    .filter((effect) => effect.id === "guarded" || effect.id === "weakened" || effect.id === "burning" || effect.id === "poisoned")
+    .map((effect) => ({
+      id: effect.id as typeof model.session.statusEffects[number]["id"],
+      label: effect.label,
+      magnitude: Math.max(0, finiteHostInt(effect.magnitude, 0)),
+      remainingTurns: Math.max(0, finiteHostInt(effect.remainingTurns, 0)),
+      source: effect.source,
+      targetId: effect.targetId,
+    }))
+  model.session.log = progress.log.slice(0, 10)
 }
 
 function applyHostTutorialResult(result: LobbyCommandResult) {

@@ -165,6 +165,8 @@ describe("host command relay", () => {
     expect(built).toMatchObject({ accepted: true, gold: expect.any(Number), inventoryCount: expect.any(Number) })
     expect(built.hub?.unlocked).toBe(true)
     expect(built.hub?.stations.find((station) => station.id === "blacksmith")).toMatchObject({ id: "blacksmith", built: expect.any(Boolean) })
+    expect(built.progress?.equipment).toEqual(expect.any(Array))
+    expect(built.progress?.log).toEqual(expect.any(Array))
     expect(built.message).toMatch(/Blacksmith|already/i)
     expect(sold).toMatchObject({ accepted: true })
     expect(sold.hub?.lootSold).toBeGreaterThanOrEqual(0)
@@ -258,10 +260,13 @@ describe("host command relay", () => {
       maxHp: expect.any(Number),
       turn: start.turn,
     })
+    expect(selected.progress?.equipment.some((item) => item.slot === "weapon")).toBe(true)
+    expect(selected.progress?.talents).toEqual(expect.any(Array))
     expect(selected.message).toContain("Aimed Shot")
     expect(rolled.accepted).toBe(true)
     expect(rolled.turn).toBeGreaterThan(selected.turn)
     expect(rolled).toMatchObject({ focus: expect.any(Number), level: 1, tutorialStage: "combat", xp: expect.any(Number) })
+    expect(rolled.progress?.toasts).toEqual(expect.any(Array))
   })
 
   test("uses explicit talent-check payloads without label parsing", () => {
@@ -287,6 +292,8 @@ describe("host command relay", () => {
     expect(rolled.accepted).toBe(true)
     expect(rolled.message).toMatch(/success|failure|Critical/i)
     expect(dismissed).toMatchObject({ accepted: true })
+    expect(dismissed.progress?.knowledge).toEqual(expect.any(Array))
+    expect(dismissed.progress?.log).toEqual(expect.any(Array))
   })
 })
 

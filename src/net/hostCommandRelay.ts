@@ -34,7 +34,7 @@ import {
   type TutorialActionId,
   type TutorialStageId,
 } from "../game/session.js"
-import type { LobbyCommandResult, LobbyCommandType, LobbyHubSnapshot } from "./lobbyState.js"
+import type { LobbyCommandResult, LobbyCommandType, LobbyHubSnapshot, LobbyProgressSnapshot } from "./lobbyState.js"
 
 export type HostRelayCommand = {
   name: string
@@ -274,6 +274,7 @@ export class HostCommandRelay {
       maxFocus: session.maxFocus,
       maxHp: session.maxHp,
       message,
+      progress: progressSnapshot(session),
       status: session.status,
       tutorialCompleted: checkpoint.completed,
       tutorialReady: checkpoint.ready,
@@ -461,6 +462,32 @@ function hubSnapshot(session: GameSession): LobbyHubSnapshot {
       selectedPermission: hub.village.selectedPermission,
       shopLog: hub.village.shopLog.slice(0, 8),
     },
+  }
+}
+
+function progressSnapshot(session: GameSession): LobbyProgressSnapshot {
+  return {
+    equipment: Object.entries(session.equipment ?? {}).flatMap(([slot, item]) =>
+      item
+        ? [
+            {
+              activeText: item.activeText,
+              bonusDamage: item.bonusDamage,
+              id: item.id,
+              name: item.name,
+              rarity: item.rarity,
+              slot,
+              statBonuses: Object.fromEntries(Object.entries(item.statBonuses ?? {}).filter(([, value]) => Number.isFinite(value))),
+            },
+          ]
+        : [],
+    ),
+    knowledge: session.knowledge.slice(0, 40).map((entry) => ({ ...entry })),
+    levelUp: session.levelUp ? structuredClone(session.levelUp) : null,
+    log: session.log.slice(0, 10),
+    statusEffects: session.statusEffects.slice(0, 12).map((effect) => ({ ...effect })),
+    talents: [...session.talents],
+    toasts: session.toasts.slice(0, 8).map((toast) => ({ ...toast })),
   }
 }
 

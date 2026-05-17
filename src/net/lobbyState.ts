@@ -139,6 +139,7 @@ export type LobbyCommandResult = {
   inventoryItems?: string[]
   gold?: number
   hub?: LobbyHubSnapshot
+  progress?: LobbyProgressSnapshot
   tutorialStage?: string
   tutorialReady?: boolean
   tutorialCompleted?: boolean
@@ -191,6 +192,63 @@ export type LobbyCalendarSnapshot = {
   season: string
   weather: string
   festival: string
+}
+
+export type LobbyProgressSnapshot = {
+  talents: string[]
+  levelUp: LobbyLevelUpSnapshot | null
+  equipment: LobbyEquipmentSnapshot[]
+  knowledge: LobbyKnowledgeSnapshot[]
+  toasts: LobbyToastSnapshot[]
+  statusEffects: LobbyStatusEffectSnapshot[]
+  log: string[]
+}
+
+export type LobbyLevelUpSnapshot = {
+  level: number
+  choices: LobbyLevelUpChoiceSnapshot[]
+}
+
+export type LobbyLevelUpChoiceSnapshot = {
+  id: string
+  name: string
+  text: string
+}
+
+export type LobbyEquipmentSnapshot = {
+  slot: string
+  id: string
+  name: string
+  rarity: string
+  bonusDamage: number
+  activeText: string
+  statBonuses: Record<string, number>
+}
+
+export type LobbyKnowledgeSnapshot = {
+  id: string
+  title: string
+  text: string
+  kind: string
+  floor?: number
+  discoveredAtTurn: number
+}
+
+export type LobbyToastSnapshot = {
+  id: string
+  title: string
+  text: string
+  tone: string
+  turn: number
+}
+
+export type LobbyStatusEffectSnapshot = {
+  id: string
+  targetId: string
+  label: string
+  remainingTurns: number
+  magnitude: number
+  source: string
 }
 
 export type HostAuthoritativeState = LobbyCommandResult & {
@@ -658,6 +716,7 @@ function normalizeCommandResult(value: unknown, fallback: Record<string, string 
   }
   if (record.gold !== undefined || fallback.gold !== undefined) result.gold = positiveInt(record.gold ?? fallback.gold)
   if (record.hub !== undefined) result.hub = cleanHubSnapshot(record.hub)
+  if (record.progress !== undefined) result.progress = cleanProgressSnapshot(record.progress)
   if (record.inventoryCount !== undefined || fallback.inventoryCount !== undefined) {
     result.inventoryCount = positiveInt(record.inventoryCount ?? fallback.inventoryCount)
   }
@@ -764,6 +823,132 @@ function cleanHubStringList(value: unknown, limit: number, textLimit: number) {
 
 function cleanHubToken(value: unknown, limit: number) {
   return String(value || "").replace(/[^\w-]/g, "").slice(0, limit)
+}
+
+function cleanProgressSnapshot(value: unknown): LobbyProgressSnapshot | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const record = value as Partial<LobbyProgressSnapshot>
+  return {
+    equipment: cleanEquipmentSnapshots(record.equipment),
+    knowledge: cleanKnowledgeSnapshots(record.knowledge),
+    levelUp: cleanLevelUpSnapshot(record.levelUp),
+    log: cleanHubStringList(record.log, 10, 140),
+    statusEffects: cleanStatusEffectSnapshots(record.statusEffects),
+    talents: cleanHubStringList(record.talents, 16, 48),
+    toasts: cleanToastSnapshots(record.toasts),
+  }
+}
+
+function cleanLevelUpSnapshot(value: unknown): LobbyLevelUpSnapshot | null {
+  if (!value || typeof value !== "object") return null
+  const record = value as Partial<LobbyLevelUpSnapshot>
+  const choices = Array.isArray(record.choices)
+    ? record.choices.flatMap((choice) => {
+        const choiceRecord = choice && typeof choice === "object" ? (choice as Partial<LobbyLevelUpChoiceSnapshot>) : null
+        const id = cleanHubToken(choiceRecord?.id, 48)
+        const name = cleanActionLabel(choiceRecord?.name || "").slice(0, 48)
+        const text = cleanActionLabel(choiceRecord?.text || "").slice(0, 140)
+        return choiceRecord && id && name ? [{ id, name, text }] : []
+      }).slice(0, 9)
+    : []
+  return {
+    choices,
+    level: Math.max(1, positiveInt(record.level) || 1),
+  }
+}
+
+function cleanEquipmentSnapshots(value: unknown): LobbyEquipmentSnapshot[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    const record = item && typeof item === "object" ? (item as Partial<LobbyEquipmentSnapshot>) : null
+    const slot = cleanHubToken(record?.slot, 24)
+    const id = cleanHubToken(record?.id, 64)
+    const name = cleanActionLabel(record?.name || "").slice(0, 64)
+    if (!record || !slot || !id || !name) return []
+    return [
+      {
+        activeText: cleanActionLabel(record.activeText || "").slice(0, 140),
+        bonusDamage: positiveInt(record.bonusDamage),
+        id,
+        name,
+        rarity: cleanHubToken(record.rarity, 24) || "common",
+        slot,
+        statBonuses: cleanStatBonusSnapshot(record.statBonuses),
+      },
+    ]
+  }).slice(0, 4)
+}
+
+function cleanStatBonusSnapshot(value: unknown): Record<string, number> {
+  const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+  const result: Record<string, number> = {}
+  for (const [rawKey, rawValue] of Object.entries(record)) {
+    const key = cleanHubToken(rawKey, 24)
+    if (!key) continue
+    const numeric = Number(rawValue)
+    if (Number.isFinite(numeric)) result[key] = Math.trunc(numeric)
+  }
+  return result
+}
+
+function cleanKnowledgeSnapshots(value: unknown): LobbyKnowledgeSnapshot[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((entry) => {
+    const record = entry && typeof entry === "object" ? (entry as Partial<LobbyKnowledgeSnapshot>) : null
+    const id = cleanHubToken(record?.id, 80)
+    const title = cleanActionLabel(record?.title || "").slice(0, 80)
+    if (!record || !id || !title) return []
+    const floor = record.floor === undefined ? undefined : positiveInt(record.floor)
+    return [
+      {
+        discoveredAtTurn: positiveInt(record.discoveredAtTurn),
+        floor,
+        id,
+        kind: cleanHubToken(record.kind, 24) || "note",
+        text: cleanActionLabel(record.text || "").slice(0, 200),
+        title,
+      },
+    ]
+  }).slice(0, 40)
+}
+
+function cleanToastSnapshots(value: unknown): LobbyToastSnapshot[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((toast) => {
+    const record = toast && typeof toast === "object" ? (toast as Partial<LobbyToastSnapshot>) : null
+    const id = cleanHubToken(record?.id, 80)
+    const title = cleanActionLabel(record?.title || "").slice(0, 80)
+    if (!record || !id || !title) return []
+    return [
+      {
+        id,
+        text: cleanActionLabel(record.text || "").slice(0, 180),
+        title,
+        tone: cleanHubToken(record.tone, 24) || "info",
+        turn: positiveInt(record.turn),
+      },
+    ]
+  }).slice(0, 8)
+}
+
+function cleanStatusEffectSnapshots(value: unknown): LobbyStatusEffectSnapshot[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((effect) => {
+    const record = effect && typeof effect === "object" ? (effect as Partial<LobbyStatusEffectSnapshot>) : null
+    const id = cleanHubToken(record?.id, 32)
+    const targetId = cleanHubToken(record?.targetId, 64)
+    if (!record || !id || !targetId) return []
+    return [
+      {
+        id,
+        label: cleanActionLabel(record.label || "").slice(0, 48),
+        magnitude: positiveInt(record.magnitude),
+        remainingTurns: positiveInt(record.remainingTurns),
+        source: cleanActionLabel(record.source || "").slice(0, 64),
+        targetId,
+      },
+    ]
+  }).slice(0, 12)
 }
 
 function sortLeaderboard(results: RaceResult[]) {

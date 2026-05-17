@@ -132,6 +132,46 @@ describe("multiplayer lobby state", () => {
             shopLog: ["Sold relic<script>"],
           },
         },
+        progress: {
+          equipment: [
+            {
+              activeText: "Cuts true<script>",
+              bonusDamage: 1,
+              id: "iron-edge<script>",
+              name: "Iron Edge<script>",
+              rarity: "uncommon",
+              slot: "weapon",
+              statBonuses: { dexterity: 2, unsafe: "bad" },
+            },
+          ],
+          knowledge: [
+            {
+              discoveredAtTurn: 3,
+              floor: 1,
+              id: "monster-slime<script>",
+              kind: "monster",
+              text: "Weak to fire<script>",
+              title: "Slime<script>",
+            },
+          ],
+          levelUp: {
+            choices: [{ id: "pathfinder<script>", name: "Pathfinder<script>", text: "Read routes<script>" }],
+            level: 2,
+          },
+          log: ["Line<script>"],
+          statusEffects: [
+            {
+              id: "guarded",
+              label: "Guarded<script>",
+              magnitude: 1,
+              remainingTurns: 2,
+              source: "shield<script>",
+              targetId: "player<script>",
+            },
+          ],
+          talents: ["pathfinder", "<bad>"],
+          toasts: [{ id: "toast<script>", text: "Book updated<script>", title: "Found<script>", tone: "success", turn: 3 }],
+        },
         hp: 18,
         inventoryCount: 4,
         inventoryItems: ["Rusty blade", "Dew vial", "<bad>", "Ranger charm"],
@@ -196,6 +236,46 @@ describe("multiplayer lobby state", () => {
       inventoryItems: ["Rusty blade", "Dew vial", "bad", "Ranger charm"],
       maxFocus: 12,
       maxHp: 26,
+      progress: {
+        equipment: [
+          {
+            activeText: "Cuts truescript",
+            bonusDamage: 1,
+            id: "iron-edgescript",
+            name: "Iron Edgescript",
+            rarity: "uncommon",
+            slot: "weapon",
+            statBonuses: { dexterity: 2 },
+          },
+        ],
+        knowledge: [
+          {
+            discoveredAtTurn: 3,
+            floor: 1,
+            id: "monster-slimescript",
+            kind: "monster",
+            text: "Weak to firescript",
+            title: "Slimescript",
+          },
+        ],
+        levelUp: {
+          choices: [{ id: "pathfinderscript", name: "Pathfinderscript", text: "Read routesscript" }],
+          level: 2,
+        },
+        log: ["Linescript"],
+        statusEffects: [
+          {
+            id: "guarded",
+            label: "Guardedscript",
+            magnitude: 1,
+            remainingTurns: 2,
+            source: "shieldscript",
+            targetId: "playerscript",
+          },
+        ],
+        talents: ["pathfinder", "bad"],
+        toasts: [{ id: "toastscript", text: "Book updatedscript", title: "Foundscript", tone: "success", turn: 3 }],
+      },
     })
   })
 
