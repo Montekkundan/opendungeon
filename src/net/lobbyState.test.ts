@@ -243,6 +243,50 @@ describe("multiplayer lobby state", () => {
         tutorialReady: true,
         tutorialStage: "movement",
         turn: 3,
+        world: {
+          dungeon: {
+            actors: [
+              {
+                ai: {
+                  aggroRadius: 3,
+                  alerted: true,
+                  direction: -1,
+                  leashRadius: 5,
+                  origin: { x: 1, y: 1 },
+                  pattern: "stalker",
+                },
+                damage: 1,
+                hp: 3,
+                id: "enemy<script>",
+                kind: "slime",
+                x: 1,
+                y: 1,
+              },
+              { damage: 1, hp: 1, id: "bad", kind: "dragon", x: 999, y: 999 },
+            ],
+            anchors: [{ floor: 1, height: 2, id: "room-0", kind: "start", roomIndex: 0, width: 2, x: 1, y: 1 }],
+            floor: 1,
+            height: 3,
+            playerStart: { x: 1, y: 1 },
+            secrets: [{ discovered: true, door: { x: 2, y: 2 }, id: "secret-1", reward: { x: 1, y: 1 }, roomIndex: 1 }],
+            seed: 2423368,
+            tiles: [
+              ["floor", "bad<script>", "door"],
+              ["stairs", "water", "floor"],
+              ["floor", "floor", "wall"],
+            ],
+            width: 3,
+          },
+          floorModifier: {
+            goldBonus: 0,
+            id: "gloom",
+            name: "Gloom<script>",
+            restFocusBonus: 0,
+            text: "Sight<script>",
+            trapDamageBonus: 0,
+            visionBonus: -2,
+          },
+        },
         x: 6,
         xp: 9,
         y: 5,
@@ -372,7 +416,38 @@ describe("multiplayer lobby state", () => {
         talents: ["pathfinder", "bad"],
         toasts: [{ id: "toastscript", text: "Book updatedscript", title: "Foundscript", tone: "success", turn: 3 }],
       },
+      world: {
+        dungeon: {
+          actors: [
+            {
+              ai: {
+                aggroRadius: 3,
+                alerted: true,
+                direction: -1,
+                leashRadius: 5,
+                origin: { x: 1, y: 1 },
+                pattern: "stalker",
+              },
+              id: "enemyscript",
+              kind: "slime",
+              x: 1,
+              y: 1,
+            },
+          ],
+          floor: 1,
+          playerStart: { x: 1, y: 1 },
+          seed: 2423368,
+          width: 8,
+        },
+        floorModifier: {
+          id: "gloom",
+          name: "Gloomscript",
+          text: "Sightscript",
+          visionBonus: -2,
+        },
+      },
     })
+    expect(command.result.world?.dungeon.tiles[0]?.[1]).toBe("wall")
   })
 
   test("rolls co-op sync state back to the host result when a command is rejected", () => {

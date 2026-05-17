@@ -141,12 +141,87 @@ export type LobbyCommandResult = {
   hub?: LobbyHubSnapshot
   progress?: LobbyProgressSnapshot
   context?: LobbyContextSnapshot
+  world?: LobbyWorldSnapshot
   tutorialStage?: string
   tutorialReady?: boolean
   tutorialCompleted?: boolean
   x: number
   y: number
   status: string
+}
+
+export type LobbyWorldSnapshot = {
+  dungeon: LobbyDungeonSnapshot
+  floorModifier: LobbyFloorModifierSnapshot
+}
+
+export type LobbyDungeonSnapshot = {
+  width: number
+  height: number
+  seed: number
+  floor: number
+  tiles: string[][]
+  actors: LobbyActorSnapshot[]
+  playerStart: LobbyPointSnapshot
+  anchors: LobbyDungeonAnchorSnapshot[]
+  secrets: LobbyDungeonSecretSnapshot[]
+}
+
+export type LobbyPointSnapshot = {
+  x: number
+  y: number
+}
+
+export type LobbyActorSnapshot = {
+  id: string
+  kind: string
+  x: number
+  y: number
+  hp: number
+  maxHp?: number
+  damage: number
+  phase?: number
+  ai?: LobbyEnemyAiSnapshot
+}
+
+export type LobbyEnemyAiSnapshot = {
+  pattern: string
+  origin: LobbyPointSnapshot
+  aggroRadius: number
+  leashRadius: number
+  direction: 1 | -1
+  alerted: boolean
+  chaseTurns?: number
+  stunnedTurns?: number
+}
+
+export type LobbyDungeonAnchorSnapshot = {
+  id: string
+  floor: number
+  roomIndex: number
+  kind: string
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export type LobbyDungeonSecretSnapshot = {
+  id: string
+  roomIndex: number
+  door: LobbyPointSnapshot
+  reward: LobbyPointSnapshot
+  discovered: boolean
+}
+
+export type LobbyFloorModifierSnapshot = {
+  id: string
+  name: string
+  text: string
+  visionBonus: number
+  restFocusBonus: number
+  trapDamageBonus: number
+  goldBonus: number
 }
 
 export type LobbyHubSnapshot = {
@@ -801,6 +876,7 @@ function normalizeCommandResult(value: unknown, fallback: Record<string, string 
   if (record.hub !== undefined) result.hub = cleanHubSnapshot(record.hub)
   if (record.progress !== undefined) result.progress = cleanProgressSnapshot(record.progress)
   if (record.context !== undefined) result.context = cleanContextSnapshot(record.context)
+  if (record.world !== undefined) result.world = cleanWorldSnapshot(record.world)
   if (record.inventoryCount !== undefined || fallback.inventoryCount !== undefined) {
     result.inventoryCount = positiveInt(record.inventoryCount ?? fallback.inventoryCount)
   }
@@ -907,6 +983,205 @@ function cleanHubStringList(value: unknown, limit: number, textLimit: number) {
 
 function cleanHubToken(value: unknown, limit: number) {
   return String(value || "").replace(/[^\w-]/g, "").slice(0, limit)
+}
+
+const allowedWorldTiles = new Set([
+  "void",
+  "floor",
+  "wall",
+  "door",
+  "stairs",
+  "potion",
+  "relic",
+  "chest",
+  "trap",
+  "note",
+  "recipe",
+  "tool",
+  "deed",
+  "fossil",
+  "boss-memory",
+  "keepsake",
+  "story-relic",
+])
+
+const allowedWorldActors = new Set([
+  "player",
+  "slime",
+  "ghoul",
+  "necromancer",
+  "gallows-wisp",
+  "rust-squire",
+  "carrion-moth",
+  "crypt-mimic",
+  "grave-root-boss",
+  "cartographer",
+  "wound-surgeon",
+  "shrine-keeper",
+  "jailer",
+  "merchant",
+])
+
+const allowedEnemyPatterns = new Set(["sentinel", "wander", "patrol-horizontal", "patrol-vertical", "stalker", "ranged", "guard", "ambush", "fleeing"])
+const allowedAnchorKinds = new Set(["start", "room", "stairs"])
+const allowedFloorModifiers = new Set(["steady", "gloom", "rich-veins", "unstable-ground", "focus-draft"])
+
+function cleanWorldSnapshot(value: unknown): LobbyWorldSnapshot | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const record = value as Partial<LobbyWorldSnapshot>
+  const dungeon = cleanDungeonSnapshot(record.dungeon)
+  if (!dungeon) return undefined
+  return {
+    dungeon,
+    floorModifier: cleanFloorModifierSnapshot(record.floorModifier),
+  }
+}
+
+function cleanDungeonSnapshot(value: unknown): LobbyDungeonSnapshot | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const record = value as Partial<LobbyDungeonSnapshot>
+  const width = clampWorldSize(record.width, 8, 160)
+  const height = clampWorldSize(record.height, 8, 96)
+  const tiles = cleanTileRows(record.tiles, width, height)
+  if (!tiles.length) return undefined
+  return {
+    actors: cleanActorSnapshots(record.actors, width, height),
+    anchors: cleanDungeonAnchors(record.anchors, width, height),
+    floor: Math.max(1, positiveInt(record.floor) || 1),
+    height: tiles.length,
+    playerStart: cleanPointSnapshot(record.playerStart, width, tiles.length),
+    secrets: cleanDungeonSecrets(record.secrets, width, tiles.length),
+    seed: positiveInt(record.seed),
+    tiles,
+    width: tiles[0]?.length ?? width,
+  }
+}
+
+function cleanTileRows(value: unknown, width: number, height: number) {
+  if (!Array.isArray(value)) return []
+  return value
+    .slice(0, height)
+    .map((row) => {
+      if (!Array.isArray(row)) return Array.from({ length: width }, () => "wall")
+      const cells = row.slice(0, width).map((tile) => {
+        const id = cleanHubToken(tile, 32)
+        return allowedWorldTiles.has(id) ? id : "wall"
+      })
+      while (cells.length < width) cells.push("wall")
+      return cells
+    })
+}
+
+function cleanActorSnapshots(value: unknown, width: number, height: number): LobbyActorSnapshot[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((actor) => {
+    const record = actor && typeof actor === "object" ? (actor as Partial<LobbyActorSnapshot>) : null
+    const id = cleanHubToken(record?.id, 80)
+    const kind = cleanHubToken(record?.kind, 32)
+    if (!record || !id || !allowedWorldActors.has(kind)) return []
+    const snapshot: LobbyActorSnapshot = {
+      damage: positiveInt(record.damage),
+      hp: positiveInt(record.hp),
+      id,
+      kind,
+      x: clampWorldCoordinate(record.x, width),
+      y: clampWorldCoordinate(record.y, height),
+    }
+    if (record.maxHp !== undefined) snapshot.maxHp = positiveInt(record.maxHp)
+    if (record.phase !== undefined) snapshot.phase = positiveInt(record.phase)
+    const ai = cleanEnemyAiSnapshot(record.ai, width, height)
+    if (ai) snapshot.ai = ai
+    return [snapshot]
+  }).slice(0, 80)
+}
+
+function cleanEnemyAiSnapshot(value: unknown, width: number, height: number): LobbyEnemyAiSnapshot | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const record = value as Partial<LobbyEnemyAiSnapshot>
+  const pattern = cleanHubToken(record.pattern, 32)
+  if (!allowedEnemyPatterns.has(pattern)) return undefined
+  const ai: LobbyEnemyAiSnapshot = {
+    aggroRadius: positiveInt(record.aggroRadius),
+    alerted: record.alerted === true,
+    direction: record.direction === -1 ? -1 : 1,
+    leashRadius: positiveInt(record.leashRadius),
+    origin: cleanPointSnapshot(record.origin, width, height),
+    pattern,
+  }
+  if (record.chaseTurns !== undefined) ai.chaseTurns = positiveInt(record.chaseTurns)
+  if (record.stunnedTurns !== undefined) ai.stunnedTurns = positiveInt(record.stunnedTurns)
+  return ai
+}
+
+function cleanDungeonAnchors(value: unknown, width: number, height: number): LobbyDungeonAnchorSnapshot[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((anchor) => {
+    const record = anchor && typeof anchor === "object" ? (anchor as Partial<LobbyDungeonAnchorSnapshot>) : null
+    const id = cleanHubToken(record?.id, 80)
+    const kind = cleanHubToken(record?.kind, 16)
+    if (!record || !id || !allowedAnchorKinds.has(kind)) return []
+    return [
+      {
+        floor: Math.max(1, positiveInt(record.floor) || 1),
+        height: clampWorldSize(record.height, 1, height),
+        id,
+        kind,
+        roomIndex: positiveInt(record.roomIndex),
+        width: clampWorldSize(record.width, 1, width),
+        x: clampWorldCoordinate(record.x, width),
+        y: clampWorldCoordinate(record.y, height),
+      },
+    ]
+  }).slice(0, 24)
+}
+
+function cleanDungeonSecrets(value: unknown, width: number, height: number): LobbyDungeonSecretSnapshot[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((secret) => {
+    const record = secret && typeof secret === "object" ? (secret as Partial<LobbyDungeonSecretSnapshot>) : null
+    const id = cleanHubToken(record?.id, 80)
+    if (!record || !id) return []
+    return [
+      {
+        discovered: record.discovered === true,
+        door: cleanPointSnapshot(record.door, width, height),
+        id,
+        reward: cleanPointSnapshot(record.reward, width, height),
+        roomIndex: positiveInt(record.roomIndex),
+      },
+    ]
+  }).slice(0, 24)
+}
+
+function cleanPointSnapshot(value: unknown, width: number, height: number): LobbyPointSnapshot {
+  const record = value && typeof value === "object" ? (value as Partial<LobbyPointSnapshot>) : {}
+  return {
+    x: clampWorldCoordinate(record.x, width),
+    y: clampWorldCoordinate(record.y, height),
+  }
+}
+
+function cleanFloorModifierSnapshot(value: unknown): LobbyFloorModifierSnapshot {
+  const record = value && typeof value === "object" ? (value as Partial<LobbyFloorModifierSnapshot>) : {}
+  const id = cleanHubToken(record.id, 32)
+  return {
+    goldBonus: finiteSignedInt(record.goldBonus),
+    id: allowedFloorModifiers.has(id) ? id : "steady",
+    name: cleanActionLabel(record.name || "Steady Stone").slice(0, 48),
+    restFocusBonus: finiteSignedInt(record.restFocusBonus),
+    text: cleanActionLabel(record.text || "No unusual floor pressure.").slice(0, 120),
+    trapDamageBonus: finiteSignedInt(record.trapDamageBonus),
+    visionBonus: finiteSignedInt(record.visionBonus),
+  }
+}
+
+function clampWorldSize(value: unknown, min: number, max: number) {
+  const size = positiveInt(value)
+  return Math.min(max, Math.max(min, size || min))
+}
+
+function clampWorldCoordinate(value: unknown, limit: number) {
+  return Math.min(Math.max(0, integer(value)), Math.max(0, limit - 1))
 }
 
 function cleanContextSnapshot(value: unknown): LobbyContextSnapshot | undefined {

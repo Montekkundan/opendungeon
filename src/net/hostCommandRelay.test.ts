@@ -15,6 +15,15 @@ describe("host command relay", () => {
 
     expect(result).toMatchObject({ accepted: true, floor: 1, status: "running" })
     expect(result).toMatchObject({ focus: 11, level: 1, xp: 0, tutorialStage: "complete" })
+    const dungeon = result.world?.dungeon
+    expect(dungeon).toBeDefined()
+    if (!dungeon) throw new Error("Expected host world snapshot")
+    expect(dungeon).toMatchObject({ floor: 1, seed: 2423368 })
+    expect(dungeon.height).toBeGreaterThan(0)
+    expect(dungeon.width).toBeGreaterThan(0)
+    expect(dungeon.tiles).toHaveLength(dungeon.height)
+    expect(dungeon.actors).toEqual(expect.any(Array))
+    expect(result.world?.floorModifier).toMatchObject({ id: expect.any(String), name: expect.any(String) })
     expect(result.message).toBeTruthy()
   })
 

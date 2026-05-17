@@ -88,7 +88,7 @@ import {
   type ScreenTransition,
 } from "./ui/screens.js"
 import { challengeCadenceForVillageSeedMode, nextVillageSeedMode, seedForVillageDescent, villageSeedPlanText } from "./game/descentSeed.js"
-import { isNpcActorId } from "./game/domainTypes.js"
+import { isEnemyActorId, isNpcActorId, type ActorId, type TileId } from "./game/domainTypes.js"
 import type { StatId } from "./game/stats.js"
 import { shouldUseThreeRenderer } from "./rendering/threeAssets.js"
 import { authHelpText, handleAuthCommand } from "./cloud/authCli.js"
@@ -100,7 +100,7 @@ import { acquireLocalRunLock, releaseLocalRunLock, terminalAppName, type LocalRu
 import { debugOverlaysEnabled } from "./system/debugFlags.js"
 import { checkInternetConnectivity } from "./net/connectivity.js"
 import { lobbyInviteErrorMessage, lobbyInviteMismatchNotice, lobbyJoinUsageMessage, normalizeLobbyBaseUrl } from "./net/hostConfig.js"
-import type { CoopSyncState, LobbyActionType, LobbyCommandEntry, LobbyCommandResult, LobbyContextSnapshot, LobbyHubSnapshot, LobbyProgressSnapshot, LobbySnapshot } from "./net/lobbyState.js"
+import type { CoopSyncState, LobbyActionType, LobbyCommandEntry, LobbyCommandResult, LobbyContextSnapshot, LobbyHubSnapshot, LobbyProgressSnapshot, LobbySnapshot, LobbyWorldSnapshot } from "./net/lobbyState.js"
 import { checkForUpdate, checkingUpdateStatus, handleUpdateCommand } from "./system/updateCheck.js"
 import { easeInOutQuart, lerp } from "./shared/numeric.js"
 import { transitionDurationForKind } from "./ui/teleportAnimation.js"
@@ -2197,6 +2197,7 @@ function applyHostResultToLocalSession(result: LobbyCommandResult, accepted: boo
   if (result.combatMessage) model.session.combat.message = result.combatMessage
   applyHostHubSnapshot(result.hub)
   applyHostProgressSnapshot(result.progress)
+  applyHostWorldSnapshot(result.world)
   applyHostContextSnapshot(result.context)
   applyHostTutorialResult(result)
 }
@@ -2204,6 +2205,157 @@ function applyHostResultToLocalSession(result: LobbyCommandResult, accepted: boo
 function finiteHostInt(value: unknown, fallback: number) {
   const number = Number(value)
   return Number.isFinite(number) ? Math.floor(number) : fallback
+}
+
+const hostTileIds = [
+  "void",
+  "floor",
+  "wall",
+  "door",
+  "stairs",
+  "potion",
+  "relic",
+  "chest",
+  "trap",
+  "note",
+  "recipe",
+  "tool",
+  "deed",
+  "fossil",
+  "boss-memory",
+  "keepsake",
+  "story-relic",
+] as const
+
+const hostActorIds = [
+  "player",
+  "slime",
+  "ghoul",
+  "necromancer",
+  "gallows-wisp",
+  "rust-squire",
+  "carrion-moth",
+  "crypt-mimic",
+  "grave-root-boss",
+  "cartographer",
+  "wound-surgeon",
+  "shrine-keeper",
+  "jailer",
+  "merchant",
+] as const
+
+const hostEnemyPatterns = ["sentinel", "wander", "patrol-horizontal", "patrol-vertical", "stalker", "ranged", "guard", "ambush", "fleeing"] as const
+const hostAnchorKinds = ["start", "room", "stairs"] as const
+const hostFloorModifierIds = ["steady", "gloom", "rich-veins", "unstable-ground", "focus-draft"] as const
+
+function applyHostWorldSnapshot(world: LobbyWorldSnapshot | undefined) {
+  if (!world) return
+  const dungeon = world.dungeon
+  if (!dungeon.tiles.length || !dungeon.tiles[0]?.length) return
+  const width = dungeon.tiles[0].length
+  const height = dungeon.tiles.length
+  model.session.dungeon = {
+    actors: dungeon.actors.flatMap((actor) => {
+      if (!isHostActorId(actor.kind)) return []
+      const normalized = {
+        damage: Math.max(0, finiteHostInt(actor.damage, 0)),
+        hp: Math.max(0, finiteHostInt(actor.hp, 0)),
+        id: actor.id,
+        kind: actor.kind,
+        position: { x: clampHostCoordinate(actor.x, width), y: clampHostCoordinate(actor.y, height) },
+      } as GameSession["dungeon"]["actors"][number]
+      if (actor.maxHp !== undefined) normalized.maxHp = Math.max(0, finiteHostInt(actor.maxHp, 0))
+      if (actor.phase !== undefined) normalized.phase = Math.max(0, finiteHostInt(actor.phase, 0))
+      if (actor.ai && isEnemyActorId(actor.kind) && isHostEnemyPattern(actor.ai.pattern)) {
+        normalized.ai = {
+          aggroRadius: Math.max(0, finiteHostInt(actor.ai.aggroRadius, 0)),
+          alerted: actor.ai.alerted,
+          chaseTurns: actor.ai.chaseTurns === undefined ? undefined : Math.max(0, finiteHostInt(actor.ai.chaseTurns, 0)),
+          direction: actor.ai.direction === -1 ? -1 : 1,
+          leashRadius: Math.max(0, finiteHostInt(actor.ai.leashRadius, 0)),
+          origin: {
+            x: clampHostCoordinate(actor.ai.origin.x, width),
+            y: clampHostCoordinate(actor.ai.origin.y, height),
+          },
+          pattern: actor.ai.pattern,
+          stunnedTurns: actor.ai.stunnedTurns === undefined ? undefined : Math.max(0, finiteHostInt(actor.ai.stunnedTurns, 0)),
+        }
+      }
+      return [normalized]
+    }),
+    anchors: dungeon.anchors.flatMap((anchor) => {
+      if (!isHostAnchorKind(anchor.kind)) return []
+      return [
+        {
+          floor: Math.max(1, finiteHostInt(anchor.floor, model.session.floor)),
+          height: Math.max(1, finiteHostInt(anchor.height, 1)),
+          id: anchor.id,
+          kind: anchor.kind,
+          position: { x: clampHostCoordinate(anchor.x, width), y: clampHostCoordinate(anchor.y, height) },
+          roomIndex: Math.max(0, finiteHostInt(anchor.roomIndex, 0)),
+          width: Math.max(1, finiteHostInt(anchor.width, 1)),
+        },
+      ]
+    }),
+    floor: Math.max(1, finiteHostInt(dungeon.floor, model.session.floor)),
+    height,
+    playerStart: {
+      x: clampHostCoordinate(dungeon.playerStart.x, width),
+      y: clampHostCoordinate(dungeon.playerStart.y, height),
+    },
+    secrets: dungeon.secrets.map((secret) => ({
+      discovered: secret.discovered,
+      door: {
+        x: clampHostCoordinate(secret.door.x, width),
+        y: clampHostCoordinate(secret.door.y, height),
+      },
+      id: secret.id,
+      reward: {
+        x: clampHostCoordinate(secret.reward.x, width),
+        y: clampHostCoordinate(secret.reward.y, height),
+      },
+      roomIndex: Math.max(0, finiteHostInt(secret.roomIndex, 0)),
+    })),
+    seed: finiteHostInt(dungeon.seed, model.session.seed),
+    tiles: dungeon.tiles.map((row) => row.map((tile) => (isHostTileId(tile) ? tile : "wall"))),
+    width,
+  }
+
+  if (isHostFloorModifier(world.floorModifier.id)) {
+    model.session.floorModifier = {
+      goldBonus: finiteHostInt(world.floorModifier.goldBonus, model.session.floorModifier.goldBonus),
+      id: world.floorModifier.id,
+      name: world.floorModifier.name,
+      restFocusBonus: finiteHostInt(world.floorModifier.restFocusBonus, model.session.floorModifier.restFocusBonus),
+      text: world.floorModifier.text,
+      trapDamageBonus: finiteHostInt(world.floorModifier.trapDamageBonus, model.session.floorModifier.trapDamageBonus),
+      visionBonus: finiteHostInt(world.floorModifier.visionBonus, model.session.floorModifier.visionBonus),
+    }
+  }
+}
+
+function clampHostCoordinate(value: unknown, limit: number) {
+  return Math.min(Math.max(0, finiteHostInt(value, 0)), Math.max(0, limit - 1))
+}
+
+function isHostTileId(value: string): value is TileId {
+  return (hostTileIds as readonly string[]).includes(value)
+}
+
+function isHostActorId(value: string): value is ActorId {
+  return (hostActorIds as readonly string[]).includes(value)
+}
+
+function isHostEnemyPattern(value: string): value is NonNullable<GameSession["dungeon"]["actors"][number]["ai"]>["pattern"] {
+  return (hostEnemyPatterns as readonly string[]).includes(value)
+}
+
+function isHostAnchorKind(value: string): value is GameSession["dungeon"]["anchors"][number]["kind"] {
+  return (hostAnchorKinds as readonly string[]).includes(value)
+}
+
+function isHostFloorModifier(value: string): value is GameSession["floorModifier"]["id"] {
+  return (hostFloorModifierIds as readonly string[]).includes(value)
 }
 
 function applyHostHubSnapshot(hubSnapshot: LobbyHubSnapshot | undefined) {

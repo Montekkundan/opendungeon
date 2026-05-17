@@ -34,7 +34,7 @@ import {
   type TutorialActionId,
   type TutorialStageId,
 } from "../game/session.js"
-import type { LobbyCommandResult, LobbyCommandType, LobbyContextSnapshot, LobbyHubSnapshot, LobbyProgressSnapshot } from "./lobbyState.js"
+import type { LobbyCommandResult, LobbyCommandType, LobbyContextSnapshot, LobbyHubSnapshot, LobbyProgressSnapshot, LobbyWorldSnapshot } from "./lobbyState.js"
 
 export type HostRelayCommand = {
   name: string
@@ -281,10 +281,64 @@ export class HostCommandRelay {
       tutorialReady: checkpoint.ready,
       tutorialStage: checkpoint.stage,
       turn: session.turn,
+      world: worldSnapshot(session),
       x: session.player.x,
       xp: session.xp,
       y: session.player.y,
     }
+  }
+}
+
+function worldSnapshot(session: GameSession): LobbyWorldSnapshot {
+  return {
+    dungeon: {
+      actors: session.dungeon.actors.map((actor) => ({
+        ai: actor.ai
+          ? {
+              aggroRadius: actor.ai.aggroRadius,
+              alerted: actor.ai.alerted,
+              chaseTurns: actor.ai.chaseTurns,
+              direction: actor.ai.direction,
+              leashRadius: actor.ai.leashRadius,
+              origin: { ...actor.ai.origin },
+              pattern: actor.ai.pattern,
+              stunnedTurns: actor.ai.stunnedTurns,
+            }
+          : undefined,
+        damage: actor.damage,
+        hp: actor.hp,
+        id: actor.id,
+        kind: actor.kind,
+        maxHp: actor.maxHp,
+        phase: actor.phase,
+        x: actor.position.x,
+        y: actor.position.y,
+      })),
+      anchors: session.dungeon.anchors.map((anchor) => ({
+        floor: anchor.floor,
+        height: anchor.height,
+        id: anchor.id,
+        kind: anchor.kind,
+        roomIndex: anchor.roomIndex,
+        width: anchor.width,
+        x: anchor.position.x,
+        y: anchor.position.y,
+      })),
+      floor: session.dungeon.floor,
+      height: session.dungeon.height,
+      playerStart: { ...session.dungeon.playerStart },
+      secrets: session.dungeon.secrets.map((secret) => ({
+        discovered: secret.discovered,
+        door: { ...secret.door },
+        id: secret.id,
+        reward: { ...secret.reward },
+        roomIndex: secret.roomIndex,
+      })),
+      seed: session.dungeon.seed,
+      tiles: session.dungeon.tiles.map((row) => [...row]),
+      width: session.dungeon.width,
+    },
+    floorModifier: { ...session.floorModifier },
   }
 }
 
