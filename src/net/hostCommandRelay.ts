@@ -268,6 +268,7 @@ export class HostCommandRelay {
       gold: session.gold,
       hp: session.hp,
       inventoryCount: session.inventory.length,
+      inventoryItems: session.inventory.slice(0, 32),
       level: session.level,
       maxFocus: session.maxFocus,
       maxHp: session.maxHp,

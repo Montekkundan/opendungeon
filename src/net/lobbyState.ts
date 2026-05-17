@@ -136,6 +136,7 @@ export type LobbyCommandResult = {
   combatMessage?: string
   combatRound?: number
   inventoryCount?: number
+  inventoryItems?: string[]
   gold?: number
   tutorialStage?: string
   tutorialReady?: boolean
@@ -612,6 +613,7 @@ function normalizeCommandResult(value: unknown, fallback: Record<string, string 
   if (record.inventoryCount !== undefined || fallback.inventoryCount !== undefined) {
     result.inventoryCount = positiveInt(record.inventoryCount ?? fallback.inventoryCount)
   }
+  if (record.inventoryItems !== undefined) result.inventoryItems = cleanInventoryItems(record.inventoryItems)
   if (record.maxHp !== undefined || fallback.maxHp !== undefined) result.maxHp = Math.max(1, positiveInt(record.maxHp ?? fallback.maxHp) || 1)
   if (record.maxFocus !== undefined || fallback.maxFocus !== undefined) result.maxFocus = Math.max(0, positiveInt(record.maxFocus ?? fallback.maxFocus))
   return result
@@ -619,6 +621,14 @@ function normalizeCommandResult(value: unknown, fallback: Record<string, string 
 
 function cleanActionLabel(value: unknown) {
   return String(value || "Updated state").replace(/[^\w .,:;!?'"()+/-]/g, "").replace(/\s+/g, " ").trim().slice(0, 140) || "Updated state"
+}
+
+function cleanInventoryItems(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => String(item || "").replace(/[^\w .,:;!?'"()+/-]/g, "").replace(/\s+/g, " ").trim().slice(0, 48))
+    .filter(Boolean)
+    .slice(0, 32)
 }
 
 function sortLeaderboard(results: RaceResult[]) {

@@ -2175,6 +2175,7 @@ function applyHostResultToLocalSession(result: LobbyCommandResult, accepted: boo
   model.session.gold = Math.max(0, finiteHostInt(result.gold, model.session.gold))
   model.session.xp = Math.max(0, finiteHostInt(result.xp, model.session.xp))
   model.session.level = Math.max(1, finiteHostInt(result.level, model.session.level))
+  if (Array.isArray(result.inventoryItems)) model.session.inventory = result.inventoryItems.slice(0, 32)
   const hostTurn = finiteHostInt(result.turn, model.session.turn)
   model.session.turn = accepted ? Math.max(model.session.turn, hostTurn) : hostTurn
   model.session.player = {

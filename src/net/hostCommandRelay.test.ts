@@ -185,8 +185,10 @@ describe("host command relay", () => {
     }))
 
     expect(dropped).toMatchObject({ accepted: true, gold: 0, inventoryCount: 2 })
+    expect(dropped.inventoryItems).toEqual(["Dew vial", "Rope arrow"])
     expect(dropped.message).toContain("dropped")
     expect(rejected).toMatchObject({ accepted: false, gold: 0, inventoryCount: 2 })
+    expect(rejected.inventoryItems).toEqual(["Dew vial", "Rope arrow"])
     expect(rejected.message).toContain("Empty slot")
   })
 

@@ -117,6 +117,7 @@ describe("multiplayer lobby state", () => {
         gold: 7,
         hp: 18,
         inventoryCount: 4,
+        inventoryItems: ["Rusty blade", "Dew vial", "<bad>", "Ranger charm"],
         level: 2,
         maxFocus: 12,
         maxHp: 26,
@@ -163,6 +164,7 @@ describe("multiplayer lobby state", () => {
       combatActive: true,
       combatMessage: "Aimed Shot: d20 +2 DEX vs DC 12.",
       combatRound: 2,
+      inventoryItems: ["Rusty blade", "Dew vial", "bad", "Ranger charm"],
       maxFocus: 12,
       maxHp: 26,
     })
