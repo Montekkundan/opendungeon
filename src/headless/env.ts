@@ -8,11 +8,13 @@ import { isNpcActorId, type TileId } from "../game/domainTypes.js"
 import { actorGlyph, tileGlyph } from "../game/glyphs.js"
 import {
   attemptFlee,
+  adjustVillageShopPrice,
   combatSkills,
   createNextDescentSession,
   createSession,
   currentBiome,
   cycleTarget,
+  cycleVillageShopItem,
   chooseConversationOption,
   chooseLevelUpTalent,
   buildHubStation,
@@ -122,6 +124,10 @@ export const headlessActionIds = [
   "village-west",
   "village-east",
   "visit-village",
+  "shop-next-item",
+  "shop-prev-item",
+  "shop-raise-price",
+  "shop-lower-price",
   "shop-price",
   "customize-house",
   "cycle-farm-permission",
@@ -812,6 +818,22 @@ export class HeadlessGameEnv {
       }
     }
     if (action === "visit-village") return { message: String(visitVillageLocation(this.session)) }
+    if (action === "shop-next-item") {
+      const preview = cycleVillageShopItem(this.session, 1)
+      return { message: preview.item ? `Selected ${preview.item}.` : "No shop item." }
+    }
+    if (action === "shop-prev-item") {
+      const preview = cycleVillageShopItem(this.session, -1)
+      return { message: preview.item ? `Selected ${preview.item}.` : "No shop item." }
+    }
+    if (action === "shop-raise-price") {
+      const preview = adjustVillageShopPrice(this.session, 5)
+      return { message: preview.item ? `Asking ${preview.askingPrice}.` : "No shop item." }
+    }
+    if (action === "shop-lower-price") {
+      const preview = adjustVillageShopPrice(this.session, -5)
+      return { message: preview.item ? `Asking ${preview.askingPrice}.` : "No shop item." }
+    }
     if (action === "shop-price") {
       const sale = runVillageShopSale(this.session)
       return { message: sale?.reaction ?? this.session.log[0] ?? "No shop sale." }
@@ -1051,6 +1073,10 @@ function addHubLegalActions(actions: Set<HeadlessActionId>, session: GameSession
   actions.add("village-west")
   actions.add("village-east")
   actions.add("visit-village")
+  actions.add("shop-next-item")
+  actions.add("shop-prev-item")
+  actions.add("shop-raise-price")
+  actions.add("shop-lower-price")
   actions.add("shop-price")
   actions.add("customize-house")
   actions.add("cycle-farm-permission")

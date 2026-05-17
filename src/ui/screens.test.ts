@@ -79,7 +79,7 @@ describe("terminal renderer snapshots", () => {
       width: 120,
       height: 40,
       model: villageModel(),
-      expectedHash: "e6f26f11",
+      expectedHash: "970041a5",
       requiredText: ["Village", "Walkable Village", "NPC Schedule", "Market and Balance", "broken", "Seed Fresh", "S seed", "R craft"],
     },
   ]

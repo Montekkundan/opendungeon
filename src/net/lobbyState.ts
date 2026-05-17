@@ -261,6 +261,12 @@ export type LobbyVillageSnapshot = {
   selectedPermission: string
   permissions: Record<string, string>
   shopLog: string[]
+  market: {
+    selectedItemIndex: number
+    askingPrice: number
+    reputation: number
+    lastDemand: string
+  }
 }
 
 export type LobbyCalendarSnapshot = {
@@ -957,6 +963,12 @@ function cleanVillageSnapshot(value: unknown): LobbyVillageSnapshot {
     if (area && permission) permissions[area] = permission
   }
   return {
+    market: {
+      askingPrice: positiveInt(record.market?.askingPrice),
+      lastDemand: cleanHubToken(record.market?.lastDemand, 24) || "untested",
+      reputation: positiveInt(record.market?.reputation),
+      selectedItemIndex: positiveInt(record.market?.selectedItemIndex),
+    },
     permissions,
     selectedLocation: cleanHubToken(record.selectedLocation, 32) || "portal",
     selectedPermission: cleanHubToken(record.selectedPermission, 32) || "houses",

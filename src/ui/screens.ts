@@ -30,6 +30,7 @@ import {
   inventoryActionsForItem,
   inventoryItemDescription,
   pointKey,
+  previewVillageShop,
   skillCheckFormulaText,
   skillCheckModifier,
   skillCheckOutcomeText,
@@ -944,19 +945,33 @@ function drawVillage(canvas: Canvas, model: AppModel) {
   const marketY = scheduleY + 10
   const marketH = Math.max(7, height - (marketY - y) - 5)
   drawPanel(canvas, sideX, marketY, sideW, marketH, "Market and Balance", UI.edgeDim)
+  const shop = previewVillageShop(session)
+  const shopItem = shop.item ? `${shop.item} (${shop.category})` : "No village-ready loot"
+  canvas.write(sideX + 3, marketY + 2, trim(`Price test ${shop.selectedItemIndex + (shop.item ? 1 : 0)}/${shop.itemCount}`, sideW - 6), UI.gold, UI.panel)
+  canvas.write(sideX + 3, marketY + 3, trim(shopItem, sideW - 6), shop.item ? UI.ink : UI.muted, UI.panel)
+  canvas.write(sideX + 3, marketY + 4, trim(`Ask ${shop.askingPrice}  Fair ${shop.fairValue}  Rep ${shop.reputation}  ${shop.demand}`, sideW - 6), UI.focus, UI.panel)
   const shopLog = hub.village.shopLog[0] ?? "No customer price test yet."
-  writeWrapped(canvas, sideX + 3, marketY + 2, sideW - 6, [shopLog], 2, UI.ink, UI.panel)
+  const compactMarket = marketH <= 8
+  if (compactMarket) {
+    writeWrapped(canvas, sideX + 3, marketY + 5, sideW - 6, [shopLog], 2, UI.ink, UI.panel)
+  } else {
+    canvas.write(sideX + 3, marketY + 5, trim("] item  -/+ price  M test", sideW - 6), UI.soft, UI.panel)
+    writeWrapped(canvas, sideX + 3, marketY + 7, sideW - 6, [shopLog], 2, UI.ink, UI.panel)
+  }
   const dashboard = hub.balanceDashboard
-  canvas.write(sideX + 3, marketY + 5, trim(`Balance ${dashboard.runs} runs  ${session.hero.classId} ${dashboard.classWinRate[session.hero.classId] ?? 0}%`, sideW - 6), UI.soft, UI.panel)
-  canvas.write(sideX + 3, marketY + 6, trim(`Gold ${dashboard.averageGold}  Hub coins ${dashboard.averageHubCoins}  Pace ${dashboard.upgradePacing}%`, sideW - 6), UI.soft, UI.panel)
+  const balanceY = marketH > 11 ? marketY + 10 : marketY + 6
+  if (!compactMarket) {
+    canvas.write(sideX + 3, balanceY, trim(`Balance ${dashboard.runs} runs  ${session.hero.classId} ${dashboard.classWinRate[session.hero.classId] ?? 0}%`, sideW - 6), UI.soft, UI.panel)
+    canvas.write(sideX + 3, balanceY + 1, trim(`Gold ${dashboard.averageGold}  Hub coins ${dashboard.averageHubCoins}  Pace ${dashboard.upgradePacing}%`, sideW - 6), UI.soft, UI.panel)
+  }
   const challenge = hub.challengeBoard.leaderboard[0]
-  if (challenge && marketH > 8) canvas.write(sideX + 3, marketY + 7, trim(`Challenge ${challenge.cadence} ${challenge.medal} ${challenge.score} ${challenge.replayKey}`, sideW - 6), UI.gold, UI.panel)
-  if (marketH > 9) {
+  if (challenge && marketH > 12) canvas.write(sideX + 3, balanceY + 2, trim(`Challenge ${challenge.cadence} ${challenge.medal} ${challenge.score} ${challenge.replayKey}`, sideW - 6), UI.gold, UI.panel)
+  if (!compactMarket && marketH > 14) {
     const permissions = hub.village.permissions
     writeWrapped(
       canvas,
       sideX + 3,
-      marketY + 8,
+      balanceY + 3,
       sideW - 6,
       [`Perms homes ${permissions.houses}, farm ${permissions.farm}, storage ${permissions.storage}, shop ${permissions.shop}, upgrades ${permissions.upgrades}.`],
       2,
@@ -964,21 +979,21 @@ function drawVillage(canvas: Canvas, model: AppModel) {
       UI.panel,
     )
   }
-  if (dashboard.notes[0] && marketH > 11) writeWrapped(canvas, sideX + 3, marketY + 10, sideW - 6, [dashboard.notes[0]], marketH - 11, UI.muted, UI.panel)
+  if (dashboard.notes[0] && marketH > 16) writeWrapped(canvas, sideX + 3, balanceY + 5, sideW - 6, [dashboard.notes[0]], marketH - 16, UI.muted, UI.panel)
 
   if (model.saveStatus) writeWrapped(canvas, x + 4, y + height - 5, width - 8, [model.saveStatus], 2, UI.focus, UI.panel)
   drawFooter(canvas, [
     ["Arrows", "walk"],
     ["Enter", "visit"],
     ["M", "market"],
+    ["]", "item"],
+    ["-/+", "price"],
+    ["R", "craft"],
     ["H", "house"],
     ["P", "farm perms"],
     ["C", "pack"],
     ["B", "balance"],
     ["S", "seed"],
-    ["N", "cutscene"],
-    ["R", "craft"],
-    ["1/3/4", "prep"],
     ["G", "descent"],
     ["Esc", "dungeon"],
   ])

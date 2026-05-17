@@ -27,6 +27,7 @@ import {
   useInventoryItemAt,
   usePotion,
   addToast,
+  adjustVillageShopPrice,
   applyChallengeRun,
   applyGmPatchOperations,
   applyOpeningStoryBranch,
@@ -36,6 +37,7 @@ import {
   cycleSharedFarmPermission,
   completeVillageQuest,
   customizeVillageHouse,
+  cycleVillageShopItem,
   harvestFarm,
   moveVillagePlayer,
   plantCrop,
@@ -926,8 +928,17 @@ describe("game session", () => {
     expect(selected).toBeTruthy()
     expect(session.hub.village.schedules).toHaveLength(5)
 
+    const preview = cycleVillageShopItem(session)
+    expect(preview.item).toBeTruthy()
+    const higherAsk = adjustVillageShopPrice(session, 5)
+    expect(higherAsk.askingPrice).toBeGreaterThanOrEqual(preview.askingPrice)
+
     const sale = runVillageShopSale(session)
     expect(sale?.value).toBeGreaterThan(0)
+    expect(sale?.askingPrice).toBeGreaterThan(0)
+    expect(sale?.fairValue).toBeGreaterThan(0)
+    expect(sale?.accepted).toBe(true)
+    expect(session.hub.village.market.reputation).toBeGreaterThan(0)
     expect(session.hub.village.shopLog[0]).toContain("coins")
 
     const house = customizeVillageHouse(session, "player-2")

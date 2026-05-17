@@ -16,8 +16,10 @@ import {
   attemptFlee,
   buildHubStation,
   cancelSkillCheck,
+  adjustVillageShopPrice,
   cycleContentPack,
   cycleCoopVillagePermission,
+  cycleVillageShopItem,
   heroClassIds,
   hubStationIds,
   completeVillageQuest,
@@ -669,6 +671,26 @@ function handleVillageKey(key: KeyEvent) {
     playAudioEvent(sale ? "item-pickup" : "menu-cancel")
     model.saveStatus = sale?.reaction ?? model.session.log[0] ?? "No market sale."
     sendLobbyAction("village", sale ? `Ran market sale: ${sale.reaction}` : "Checked market sale", { villageAction: "market-sale" })
+    return
+  }
+  if (key.name === "[") {
+    const preview = cycleVillageShopItem(model.session, -1)
+    model.saveStatus = preview.item ? `Market item: ${preview.item} at ${preview.askingPrice} coins.` : "No village-ready loot."
+    return
+  }
+  if (key.name === "]") {
+    const preview = cycleVillageShopItem(model.session, 1)
+    model.saveStatus = preview.item ? `Market item: ${preview.item} at ${preview.askingPrice} coins.` : "No village-ready loot."
+    return
+  }
+  if (key.name === "-") {
+    const preview = adjustVillageShopPrice(model.session, key.shift ? -10 : -1)
+    model.saveStatus = preview.item ? `Asking ${preview.askingPrice} coins; fair demand near ${preview.fairValue}.` : "No item selected."
+    return
+  }
+  if (key.name === "=" || key.name === "+") {
+    const preview = adjustVillageShopPrice(model.session, key.shift ? 10 : 1)
+    model.saveStatus = preview.item ? `Asking ${preview.askingPrice} coins; fair demand near ${preview.fairValue}.` : "No item selected."
     return
   }
   if (key.name === "h") {
@@ -2403,6 +2425,18 @@ function applyHostHubSnapshot(hubSnapshot: LobbyHubSnapshot | undefined) {
     if (permission === "owner-only" || permission === "friends" || permission === "everyone") {
       hub.village.permissions[area] = permission
     }
+  }
+  hub.village.market = {
+    askingPrice: Math.max(0, finiteHostInt(hubSnapshot.village.market.askingPrice, hub.village.market.askingPrice)),
+    lastDemand:
+      hubSnapshot.village.market.lastDemand === "bargain" ||
+      hubSnapshot.village.market.lastDemand === "fair" ||
+      hubSnapshot.village.market.lastDemand === "expensive" ||
+      hubSnapshot.village.market.lastDemand === "walked"
+        ? hubSnapshot.village.market.lastDemand
+        : "untested",
+    reputation: Math.max(0, finiteHostInt(hubSnapshot.village.market.reputation, hub.village.market.reputation)),
+    selectedItemIndex: Math.max(0, finiteHostInt(hubSnapshot.village.market.selectedItemIndex, hub.village.market.selectedItemIndex)),
   }
   hub.village.shopLog = hubSnapshot.village.shopLog.slice(0, 8)
   hub.calendar = {

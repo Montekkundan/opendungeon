@@ -427,11 +427,19 @@ export type VillageMapState = {
   schedules: VillageNpcSchedule[]
   customers: VillageCustomer[]
   shopLog: string[]
+  market: VillageMarketState
   permissions: VillagePermissionState
   sharedFarm: {
     permissions: FarmPermission
     storage: string[]
   }
+}
+
+export type VillageMarketState = {
+  selectedItemIndex: number
+  askingPrice: number
+  reputation: number
+  lastDemand: "untested" | "bargain" | "fair" | "expensive" | "walked"
 }
 
 export type VillageCalendarState = {
@@ -499,7 +507,24 @@ export type VillageShopSale = {
   customer: VillageCustomer
   item: string
   value: number
+  askingPrice: number
+  fairValue: number
+  accepted: boolean
+  demand: VillageMarketState["lastDemand"]
   reaction: string
+}
+
+export type VillageShopPreview = {
+  customer: VillageCustomer
+  item: string | null
+  category: VillageCustomerTaste | null
+  baseValue: number
+  askingPrice: number
+  fairValue: number
+  reputation: number
+  demand: VillageMarketState["lastDemand"]
+  selectedItemIndex: number
+  itemCount: number
 }
 
 export type VillageCraftKind = "food" | "tool" | "charm"
@@ -1444,6 +1469,90 @@ export function visitVillageLocation(session: GameSession, id: VillageLocationId
   return "portal"
 }
 
+type VillageShopCandidate = {
+  item: string
+  index: number
+  category: VillageCustomerTaste
+  value: number
+}
+
+function currentVillageCustomer(session: GameSession) {
+  const customers = session.hub.village.customers.length ? session.hub.village.customers : createVillageCustomers()
+  return customers[Math.abs(session.seed + session.turn + session.hub.lootSold) % customers.length]
+}
+
+function villageShopMultiplier(session: GameSession, customer: VillageCustomer, category: VillageCustomerTaste) {
+  const trust = session.hub.trust[customer.trustNpc]
+  const matched = category === customer.taste
+  return 1 + (matched ? 0.45 : -0.12) + trust.level * 0.08 + customer.patience * 0.03
+}
+
+function villageShopCandidates(session: GameSession, customer: VillageCustomer): VillageShopCandidate[] {
+  return session.inventory
+    .map((item, index) => ({ item, index, category: classifyShopItem(item), value: sellValue(item) }))
+    .filter((entry) => entry.value > 0)
+    .sort((left, right) => Number(right.category === customer.taste) - Number(left.category === customer.taste) || right.value - left.value)
+}
+
+function villageShopFairValue(session: GameSession, customer: VillageCustomer, candidate: VillageShopCandidate | undefined) {
+  if (!candidate) return 0
+  return Math.max(1, Math.round(candidate.value * villageShopMultiplier(session, customer, candidate.category)))
+}
+
+function villageDemandForPrice(askingPrice: number, fairValue: number): VillageMarketState["lastDemand"] {
+  if (fairValue <= 0) return "untested"
+  const ratio = askingPrice / fairValue
+  if (ratio <= 0.75) return "bargain"
+  if (ratio <= 1.15) return "fair"
+  if (ratio <= 1.55) return "expensive"
+  return "walked"
+}
+
+export function previewVillageShop(session: GameSession): VillageShopPreview {
+  session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  const customer = currentVillageCustomer(session)
+  const candidates = villageShopCandidates(session, customer)
+  const selectedItemIndex = clamp(Math.floor(Number(session.hub.village.market.selectedItemIndex) || 0), 0, Math.max(0, candidates.length - 1))
+  session.hub.village.market.selectedItemIndex = selectedItemIndex
+  const selected = candidates[selectedItemIndex]
+  const fairValue = villageShopFairValue(session, customer, selected)
+  if (selected && session.hub.village.market.askingPrice <= 0) session.hub.village.market.askingPrice = fairValue
+  const askingPrice = selected ? clamp(Math.floor(Number(session.hub.village.market.askingPrice) || fairValue), 1, 999) : 0
+  if (selected) session.hub.village.market.askingPrice = askingPrice
+  const demand = selected ? villageDemandForPrice(askingPrice, fairValue) : "untested"
+  return {
+    customer,
+    item: selected?.item ?? null,
+    category: selected?.category ?? null,
+    baseValue: selected?.value ?? 0,
+    askingPrice,
+    fairValue,
+    reputation: session.hub.village.market.reputation,
+    demand,
+    selectedItemIndex,
+    itemCount: candidates.length,
+  }
+}
+
+export function cycleVillageShopItem(session: GameSession, direction = 1): VillageShopPreview {
+  session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  const preview = previewVillageShop(session)
+  if (preview.itemCount > 0) {
+    session.hub.village.market.selectedItemIndex = (preview.selectedItemIndex + direction + preview.itemCount) % preview.itemCount
+    const nextPreview = previewVillageShop(session)
+    session.hub.village.market.askingPrice = Math.max(1, nextPreview.fairValue)
+    return previewVillageShop(session)
+  }
+  return preview
+}
+
+export function adjustVillageShopPrice(session: GameSession, delta: number): VillageShopPreview {
+  session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
+  const preview = previewVillageShop(session)
+  if (preview.item) session.hub.village.market.askingPrice = clamp(preview.askingPrice + delta, 1, 999)
+  return previewVillageShop(session)
+}
+
 export function runVillageShopSale(session: GameSession): VillageShopSale | null {
   session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
   if (!session.hub.unlocked) {
@@ -1452,13 +1561,12 @@ export function runVillageShopSale(session: GameSession): VillageShopSale | null
   }
   const customers = session.hub.village.customers.length ? session.hub.village.customers : createVillageCustomers()
   session.hub.village.customers = customers
-  const customer = customers[Math.abs(session.seed + session.turn + session.hub.lootSold) % customers.length]
-  const candidates = session.inventory
-    .map((item, index) => ({ item, index, category: classifyShopItem(item), value: sellValue(item) }))
-    .filter((entry) => entry.value > 0)
-    .sort((left, right) => Number(right.category === customer.taste) - Number(left.category === customer.taste) || right.value - left.value)
+  const customer = currentVillageCustomer(session)
+  const candidates = villageShopCandidates(session, customer)
 
-  const selected = candidates[0]
+  const selectedIndex = clamp(Math.floor(Number(session.hub.village.market.selectedItemIndex) || 0), 0, Math.max(0, candidates.length - 1))
+  session.hub.village.market.selectedItemIndex = selectedIndex
+  const selected = candidates[selectedIndex]
   if (!selected) {
     const reaction = `${customer.name} checks the counter, but you have no village-ready loot.`
     session.hub.village.shopLog.unshift(reaction)
@@ -1470,20 +1578,39 @@ export function runVillageShopSale(session: GameSession): VillageShopSale | null
 
   const trust = session.hub.trust[customer.trustNpc]
   const matched = selected.category === customer.taste
-  const multiplier = 1 + (matched ? 0.45 : -0.12) + trust.level * 0.08 + customer.patience * 0.03
-  const value = Math.max(1, Math.round(selected.value * multiplier))
+  const fairValue = villageShopFairValue(session, customer, selected)
+  const askingPrice = clamp(Math.floor(Number(session.hub.village.market.askingPrice) || fairValue), 1, 999)
+  session.hub.village.market.askingPrice = askingPrice
+  const demand = villageDemandForPrice(askingPrice, fairValue)
+  const accepted = demand !== "walked"
+  if (!accepted) {
+    session.hub.village.market.lastDemand = demand
+    session.hub.village.market.reputation = Math.max(0, session.hub.village.market.reputation - 1)
+    const reaction = `${customer.name} walked away from ${selected.item} at ${askingPrice} coins; fair demand is near ${fairValue}.`
+    session.hub.village.shopLog.unshift(reaction)
+    session.hub.village.shopLog = session.hub.village.shopLog.slice(0, 8)
+    pushSessionMessage(session, reaction)
+    addToast(session, "Price too high", reaction, "info")
+    return { customer, item: selected.item, value: 0, askingPrice, fairValue, accepted, demand, reaction }
+  }
+
   const [item] = session.inventory.splice(selected.index, 1)
+  const value = askingPrice
   session.hub.coins += value
   session.hub.lootSold += 1
+  session.hub.village.market.lastDemand = demand
+  session.hub.village.market.reputation += demand === "bargain" ? 2 : demand === "fair" ? 3 : 1
   gainNpcTrust(session, customer.trustNpc, matched ? 3 : 1, false)
   const reaction = matched
-    ? `${customer.name} wanted ${selected.category} loot and paid ${value} coins for ${item}.`
-    : `${customer.name} haggled on ${item}; ${value} coins still changed hands.`
+    ? `${customer.name} wanted ${selected.category} loot and paid ${value} coins for ${item}; demand looked ${demand}.`
+    : `${customer.name} haggled on ${item}; ${value} coins changed hands and demand looked ${demand}.`
   session.hub.village.shopLog.unshift(reaction)
   session.hub.village.shopLog = session.hub.village.shopLog.slice(0, 8)
   pushSessionMessage(session, reaction)
   addToast(session, "Price discovered", reaction, matched ? "success" : "info")
-  return { customer, item, value, reaction }
+  session.hub.village.market.selectedItemIndex = 0
+  session.hub.village.market.askingPrice = 0
+  return { customer, item, value, askingPrice, fairValue, accepted, demand, reaction }
 }
 
 export function customizeVillageHouse(session: GameSession, playerId = "player-1") {
@@ -4556,11 +4683,23 @@ function normalizeVillageMapState(value: unknown, fallback: VillageMapState): Vi
     schedules: normalizeVillageSchedules(source.schedules, fallback.schedules),
     customers: normalizeVillageCustomers(source.customers, fallback.customers),
     shopLog: normalizeStringList(source.shopLog, 8, 120),
+    market: normalizeVillageMarketState(source.market, fallback.market),
     permissions,
     sharedFarm: {
       permissions: permissions.farm,
       storage: normalizeStringList(sharedFarm.storage, 20, 50),
     },
+  }
+}
+
+function normalizeVillageMarketState(value: unknown, fallback: VillageMarketState): VillageMarketState {
+  const source = value && typeof value === "object" ? (value as Partial<VillageMarketState>) : {}
+  const demand = source.lastDemand
+  return {
+    selectedItemIndex: Math.max(0, Math.floor(Number(source.selectedItemIndex) || fallback.selectedItemIndex)),
+    askingPrice: clamp(Math.floor(Number(source.askingPrice) || fallback.askingPrice), 0, 999),
+    reputation: clamp(Math.floor(Number(source.reputation) || fallback.reputation), 0, 999),
+    lastDemand: demand === "untested" || demand === "bargain" || demand === "fair" || demand === "expensive" || demand === "walked" ? demand : fallback.lastDemand,
   }
 }
 
@@ -4766,6 +4905,12 @@ function createVillageMapState(mode: MultiplayerMode): VillageMapState {
     })),
     customers: createVillageCustomers(),
     shopLog: [],
+    market: {
+      selectedItemIndex: 0,
+      askingPrice: 0,
+      reputation: 0,
+      lastDemand: "untested",
+    },
     permissions,
     sharedFarm: {
       permissions: permissions.farm,

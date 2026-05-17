@@ -556,6 +556,7 @@ function hubSnapshot(session: GameSession): LobbyHubSnapshot {
     unlocked: hub.unlocked,
     unlockedGear: hub.unlockedGear.slice(0, 20),
     village: {
+      market: { ...hub.village.market },
       permissions: { ...hub.village.permissions },
       selectedLocation: hub.village.selectedLocation,
       selectedPermission: hub.village.selectedPermission,

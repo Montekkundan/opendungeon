@@ -421,8 +421,12 @@ export function builtinScenario(name: string): ScenarioLine[] | null {
     return [
       { action: "unlock-hub" },
       { command: "add-item", item: "Boss memory shard" },
+      { command: "add-item", item: "Tool part bundle" },
+      { action: "shop-next-item" },
+      { action: "shop-raise-price" },
       { action: "shop-price" },
       { assert: { path: "session.hub.village.shopLog.0", truthy: true } },
+      { assert: { path: "session.hub.village.market.reputation", min: 1 } },
       { assert: { path: "session.hub.coins", min: 1 } },
       { command: "check-invariants" },
     ]
