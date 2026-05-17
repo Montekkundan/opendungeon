@@ -103,6 +103,7 @@ import { debugOverlaysEnabled } from "./system/debugFlags.js"
 import { checkInternetConnectivity } from "./net/connectivity.js"
 import { lobbyInviteErrorMessage, lobbyInviteMismatchNotice, lobbyJoinUsageMessage, normalizeLobbyBaseUrl } from "./net/hostConfig.js"
 import type { CoopSyncState, LobbyActionType, LobbyCommandEntry, LobbyCommandResult, LobbyContextSnapshot, LobbyHubSnapshot, LobbyProgressSnapshot, LobbySnapshot, LobbyWorldSnapshot } from "./net/lobbyState.js"
+import { latestLocalHostState } from "./net/hostStateCursor.js"
 import { checkForUpdate, checkingUpdateStatus, handleUpdateCommand } from "./system/updateCheck.js"
 import { easeInOutQuart, lerp } from "./shared/numeric.js"
 import { transitionDurationForKind } from "./ui/teleportAnimation.js"
@@ -271,6 +272,7 @@ let lobbySocketUrl = ""
 let lobbyConnectedPlayers = 0
 const deliveredGmPatchIds = new Set<string>()
 const appliedLobbyCommandIds = new Set<string>()
+let lastAppliedHostStateSequence = 0
 let activeRunLock: LocalRunLock | null = null
 const localGuestSessionId = crypto.randomUUID().slice(0, 8)
 const localLobbyClientId = crypto.randomUUID()
@@ -2033,6 +2035,7 @@ function connectLobby() {
       }
       lobbyConnectedPlayers = 0
       appliedLobbyCommandIds.clear()
+      lastAppliedHostStateSequence = 0
       model.remotePlayers = []
       model.coopGateStatus = ""
       clearCoopTutorialHold()
@@ -2167,14 +2170,26 @@ function updateLobbyStatus(text: string) {
 }
 
 function applyHostCommandResultsFromSnapshot(snapshot: Partial<LobbySnapshot>) {
-  if (!Array.isArray(snapshot.commands)) return false
   let reconciled = false
-  for (const command of [...snapshot.commands].reverse()) {
-    const entry = command as Partial<LobbyCommandEntry>
-    if (!entry.id || appliedLobbyCommandIds.has(entry.id) || entry.playerId !== localLobbyClientId) continue
-    appliedLobbyCommandIds.add(entry.id)
-    if (!entry.result) continue
-    reconcileLocalSessionWithHostResult(entry)
+  if (Array.isArray(snapshot.commands)) {
+    for (const command of [...snapshot.commands].reverse()) {
+      const entry = command as Partial<LobbyCommandEntry>
+      if (!entry.id || appliedLobbyCommandIds.has(entry.id) || entry.playerId !== localLobbyClientId) continue
+      appliedLobbyCommandIds.add(entry.id)
+      if (!entry.result) continue
+      reconcileLocalSessionWithHostResult(entry)
+      lastAppliedHostStateSequence = Math.max(
+        lastAppliedHostStateSequence,
+        finiteHostInt(entry.sequence, lastAppliedHostStateSequence),
+      )
+      reconciled = true
+    }
+  }
+
+  const hostState = latestLocalHostState(snapshot, localLobbyClientId, lastAppliedHostStateSequence)
+  if (hostState) {
+    applyHostResultToLocalSession(hostState, hostState.accepted !== false)
+    lastAppliedHostStateSequence = hostState.commandSequence
     reconciled = true
   }
   return reconciled
@@ -2747,6 +2762,7 @@ function closeLobbySocket() {
   lobbyConnectedPlayers = 0
   deliveredGmPatchIds.clear()
   appliedLobbyCommandIds.clear()
+  lastAppliedHostStateSequence = 0
   model.remotePlayers = []
   model.coopGateStatus = ""
   clearCoopTutorialHold()
