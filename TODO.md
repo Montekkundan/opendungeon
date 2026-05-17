@@ -248,10 +248,10 @@
 
 ## More Further Improvements To Approve
 
-- [ ] Add a village calendar with seasons, weather, festivals, and dungeon modifiers tied to village events.
+- [x] Add a village calendar with seasons, weather, festivals, and dungeon modifiers tied to village events.
 - [x] Add deeper NPC schedule simulation with morning/day/night routines, relationship scenes, and trust-gated house visits.
 - [x] Add a proper shopkeeper UI for price experiments: set price, wait for customer reactions, learn demand curves, and build shop reputation.
-- [ ] Add cooking and crafting recipes that combine dungeon loot, farm crops, and trust unlocks into next-run food, bombs, tools, and charms.
+- [x] Add cooking and crafting recipes that combine dungeon loot, farm crops, and trust unlocks into next-run food, bombs, tools, and charms.
 - [x] Add a co-op permissions screen for houses, farm plots, storage, shop shelves, and shared upgrade spending.
 - [x] Add a content-pack import wizard with free-license checks, terminal preview sampling, and per-pack accessibility scores.
 - [x] Add local daily/weekly challenge boards with replay ghosts, fixed seeds, mutator bundles, and class-specific medals.
