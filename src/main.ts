@@ -2006,17 +2006,13 @@ function connectLobby() {
       model.remotePlayers = []
       model.coopGateStatus = ""
       clearCoopTutorialHold()
-      if (model.screen === "game" || model.screen === "village") {
-        const message = "Lobby host stopped. Multiplayer is disconnected; return to title and rejoin when the host is back."
-        model.session.log.unshift(message)
-        model.saveStatus = message
-        model.dialog = "lobbyDisconnected"
-        addToast(model.session, "Lobby disconnected", message, "warning")
-      }
+      showLobbyDisconnected()
       refresh()
     })
     socket.on("error", () => {
-      model.session.log.unshift("Lobby connection failed.")
+      const message = "Lobby connection failed. Multiplayer is disconnected; return to title and rejoin when the host is back."
+      model.session.log.unshift(message)
+      showLobbyDisconnected(message)
       refresh()
     })
   } catch {
@@ -2055,7 +2051,15 @@ function syncLobbyState() {
 
 function sendLobbyAction(actionType: LobbyActionType, label: string, extraPayload: Record<string, string | number | boolean> = {}) {
   const socket = lobbySocket
-  if (!socket || socket.readyState !== WebSocket.OPEN) return
+  if (!socket) {
+    if (lobbyUrlFromConfig()) showLobbyDisconnected()
+    return
+  }
+  if (socket.readyState === WebSocket.CLOSING || socket.readyState === WebSocket.CLOSED) {
+    showLobbyDisconnected()
+    return
+  }
+  if (socket.readyState !== WebSocket.OPEN) return
   const checkpoint = tutorialCoopCheckpoint(model.session)
   const tutorialEnabled = model.session.tutorial.enabled && !model.session.tutorial.disabledAfterDeath && model.session.deaths === 0
   socket.send(
@@ -2088,6 +2092,16 @@ function sendLobbyAction(actionType: LobbyActionType, label: string, extraPayloa
 
 function isLobbyConnected() {
   return lobbySocket?.readyState === WebSocket.OPEN
+}
+
+function showLobbyDisconnected(message = "Lobby host stopped. Multiplayer is disconnected; return to title and rejoin when the host is back.") {
+  if (destroyed || model.session.mode === "solo") return
+  if (model.screen !== "game" && model.screen !== "village") return
+  const alreadyShowing = model.dialog === "lobbyDisconnected"
+  model.saveStatus = message
+  model.dialog = "lobbyDisconnected"
+  if (model.session.log[0] !== message) model.session.log.unshift(message)
+  if (!alreadyShowing) addToast(model.session, "Lobby disconnected", message, "warning")
 }
 
 function updateLobbyStatus(text: string) {
