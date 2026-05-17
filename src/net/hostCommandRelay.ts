@@ -246,8 +246,8 @@ export class HostCommandRelay {
     if (turn === null || turn < session.turn) return
     const floor = finitePayloadInt(command.payload.floor)
     const hp = finitePayloadInt(command.payload.hp)
-    const x = finitePayloadInt(command.payload.x)
-    const y = finitePayloadInt(command.payload.y)
+    const x = command.type === "move" ? finitePayloadInt(command.payload.fromX) ?? finitePayloadInt(command.payload.x) : finitePayloadInt(command.payload.x)
+    const y = command.type === "move" ? finitePayloadInt(command.payload.fromY) ?? finitePayloadInt(command.payload.y) : finitePayloadInt(command.payload.y)
 
     if (floor !== null) session.floor = Math.max(1, floor)
     if (hp !== null) session.hp = Math.max(0, hp)

@@ -1145,7 +1145,7 @@ function handleGameKey(key: KeyEvent) {
     if (moved) {
       startPlayerMoveAnimation(direction)
     }
-    if (isLobbyConnected()) sendLobbyAction("move", `Moved ${direction}`, { direction, localMoved: moved })
+    if (isLobbyConnected()) sendLobbyAction("move", `Moved ${direction}`, { direction, localMoved: moved, fromX: before.x, fromY: before.y })
     if ((model.session.status as GameSession["status"]) === "victory" && model.session.hub.unlocked && !wasHubUnlocked) openVillageRoad("The final gate opens to the village.", Boolean(model.session.hub.lastCutsceneId))
   }
 }

@@ -41,6 +41,20 @@ describe("host command relay", () => {
     expect(result).toMatchObject({ accepted: true, floor: 1, hp: 19, turn: 43, x: 6, y: 5 })
   })
 
+  test("uses pre-move coordinates so optimistic clients do not double step", () => {
+    const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
+
+    const result = relay.apply({
+      label: "Moved east",
+      name: "Mira",
+      payload: { direction: "east", fromX: 5, fromY: 5, turn: 42, x: 6, y: 5 },
+      playerId: "mira",
+      type: "move",
+    })
+
+    expect(result).toMatchObject({ accepted: true, turn: 43, x: 6, y: 5 })
+  })
+
   test("does not rewind host sessions from stale client snapshots", () => {
     const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
     const latest = relay.apply(command({ payload: { direction: "east", turn: 42, x: 5, y: 5 } }))
