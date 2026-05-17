@@ -127,10 +127,14 @@ export type LobbyCommandResult = {
   floor: number
   turn: number
   hp: number
+  maxHp?: number
   focus?: number
+  maxFocus?: number
   xp?: number
   level?: number
   combatActive?: boolean
+  combatMessage?: string
+  combatRound?: number
   inventoryCount?: number
   gold?: number
   tutorialStage?: string
@@ -588,6 +592,8 @@ function normalizeCommandResult(value: unknown, fallback: Record<string, string 
   const result: LobbyCommandResult = {
     accepted: record.accepted !== false,
     combatActive: typeof record.combatActive === "boolean" ? record.combatActive : typeof fallback.combatActive === "boolean" ? fallback.combatActive : undefined,
+    combatMessage: record.combatMessage !== undefined || fallback.combatMessage !== undefined ? cleanActionLabel(record.combatMessage ?? fallback.combatMessage) : undefined,
+    combatRound: record.combatRound !== undefined || fallback.combatRound !== undefined ? positiveInt(record.combatRound ?? fallback.combatRound) : undefined,
     floor: positiveInt(record.floor ?? fallback.floor),
     focus: record.focus !== undefined || fallback.focus !== undefined ? positiveInt(record.focus ?? fallback.focus) : undefined,
     hp: positiveInt(record.hp ?? fallback.hp),
@@ -606,11 +612,13 @@ function normalizeCommandResult(value: unknown, fallback: Record<string, string 
   if (record.inventoryCount !== undefined || fallback.inventoryCount !== undefined) {
     result.inventoryCount = positiveInt(record.inventoryCount ?? fallback.inventoryCount)
   }
+  if (record.maxHp !== undefined || fallback.maxHp !== undefined) result.maxHp = Math.max(1, positiveInt(record.maxHp ?? fallback.maxHp) || 1)
+  if (record.maxFocus !== undefined || fallback.maxFocus !== undefined) result.maxFocus = Math.max(0, positiveInt(record.maxFocus ?? fallback.maxFocus))
   return result
 }
 
 function cleanActionLabel(value: unknown) {
-  return String(value || "Updated state").replace(/[^\w .,:;!?'"()/-]/g, "").replace(/\s+/g, " ").trim().slice(0, 140) || "Updated state"
+  return String(value || "Updated state").replace(/[^\w .,:;!?'"()+/-]/g, "").replace(/\s+/g, " ").trim().slice(0, 140) || "Updated state"
 }
 
 function sortLeaderboard(results: RaceResult[]) {

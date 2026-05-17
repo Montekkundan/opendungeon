@@ -151,6 +151,7 @@
 - [x] Add explicit inventory utility payloads for potion and rest shortcuts so co-op replay does not parse those actions from visible labels.
 - [x] Reject co-op movement, interaction, combat, inventory, and village commands that only describe their action in visible label text; host replay now requires structured payload fields.
 - [x] Roll rejected co-op commands back to the last trusted host state. The host now checkpoints before client snapshot hydration, rejected commands cannot poison shared state with optimistic coordinates, and clients reconcile their local floor/turn/HP/position back to the rejected host result.
+- [x] Broadcast host-owned max HP, max focus, combat round, and combat message in command results so accepted combat and resource commands reconcile local client UI with the authoritative host state.
 - [ ] Finish the accepted command stream into a fully host-rendered command relay: clients should render authoritative host state/results for movement, combat, loot, village, and tutorial progression instead of keeping parallel local simulation as the primary source of truth.
 - [x] Verify signed-in duplicate-run locking in Ghostty and another terminal app: local active-run locks block the same signed-in account and hosted lobbies reject duplicate signed-in account identities, while separate guest auth dirs remain allowed.
 - [x] Make game modes explicit everywhere: Single Player, Multiplayer, and Multiplayer with GM. Avoid mixing race/sync/dev-host concepts with the authored story loop.

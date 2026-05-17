@@ -2166,8 +2166,12 @@ function reconcileLocalSessionWithHostResult(command: Partial<LobbyCommandEntry>
 
 function applyHostResultToLocalSession(result: LobbyCommandResult, accepted: boolean) {
   model.session.floor = Math.max(1, finiteHostInt(result.floor, model.session.floor))
+  model.session.maxHp = Math.max(1, finiteHostInt(result.maxHp, model.session.maxHp))
+  model.session.maxFocus = Math.max(0, finiteHostInt(result.maxFocus, model.session.maxFocus))
   model.session.focus = Math.max(0, finiteHostInt(result.focus, model.session.focus))
   model.session.hp = Math.max(0, finiteHostInt(result.hp, model.session.hp))
+  model.session.focus = Math.min(model.session.focus, model.session.maxFocus)
+  model.session.hp = Math.min(model.session.hp, model.session.maxHp)
   model.session.gold = Math.max(0, finiteHostInt(result.gold, model.session.gold))
   model.session.xp = Math.max(0, finiteHostInt(result.xp, model.session.xp))
   model.session.level = Math.max(1, finiteHostInt(result.level, model.session.level))
@@ -2179,6 +2183,9 @@ function applyHostResultToLocalSession(result: LobbyCommandResult, accepted: boo
     y: finiteHostInt(result.y, model.session.player.y),
   }
   model.session.status = String(result.status || model.session.status) as GameSession["status"]
+  model.session.combat.active = result.combatActive ?? model.session.combat.active
+  model.session.combat.round = Math.max(0, finiteHostInt(result.combatRound, model.session.combat.round))
+  if (result.combatMessage) model.session.combat.message = result.combatMessage
 }
 
 function finiteHostInt(value: unknown, fallback: number) {

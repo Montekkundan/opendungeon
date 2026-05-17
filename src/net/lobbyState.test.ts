@@ -109,12 +109,17 @@ describe("multiplayer lobby state", () => {
       },
       result: {
         accepted: true,
+        combatActive: true,
+        combatMessage: "Aimed Shot: d20 +2 DEX vs DC 12.",
+        combatRound: 2,
         focus: 10,
         floor: 1,
         gold: 7,
         hp: 18,
         inventoryCount: 4,
         level: 2,
+        maxFocus: 12,
+        maxHp: 26,
         message: "Mira moved east.",
         status: "running",
         tutorialCompleted: false,
@@ -153,6 +158,13 @@ describe("multiplayer lobby state", () => {
       x: 6,
       xp: 9,
       y: 5,
+    })
+    expect(command.result).toMatchObject({
+      combatActive: true,
+      combatMessage: "Aimed Shot: d20 +2 DEX vs DC 12.",
+      combatRound: 2,
+      maxFocus: 12,
+      maxHp: 26,
     })
   })
 

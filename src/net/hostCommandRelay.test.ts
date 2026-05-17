@@ -242,7 +242,15 @@ describe("host command relay", () => {
 
     expect(start).toMatchObject({ accepted: true, combatActive: true })
     expect(start.message).toContain("Combat starts")
-    expect(selected).toMatchObject({ accepted: true, combatActive: true, turn: start.turn })
+    expect(selected).toMatchObject({
+      accepted: true,
+      combatActive: true,
+      combatMessage: expect.stringContaining("Aimed Shot"),
+      combatRound: 1,
+      maxFocus: expect.any(Number),
+      maxHp: expect.any(Number),
+      turn: start.turn,
+    })
     expect(selected.message).toContain("Aimed Shot")
     expect(rolled.accepted).toBe(true)
     expect(rolled.turn).toBeGreaterThan(selected.turn)
