@@ -45,6 +45,7 @@ import {
   prepareFood,
   refreshBalanceDashboard,
   refreshVillageCalendar,
+  refreshVillageSchedules,
   recordChallengeResult,
   runVillageShopSale,
   sellLootToVillage,
@@ -910,12 +911,40 @@ describe("game session", () => {
     const calendar = refreshVillageCalendar(session)
 
     expect(calendar.day).toBe(13)
+    expect(calendar.phase).toBe("morning")
     expect(calendar.festival).toBe("final-gate-vigil")
 
     const next = createNextDescentSession(session, 8888)
     expect(next.hub.calendar.day).toBe(13)
     expect(next.inventory).toContain("Final-gate candle")
     expect(next.knowledge.some((entry) => entry.id === "village-calendar-day-13" && entry.text.includes("final gate vigil"))).toBe(true)
+  })
+
+  test("village NPC schedules use day phases, trust-gated visits, and boss aftermath scenes", () => {
+    const session = createSession(1234, "solo", "ranger", "Mira")
+    unlockHub(session)
+    session.turn = 8
+
+    let schedules = refreshVillageSchedules(session)
+    expect(session.hub.calendar.phase).toBe("night")
+    expect(schedules.find((schedule) => schedule.npc === "blacksmith")).toMatchObject({
+      phase: "night",
+      location: "houses",
+      available: false,
+      requiredTrust: 1,
+    })
+
+    session.hub.trust.blacksmith.level = 1
+    session.hub.trust.cook.level = 2
+    session.inventory.unshift("Grave Root memory")
+    schedules = refreshVillageSchedules(session)
+
+    expect(schedules.find((schedule) => schedule.npc === "blacksmith")).toMatchObject({
+      available: true,
+      scene: "opens a private armor ledger",
+    })
+    expect(schedules.find((schedule) => schedule.npc === "cook")?.scene).toContain("relationship scene")
+    expect(schedules.find((schedule) => schedule.npc === "cartographer")?.scene).toContain("Grave Root memory")
   })
 
   test("village screen systems cover movement, schedules, shop pricing, co-op homes, content packs, cutscenes, and balance", () => {

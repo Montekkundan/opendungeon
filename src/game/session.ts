@@ -344,6 +344,8 @@ export const villageSeasonIds = ["spring", "summer", "autumn", "winter"] as cons
 export type VillageSeasonId = (typeof villageSeasonIds)[number]
 export const villageWeatherIds = ["clear", "rain", "fog", "storm", "emberfall"] as const
 export type VillageWeatherId = (typeof villageWeatherIds)[number]
+export const villageDayPhases = ["morning", "day", "night"] as const
+export type VillageDayPhase = (typeof villageDayPhases)[number]
 export type VillageFestivalId = "none" | "market-day" | "forge-fair" | "harvest-night" | "final-gate-vigil"
 export type EquipmentSlot = "weapon" | "armor" | "relic"
 export type EquipmentRarity = "common" | "uncommon" | "rare" | "legendary"
@@ -400,7 +402,10 @@ export type VillageHouse = {
 export type VillageNpcSchedule = {
   npc: VillageNpcId
   location: VillageLocationId
+  phase: VillageDayPhase
   available: boolean
+  scene: string
+  requiredTrust: number
   text: string
 }
 
@@ -444,6 +449,7 @@ export type VillageMarketState = {
 
 export type VillageCalendarState = {
   day: number
+  phase: VillageDayPhase
   season: VillageSeasonId
   weather: VillageWeatherId
   festival: VillageFestivalId
@@ -1389,24 +1395,58 @@ function challengeMedal(score: number): ChallengeMedal {
 export function refreshVillageSchedules(session: GameSession) {
   session.hub = normalizeHubState(session.hub, session.mode, session.hero.name)
   refreshVillageCalendar(session)
-  const phase = Math.floor(session.turn / 12) % 3
-  const routes: Record<VillageNpcId, VillageLocationId[]> = {
-    blacksmith: ["blacksmith", "market", "guildhall"],
-    cook: ["market", "farm", "houses"],
-    farmer: ["farm", "market", "houses"],
-    cartographer: ["portal", "guildhall", "market"],
-    guildmaster: ["guildhall", "portal", "market"],
+  const phase = session.hub.calendar.phase
+  const routes: Record<VillageNpcId, Record<VillageDayPhase, { location: VillageLocationId; scene: string; trustGate?: number; bossScene?: string }>> = {
+    blacksmith: {
+      morning: { location: "blacksmith", scene: "sets the forge for weapon repairs" },
+      day: { location: "market", scene: "prices tool parts for the next descent" },
+      night: { location: "houses", scene: "opens a private armor ledger", trustGate: 1 },
+    },
+    cook: {
+      morning: { location: "market", scene: "buys herbs and ration scraps" },
+      day: { location: "farm", scene: "tests meal prep with fresh crops" },
+      night: { location: "houses", scene: "shares kitchen rumors over stew", trustGate: 1 },
+    },
+    farmer: {
+      morning: { location: "farm", scene: "checks crop rows and sprinkler lines" },
+      day: { location: "market", scene: "trades harvest stock for dungeon loot" },
+      night: { location: "houses", scene: "offers seed planning at the porch", trustGate: 1 },
+    },
+    cartographer: {
+      morning: { location: "portal", scene: "measures portal drift before sunrise", bossScene: "charts {memory} echoes near the portal" },
+      day: { location: "guildhall", scene: "compares route notes with the guild", bossScene: "marks aftermath paths from {memory}" },
+      night: { location: "houses", scene: "shares hidden-room maps indoors", trustGate: 1, bossScene: "guards {memory} route notes after dark" },
+    },
+    guildmaster: {
+      morning: { location: "guildhall", scene: "posts new contracts and gate rules", bossScene: "posts reports about {memory}" },
+      day: { location: "portal", scene: "audits final-gate clues with patrols", bossScene: "briefs scouts after {memory}" },
+      night: { location: "houses", scene: "reviews private trust ledgers", trustGate: 2, bossScene: "hosts a late council about {memory}" },
+    },
   }
+  const trustedScenes: Partial<Record<VillageNpcId, string>> = {
+    blacksmith: "offers a relationship scene about rebuilding the broken hut",
+    cook: "shares a relationship scene about food before hard descents",
+    farmer: "talks through a relationship scene about village recovery",
+    cartographer: "shows a relationship scene about routes nobody else sees",
+    guildmaster: "opens a relationship scene about why the final gate matters",
+  }
+  const bossMemory = session.inventory.find((item) => item.endsWith(" memory"))
   session.hub.village.schedules = villageNpcIds.map((npc) => {
-    const location = routes[npc][phase] ?? routes[npc][0]
+    const route = routes[npc][phase]
     const trust = session.hub.trust[npc]
-    const available = session.hub.unlocked && !(phase === 2 && npc === "cartographer" && trust.level < 1)
-    const place = villageLocations[location].label
+    const requiredTrust = route.trustGate ?? 0
+    const available = session.hub.unlocked && trust.level >= requiredTrust
+    const place = villageLocations[route.location].label
+    const baseScene = bossMemory && route.bossScene ? route.bossScene.replace("{memory}", bossMemory) : trust.level >= 2 ? trustedScenes[npc] ?? route.scene : route.scene
+    const phaseLabel = villageDayPhaseLabel(phase)
     return {
       npc,
-      location,
+      location: route.location,
+      phase,
       available,
-      text: available ? `${trust.name} is at ${place}.` : `${trust.name} is away until you earn more trust.`,
+      scene: baseScene,
+      requiredTrust,
+      text: available ? `${phaseLabel}: ${trust.name} ${baseScene} at ${place}.` : `${phaseLabel}: ${trust.name}'s ${place} scene needs trust ${requiredTrust}.`,
     }
   })
   return session.hub.village.schedules
@@ -4718,6 +4758,7 @@ function normalizeVillageCalendarState(value: unknown, fallback: VillageCalendar
   const source = value && typeof value === "object" ? (value as Partial<VillageCalendarState>) : {}
   return {
     day: Math.max(1, Math.floor(Number(source.day) || fallback.day)),
+    phase: isVillageDayPhase(source.phase) ? source.phase : fallback.phase,
     season: isVillageSeasonId(source.season) ? source.season : fallback.season,
     weather: isVillageWeatherId(source.weather) ? source.weather : fallback.weather,
     festival: isVillageFestivalId(source.festival) ? source.festival : fallback.festival,
@@ -4735,8 +4776,11 @@ function normalizeVillageSchedules(value: unknown, fallback: VillageNpcSchedule[
       {
         npc: schedule.npc,
         location: isVillageLocationId(schedule.location) ? schedule.location : "portal",
+        phase: isVillageDayPhase(schedule.phase) ? schedule.phase : "morning",
         available: schedule.available !== false,
-        text: cleanBookText(schedule.text || `${villageTrustDefinitions[schedule.npc]} is in the village.`, 96),
+        scene: cleanBookText(schedule.scene || "keeps a village routine", 96),
+        requiredTrust: clamp(Math.floor(Number(schedule.requiredTrust) || 0), 0, 9),
+        text: cleanBookText(schedule.text || `${villageTrustDefinitions[schedule.npc]} is in the village.`, 140),
       },
     ]
   })
@@ -4900,6 +4944,9 @@ function createVillageMapState(mode: MultiplayerMode): VillageMapState {
     schedules: villageNpcIds.map((npc) => ({
       npc,
       location: npc === "blacksmith" ? "blacksmith" : npc === "farmer" ? "farm" : npc === "guildmaster" ? "guildhall" : npc === "cook" ? "market" : "portal",
+      phase: "morning",
+      scene: "keeps a morning village routine",
+      requiredTrust: 0,
       available: true,
       text: `${villageTrustDefinitions[npc]} is ready to talk.`,
     })),
@@ -4932,17 +4979,19 @@ function createVillagePermissions(mode: MultiplayerMode): VillagePermissionState
 
 function createVillageCalendarState(seed: number, turn: number): VillageCalendarState {
   const day = Math.max(1, Math.floor(turn / 12) + 1)
+  const phase = villageDayPhaseForTurn(turn)
   const season = villageSeasonIds[Math.floor((day - 1) / 7) % villageSeasonIds.length] ?? "spring"
   const weather = villageWeatherIds[Math.abs(seed + day * 13) % villageWeatherIds.length] ?? "clear"
   const festival = villageFestivalForDay(day, season)
   const modifier = villageCalendarModifier(weather, festival)
   return {
     day,
+    phase,
     season,
     weather,
     festival,
     dungeonModifier: modifier,
-    note: villageCalendarNote(day, season, weather, festival, modifier),
+    note: villageCalendarNote(day, phase, season, weather, festival, modifier),
   }
 }
 
@@ -5019,9 +5068,23 @@ function villageCalendarModifier(weather: VillageWeatherId, festival: VillageFes
   return "No extra dungeon pressure today."
 }
 
-function villageCalendarNote(day: number, season: VillageSeasonId, weather: VillageWeatherId, festival: VillageFestivalId, modifier: string) {
+function villageDayPhaseForTurn(turn: number): VillageDayPhase {
+  const phase = Math.floor(Math.max(0, turn) / 4) % villageDayPhases.length
+  return villageDayPhases[phase] ?? "morning"
+}
+
+function villageDayPhaseLabel(phase: VillageDayPhase) {
+  const labels: Record<VillageDayPhase, string> = {
+    morning: "Morning",
+    day: "Day",
+    night: "Night",
+  }
+  return labels[phase]
+}
+
+function villageCalendarNote(day: number, phase: VillageDayPhase, season: VillageSeasonId, weather: VillageWeatherId, festival: VillageFestivalId, modifier: string) {
   const festivalText = festival === "none" ? "no festival" : festival.replace(/-/g, " ")
-  return `Day ${day}, ${season}, ${weather}; ${festivalText}. ${modifier}`
+  return `Day ${day} ${phase}, ${season}, ${weather}; ${festivalText}. ${modifier}`
 }
 
 function createBalanceDashboardState(): BalanceDashboardState {
@@ -5100,6 +5163,10 @@ function isVillageSeasonId(value: unknown): value is VillageSeasonId {
 
 function isVillageWeatherId(value: unknown): value is VillageWeatherId {
   return typeof value === "string" && (villageWeatherIds as readonly string[]).includes(value)
+}
+
+function isVillageDayPhase(value: unknown): value is VillageDayPhase {
+  return typeof value === "string" && (villageDayPhases as readonly string[]).includes(value)
 }
 
 function isVillageFestivalId(value: unknown): value is VillageFestivalId {

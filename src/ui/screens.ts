@@ -928,17 +928,18 @@ function drawVillage(canvas: Canvas, model: AppModel) {
   writeWrapped(canvas, sideX + 3, mapY + 2, sideW - 6, [selected.text], 3, UI.ink, UI.panel)
   writeWrapped(canvas, sideX + 3, mapY + 6, sideW - 6, [`Coins ${hub.coins}  Loot sold ${hub.lootSold}`], 1, UI.soft, UI.panel)
   writeWrapped(canvas, sideX + 3, mapY + 7, sideW - 6, [`Pack ${hub.contentPacks.active}  Perm ${hub.village.selectedPermission} ${hub.village.permissions[hub.village.selectedPermission]}`], 1, UI.soft, UI.panel)
-  writeWrapped(canvas, sideX + 3, mapY + 8, sideW - 6, [`Day ${hub.calendar.day} ${hub.calendar.season} ${hub.calendar.weather}. ${hub.calendar.festival}`], 1, UI.brass, UI.panel)
+  writeWrapped(canvas, sideX + 3, mapY + 8, sideW - 6, [`Day ${hub.calendar.day} ${hub.calendar.phase} ${hub.calendar.weather}. ${hub.calendar.festival}`], 1, UI.brass, UI.panel)
   writeWrapped(canvas, sideX + 3, mapY + 9, sideW - 6, [`Seed ${villageSeedModeLabel(model.villageSeedMode)}. S cycles.`], 1, UI.gold, UI.panel)
   writeWrapped(canvas, sideX + 3, mapY + 10, sideW - 6, ["P cycles selected-area co-op permissions."], 1, UI.focus, UI.panel)
 
   const scheduleY = mapY + locationH + 1
-  drawPanel(canvas, sideX, scheduleY, sideW, 9, "NPC Schedule", UI.edge)
+  drawPanel(canvas, sideX, scheduleY, sideW, 9, `NPC Schedule ${hub.calendar.phase}`, UI.edge)
   hub.village.schedules.slice(0, 5).forEach((schedule, index) => {
     const rowY = scheduleY + 2 + index
     const trust = hub.trust[schedule.npc]
     const color = schedule.available ? UI.ink : UI.muted
-    canvas.write(sideX + 3, rowY, trim(trust.name, Math.max(10, sideW - 22)), color, UI.panel)
+    const scene = schedule.available ? schedule.scene : `Trust ${schedule.requiredTrust} visit`
+    canvas.write(sideX + 3, rowY, trim(`${trust.name}: ${scene}`, Math.max(10, sideW - 22)), color, UI.panel)
     canvas.write(sideX + sideW - 17, rowY, trim(villageLocations[schedule.location].label, 14), schedule.available ? UI.gold : UI.muted, UI.panel)
   })
 
