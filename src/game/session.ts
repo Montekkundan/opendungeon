@@ -2185,7 +2185,7 @@ export function usePotion(session: GameSession) {
     trimLog(session)
     return
   }
-  const index = session.inventory.indexOf("Deploy nerve potion")
+  const index = session.inventory.findIndex((item) => /deploy nerve potion|vial|potion/i.test(item))
   if (index < 0) {
     session.log.unshift("No potion in the pack.")
     trimLog(session)

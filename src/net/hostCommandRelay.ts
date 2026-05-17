@@ -167,11 +167,12 @@ export class HostCommandRelay {
       return
     }
     if (this.applyTutorialUiAction(session, label)) return
-    if (label.includes("used potion")) {
+    const utilityAction = inventoryUtilityActionFromPayload(command.payload.inventoryUtilityAction)
+    if (utilityAction === "use-potion" || label.includes("used potion")) {
       usePotion(session)
       return
     }
-    if (label === "rested" || label.includes("rested")) {
+    if (utilityAction === "rest" || label === "rested" || label.includes("rested")) {
       rest(session)
       return
     }
@@ -407,6 +408,11 @@ function inventoryActionFromLabel(label: string): InventoryActionId | null {
 
 function inventoryActionFromPayload(value: unknown): InventoryActionId | null {
   if (value === "inspect" || value === "use" || value === "equip" || value === "drop" || value === "stash" || value === "sell") return value
+  return null
+}
+
+function inventoryUtilityActionFromPayload(value: unknown) {
+  if (value === "rest" || value === "use-potion") return value
   return null
 }
 

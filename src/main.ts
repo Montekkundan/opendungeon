@@ -1068,12 +1068,12 @@ function handleGameKey(key: KeyEvent) {
   }
   if (key.name === "r") {
     rest(model.session)
-    sendLobbyAction("inventory", "Rested")
+    sendLobbyAction("inventory", "Rested", { inventoryUtilityAction: "rest" })
     return
   }
   if (key.name === "h") {
     usePotion(model.session)
-    sendLobbyAction("inventory", "Used potion")
+    sendLobbyAction("inventory", "Used potion", { inventoryUtilityAction: "use-potion" })
     return
   }
   if (key.name === "?" || (key.shift && key.name === "/")) {

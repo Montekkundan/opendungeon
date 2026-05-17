@@ -171,6 +171,26 @@ describe("host command relay", () => {
     expect(rejected.message).toContain("Empty slot")
   })
 
+  test("uses explicit inventory utility payloads without label parsing", () => {
+    const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
+
+    const usedPotion = relay.apply(command({
+      label: "Client activated inventory utility",
+      payload: { hp: 13, inventoryUtilityAction: "use-potion", turn: 1 },
+      type: "inventory",
+    }))
+    const rested = relay.apply(command({
+      label: "Client activated inventory utility",
+      payload: { hp: usedPotion.hp, inventoryUtilityAction: "rest", turn: usedPotion.turn },
+      type: "inventory",
+    }))
+
+    expect(usedPotion).toMatchObject({ accepted: true, hp: 18, inventoryCount: 2 })
+    expect(usedPotion.message).toContain("Dew vial used")
+    expect(rested).toMatchObject({ accepted: true, hp: 19 })
+    expect(rested.message).toContain("rest")
+  })
+
   test("uses explicit combat payloads and returns host combat state", () => {
     const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
     const start = relay.apply(command({
