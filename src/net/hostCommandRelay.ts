@@ -153,8 +153,8 @@ export class HostCommandRelay {
       rest(session)
       return
     }
-    const action = inventoryActionFromLabel(label)
-    const index = inventorySlotFromLabel(label)
+    const action = inventoryActionFromPayload(command.payload.inventoryAction) ?? inventoryActionFromLabel(label)
+    const index = inventorySlotFromPayload(command.payload.inventorySlot) ?? inventorySlotFromLabel(label)
     if (action && index !== null) {
       const result = performInventoryAction(session, index, action)
       if (!result.used && action !== "inspect") throw new Error(result.message)
@@ -237,7 +237,9 @@ export class HostCommandRelay {
     return {
       accepted,
       floor: session.floor,
+      gold: session.gold,
       hp: session.hp,
+      inventoryCount: session.inventory.length,
       message,
       status: session.status,
       turn: session.turn,
@@ -296,10 +298,20 @@ function inventoryActionFromLabel(label: string): InventoryActionId | null {
   return null
 }
 
+function inventoryActionFromPayload(value: unknown): InventoryActionId | null {
+  if (value === "inspect" || value === "use" || value === "equip" || value === "drop" || value === "stash" || value === "sell") return value
+  return null
+}
+
 function inventorySlotFromLabel(label: string) {
   const match = label.match(/slot (\d+)/)
   if (!match) return null
   return Math.max(0, Number(match[1]) - 1)
+}
+
+function inventorySlotFromPayload(value: unknown) {
+  const index = finitePayloadInt(value)
+  return index !== null && index >= 0 ? index : null
 }
 
 function hubStationFromLabel(label: string): HubStationId | null {

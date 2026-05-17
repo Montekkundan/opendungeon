@@ -116,6 +116,26 @@ describe("host command relay", () => {
     expect(next).toMatchObject({ accepted: true, floor: 1, status: "running" })
     expect(next.message).toContain("next descent")
   })
+
+  test("uses explicit inventory payloads and returns host item counts", () => {
+    const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
+
+    const dropped = relay.apply(command({
+      label: "drop inventory slot 1: Rusty blade dropped from the pack.",
+      payload: { inventoryAction: "drop", inventorySlot: 0 },
+      type: "inventory",
+    }))
+    const rejected = relay.apply(command({
+      label: "drop inventory slot 99",
+      payload: { inventoryAction: "drop", inventorySlot: 98 },
+      type: "inventory",
+    }))
+
+    expect(dropped).toMatchObject({ accepted: true, gold: 0, inventoryCount: 2 })
+    expect(dropped.message).toContain("dropped")
+    expect(rejected).toMatchObject({ accepted: false, gold: 0, inventoryCount: 2 })
+    expect(rejected.message).toContain("Empty slot")
+  })
 })
 
 function command(overrides: Partial<Parameters<HostCommandRelay["apply"]>[0]> = {}): Parameters<HostCommandRelay["apply"]>[0] {

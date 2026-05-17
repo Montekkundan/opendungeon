@@ -796,7 +796,7 @@ function applySelectedInventoryAction(action: Parameters<typeof performInventory
   model.message = result.message
   setInventoryIndex(index)
   if (result.used) playAudioEvent(action === "drop" ? "menu-cancel" : "item-pickup")
-  if (result.used) sendLobbyAction("inventory", `${action} inventory slot ${index + 1}: ${result.message}`)
+  if (result.used) sendLobbyAction("inventory", `${action} inventory slot ${index + 1}: ${result.message}`, { inventoryAction: action, inventorySlot: index })
 }
 
 function moveInventoryItem(source: number, target: number) {
@@ -2139,6 +2139,7 @@ function reconcileLocalSessionWithHostResult(command: Partial<LobbyCommandEntry>
   if (accepted) {
     model.session.floor = Math.max(1, finiteHostInt(result.floor, model.session.floor))
     model.session.hp = Math.max(0, finiteHostInt(result.hp, model.session.hp))
+    model.session.gold = Math.max(0, finiteHostInt(result.gold, model.session.gold))
     model.session.turn = Math.max(model.session.turn, finiteHostInt(result.turn, model.session.turn))
     model.session.player = {
       ...model.session.player,

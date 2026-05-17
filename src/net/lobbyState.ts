@@ -125,6 +125,8 @@ export type LobbyCommandResult = {
   floor: number
   turn: number
   hp: number
+  inventoryCount?: number
+  gold?: number
   x: number
   y: number
   status: string
@@ -456,7 +458,9 @@ export class MultiplayerLobbyState {
       ...state,
       connected: true,
       floor: result.floor,
+      gold: result.gold ?? state.gold,
       hp: result.hp,
+      inventoryCount: result.inventoryCount ?? state.inventoryCount,
       saveRevision: Math.max(state.saveRevision, result.turn),
       turn: Math.max(state.turn, result.turn),
       updatedAt,
@@ -544,7 +548,7 @@ function normalizeCommandPayload(value: unknown, fallback: Record<string, number
 
 function normalizeCommandResult(value: unknown, fallback: Record<string, string | number | boolean>): LobbyCommandResult {
   const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {}
-  return {
+  const result: LobbyCommandResult = {
     accepted: record.accepted !== false,
     floor: positiveInt(record.floor ?? fallback.floor),
     hp: positiveInt(record.hp ?? fallback.hp),
@@ -554,6 +558,11 @@ function normalizeCommandResult(value: unknown, fallback: Record<string, string 
     x: integer(record.x ?? fallback.x),
     y: integer(record.y ?? fallback.y),
   }
+  if (record.gold !== undefined || fallback.gold !== undefined) result.gold = positiveInt(record.gold ?? fallback.gold)
+  if (record.inventoryCount !== undefined || fallback.inventoryCount !== undefined) {
+    result.inventoryCount = positiveInt(record.inventoryCount ?? fallback.inventoryCount)
+  }
+  return result
 }
 
 function cleanActionLabel(value: unknown) {

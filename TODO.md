@@ -142,6 +142,7 @@
 - [x] Hydrate host command relay sessions from each client's latest synced floor, HP, turn, and position before applying commands, while refusing to rewind from stale snapshots. This keeps LAN co-op correction from snapping players back toward stale tutorial geometry.
 - [x] Keep multiplayer relay coverage in the common gameplay verifier, including host command relay unit tests and smoke assertions that host-applied command results update each player's broadcast co-op position.
 - [x] Route village movement and next-descent commands through the host relay instead of generic dungeon movement, so co-op village walking and launch commands have host-owned results.
+- [x] Add explicit inventory action payloads and host result item/gold counts so co-op item commands no longer rely only on command-label parsing.
 - [ ] Finish the accepted command stream into a fully host-rendered command relay: clients should render authoritative host state/results for movement, combat, loot, village, and tutorial progression instead of keeping parallel local simulation as the primary source of truth.
 - [x] Verify signed-in duplicate-run locking in Ghostty and another terminal app: local active-run locks block the same signed-in account and hosted lobbies reject duplicate signed-in account identities, while separate guest auth dirs remain allowed.
 - [x] Make game modes explicit everywhere: Single Player, Multiplayer, and Multiplayer with GM. Avoid mixing race/sync/dev-host concepts with the authored story loop.
