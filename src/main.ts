@@ -814,21 +814,21 @@ function handleSkillCheckKey(key: KeyEvent) {
   if (check.status === "pending") {
     if (key.name === "escape") {
       cancelSkillCheck(model.session)
-      sendLobbyAction("interact", "Stepped away from a talent check")
+      sendLobbyAction("interact", "Stepped away from a talent check", { interactionAction: "cancel-skill-check" })
       return
     }
     if (isConfirmKey(key)) {
       playAudioEvent("d20-roll")
       const roll = resolveSkillCheck(model.session)
       if (roll) startDiceRollAnimation(roll.d20)
-      sendLobbyAction("interact", `Rolled a talent check${roll ? ` d20=${roll.d20}` : ""}`)
+      sendLobbyAction("interact", `Rolled a talent check${roll ? ` d20=${roll.d20}` : ""}`, { interactionAction: "roll-skill-check" })
     }
     return
   }
 
   if (isConfirmKey(key) || key.name === "escape") {
     dismissSkillCheck(model.session)
-    sendLobbyAction("interact", "Closed talent check result")
+    sendLobbyAction("interact", "Closed talent check result", { interactionAction: "dismiss-skill-check" })
   }
 }
 
@@ -990,23 +990,24 @@ function handleGameKey(key: KeyEvent) {
     if (key.name === "escape") {
       model.session.conversation = null
       model.saveStatus = "Conversation closed."
-      sendLobbyAction("interact", "Left NPC conversation")
+      sendLobbyAction("interact", "Left NPC conversation", { interactionAction: "leave-conversation" })
       return
     }
     if (isConfirmKey(key)) {
       if (model.session.conversation.status === "completed") {
         model.session.conversation = null
         model.saveStatus = "Conversation closed."
-        sendLobbyAction("interact", "Closed NPC conversation")
+        sendLobbyAction("interact", "Closed NPC conversation", { interactionAction: "close-conversation" })
       } else {
         interactWithWorld(model.session)
-        sendLobbyAction("interact", "Advanced NPC conversation")
+        sendLobbyAction("interact", "Advanced NPC conversation", { interactionAction: "advance-conversation" })
       }
       return
     }
     if (/^[1-3]$/.test(key.name)) {
-      chooseConversationOption(model.session, Number(key.name) - 1)
-      sendLobbyAction("interact", `Selected NPC conversation option ${key.name}`)
+      const optionIndex = Number(key.name) - 1
+      chooseConversationOption(model.session, optionIndex)
+      sendLobbyAction("interact", `Selected NPC conversation option ${key.name}`, { interactionAction: "conversation-option", conversationOption: optionIndex })
       return
     }
     if (isLeftKey(key) || isUpKey(key)) {
@@ -1028,7 +1029,7 @@ function handleGameKey(key: KeyEvent) {
     model.message = ""
     setInventoryIndex(model.inventoryIndex)
     recordTutorialAction(model.session, "inventory")
-    sendLobbyAction("inventory", "Opened inventory")
+    sendLobbyAction("inventory", "Opened inventory", { tutorialAction: "inventory" })
     return
   }
   if (key.name === "c") {
@@ -1047,7 +1048,7 @@ function handleGameKey(key: KeyEvent) {
     model.dialog = "book"
     clampBookSelection()
     recordTutorialAction(model.session, "book")
-    sendLobbyAction("interact", "Opened Book")
+    sendLobbyAction("interact", "Opened Book", { tutorialAction: "book" })
     return
   }
   if (key.name === "v") {
@@ -1062,7 +1063,7 @@ function handleGameKey(key: KeyEvent) {
     model.dialog = "quests"
     model.questIndex = clamp(model.questIndex, 0, Math.max(0, visibleQuestCount(model.session) - 1))
     recordTutorialAction(model.session, "quests")
-    sendLobbyAction("interact", "Opened quest journal")
+    sendLobbyAction("interact", "Opened quest journal", { tutorialAction: "quests" })
     return
   }
   if (key.name === "r") {
@@ -1081,7 +1082,7 @@ function handleGameKey(key: KeyEvent) {
   }
   if (key.name === "e" || isConfirmKey(key)) {
     interactWithWorld(model.session)
-    sendLobbyAction("interact", "Interacted with nearby world object")
+    sendLobbyAction("interact", "Interacted with nearby world object", { interactionAction: "world" })
     return
   }
   if (key.name === "u") {

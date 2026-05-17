@@ -103,21 +103,33 @@ export class HostCommandRelay {
 
   private applyInteraction(session: GameSession, command: HostRelayCommand) {
     const label = command.label.toLowerCase()
+    const action = interactionActionFromPayload(command.payload.interactionAction)
+    const tutorialAction = tutorialActionFromPayload(command.payload.tutorialAction) ?? tutorialActionFromLabel(label)
+    if (tutorialAction) {
+      recordTutorialAction(session, tutorialAction)
+      return
+    }
     if (this.applyTutorialUiAction(session, label)) return
-    if (label.includes("stepped away")) {
+    if (action === "cancel-skill-check" || label.includes("stepped away")) {
       if (!cancelSkillCheck(session)) throw new Error("No pending talent check to cancel.")
       return
     }
-    if (label.includes("closed talent")) {
+    if (action === "dismiss-skill-check" || label.includes("closed talent")) {
       dismissSkillCheck(session)
       return
     }
-    if (label.includes("rolled a talent")) {
+    if (action === "roll-skill-check" || label.includes("rolled a talent")) {
       const roll = resolveSkillCheck(session)
       if (!roll) throw new Error("No pending talent check to roll.")
       return
     }
-    const option = conversationOptionIndex(label)
+    if (action === "leave-conversation" || action === "close-conversation") {
+      if (!session.conversation) throw new Error("No active NPC conversation.")
+      session.conversation = null
+      session.log.unshift("Conversation closed.")
+      return
+    }
+    const option = conversationOptionFromPayload(command.payload.conversationOption) ?? conversationOptionIndex(label)
     if (option !== null) {
       if (!session.conversation) throw new Error("No active NPC conversation.")
       chooseConversationOption(session, option)
@@ -147,6 +159,11 @@ export class HostCommandRelay {
 
   private applyInventory(session: GameSession, command: HostRelayCommand) {
     const label = command.label.toLowerCase()
+    const tutorialAction = tutorialActionFromPayload(command.payload.tutorialAction)
+    if (tutorialAction) {
+      recordTutorialAction(session, tutorialAction)
+      return
+    }
     if (this.applyTutorialUiAction(session, label)) return
     if (label.includes("used potion")) {
       usePotion(session)
@@ -271,6 +288,11 @@ function tutorialActionFromLabel(label: string): TutorialActionId | null {
   return null
 }
 
+function tutorialActionFromPayload(value: unknown): TutorialActionId | null {
+  if (value === "inventory" || value === "book" || value === "quests") return value
+  return null
+}
+
 function directionFromCommand(command: HostRelayCommand) {
   const direction = String(command.payload.direction || command.label).toLowerCase()
   if (direction.includes("north") || direction.includes("up")) return { dx: 0, dy: -1 }
@@ -284,6 +306,27 @@ function conversationOptionIndex(label: string) {
   const match = label.match(/option (\d+)/)
   if (!match) return null
   return Math.max(0, Number(match[1]) - 1)
+}
+
+function conversationOptionFromPayload(value: unknown) {
+  const index = finitePayloadInt(value)
+  return index !== null && index >= 0 ? index : null
+}
+
+function interactionActionFromPayload(value: unknown) {
+  if (
+    value === "cancel-skill-check" ||
+    value === "dismiss-skill-check" ||
+    value === "roll-skill-check" ||
+    value === "leave-conversation" ||
+    value === "close-conversation" ||
+    value === "advance-conversation" ||
+    value === "conversation-option" ||
+    value === "world"
+  ) {
+    return value
+  }
+  return null
 }
 
 function combatSkillIndex(label: string) {

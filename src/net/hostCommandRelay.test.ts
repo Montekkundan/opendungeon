@@ -89,9 +89,9 @@ describe("host command relay", () => {
     for (const direction of ["up", "down", "left", "right"]) {
       relay.apply(command({ label: `Moved ${direction}`, payload: { ...payload, direction } }))
     }
-    relay.apply(command({ label: "Opened inventory", payload, type: "inventory" }))
-    relay.apply(command({ label: "Opened Book", payload, type: "interact" }))
-    const result = relay.apply(command({ label: "Opened quest journal", payload, type: "interact" }))
+    relay.apply(command({ label: "Client opened a panel", payload: { ...payload, tutorialAction: "inventory" }, type: "inventory" }))
+    relay.apply(command({ label: "Client opened a panel", payload: { ...payload, tutorialAction: "book" }, type: "interact" }))
+    const result = relay.apply(command({ label: "Client opened a panel", payload: { ...payload, tutorialAction: "quests" }, type: "interact" }))
 
     expect(result.accepted).toBe(true)
     expect(result.message).toContain("Area I gate opens")
@@ -160,6 +160,31 @@ describe("host command relay", () => {
     expect(selected.message).toContain("Aimed Shot")
     expect(rolled.accepted).toBe(true)
     expect(rolled.turn).toBeGreaterThan(selected.turn)
+  })
+
+  test("uses explicit talent-check payloads without label parsing", () => {
+    const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
+    const start = relay.apply(command({
+      label: "Moved east",
+      payload: { direction: "east", tutorialEnabled: true, tutorialStage: "npc-check", turn: 1, x: 21, y: 6 },
+      type: "move",
+    }))
+    const rolled = relay.apply(command({
+      label: "Client confirmed modal",
+      payload: { interactionAction: "roll-skill-check", hp: start.hp, turn: start.turn, x: start.x, y: start.y },
+      type: "interact",
+    }))
+    const dismissed = relay.apply(command({
+      label: "Client confirmed modal",
+      payload: { interactionAction: "dismiss-skill-check", hp: rolled.hp, turn: rolled.turn, x: rolled.x, y: rolled.y },
+      type: "interact",
+    }))
+
+    expect(start.accepted).toBe(true)
+    expect(start.message).toContain("Whispering Relic")
+    expect(rolled.accepted).toBe(true)
+    expect(rolled.message).toMatch(/success|failure|Critical/i)
+    expect(dismissed).toMatchObject({ accepted: true })
   })
 })
 
