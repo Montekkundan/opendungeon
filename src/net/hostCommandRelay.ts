@@ -34,7 +34,7 @@ import {
   type TutorialActionId,
   type TutorialStageId,
 } from "../game/session.js"
-import type { LobbyCommandResult, LobbyCommandType } from "./lobbyState.js"
+import type { LobbyCommandResult, LobbyCommandType, LobbyHubSnapshot } from "./lobbyState.js"
 
 export type HostRelayCommand = {
   name: string
@@ -266,6 +266,7 @@ export class HostCommandRelay {
       floor: session.floor,
       focus: session.focus,
       gold: session.gold,
+      hub: hubSnapshot(session),
       hp: session.hp,
       inventoryCount: session.inventory.length,
       inventoryItems: session.inventory.slice(0, 32),
@@ -422,6 +423,45 @@ function hubStationFromPayload(value: unknown): HubStationId | null {
 function finitePayloadInt(value: unknown) {
   const number = Number(value)
   return Number.isFinite(number) ? Math.floor(number) : null
+}
+
+function hubSnapshot(session: GameSession): LobbyHubSnapshot {
+  const hub = session.hub
+  return {
+    calendar: {
+      day: hub.calendar.day,
+      festival: hub.calendar.festival,
+      season: hub.calendar.season,
+      weather: hub.calendar.weather,
+    },
+    coins: hub.coins,
+    farm: {
+      planted: hub.farm.planted,
+      plots: hub.farm.plots,
+      ready: hub.farm.ready,
+      sprinklers: hub.farm.sprinklers,
+    },
+    houses: hub.houses.map((house) => ({
+      built: house.built,
+      name: house.name,
+      playerId: house.playerId,
+    })),
+    lootSold: hub.lootSold,
+    preparedFood: hub.preparedFood.slice(0, 12),
+    stations: Object.values(hub.stations).map((station) => ({
+      built: station.built,
+      id: station.id,
+      level: station.level,
+    })),
+    unlocked: hub.unlocked,
+    unlockedGear: hub.unlockedGear.slice(0, 20),
+    village: {
+      permissions: { ...hub.village.permissions },
+      selectedLocation: hub.village.selectedLocation,
+      selectedPermission: hub.village.selectedPermission,
+      shopLog: hub.village.shopLog.slice(0, 8),
+    },
+  }
 }
 
 function snapshot(session: GameSession) {

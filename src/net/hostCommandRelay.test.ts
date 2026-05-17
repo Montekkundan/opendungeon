@@ -163,10 +163,15 @@ describe("host command relay", () => {
     }))
 
     expect(built).toMatchObject({ accepted: true, gold: expect.any(Number), inventoryCount: expect.any(Number) })
+    expect(built.hub?.unlocked).toBe(true)
+    expect(built.hub?.stations.find((station) => station.id === "blacksmith")).toMatchObject({ id: "blacksmith", built: expect.any(Boolean) })
     expect(built.message).toMatch(/Blacksmith|already/i)
     expect(sold).toMatchObject({ accepted: true })
+    expect(sold.hub?.lootSold).toBeGreaterThanOrEqual(0)
     expect(prepared).toMatchObject({ accepted: true })
+    expect(prepared.hub?.preparedFood).toEqual(expect.any(Array))
     expect(permission).toMatchObject({ accepted: true })
+    expect(permission.hub?.village.permissions).toMatchObject({ houses: expect.any(String) })
     expect(permission.message).toMatch(/permission|owner|friends/i)
   })
 

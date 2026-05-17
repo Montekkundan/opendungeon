@@ -138,12 +138,59 @@ export type LobbyCommandResult = {
   inventoryCount?: number
   inventoryItems?: string[]
   gold?: number
+  hub?: LobbyHubSnapshot
   tutorialStage?: string
   tutorialReady?: boolean
   tutorialCompleted?: boolean
   x: number
   y: number
   status: string
+}
+
+export type LobbyHubSnapshot = {
+  unlocked: boolean
+  coins: number
+  lootSold: number
+  stations: LobbyHubStationSnapshot[]
+  farm: LobbyFarmSnapshot
+  houses: LobbyHouseSnapshot[]
+  preparedFood: string[]
+  unlockedGear: string[]
+  village: LobbyVillageSnapshot
+  calendar: LobbyCalendarSnapshot
+}
+
+export type LobbyHubStationSnapshot = {
+  id: string
+  built: boolean
+  level: number
+}
+
+export type LobbyFarmSnapshot = {
+  plots: number
+  planted: number
+  ready: number
+  sprinklers: number
+}
+
+export type LobbyHouseSnapshot = {
+  playerId: string
+  name: string
+  built: boolean
+}
+
+export type LobbyVillageSnapshot = {
+  selectedLocation: string
+  selectedPermission: string
+  permissions: Record<string, string>
+  shopLog: string[]
+}
+
+export type LobbyCalendarSnapshot = {
+  day: number
+  season: string
+  weather: string
+  festival: string
 }
 
 export type HostAuthoritativeState = LobbyCommandResult & {
@@ -610,6 +657,7 @@ function normalizeCommandResult(value: unknown, fallback: Record<string, string 
     y: integer(record.y ?? fallback.y),
   }
   if (record.gold !== undefined || fallback.gold !== undefined) result.gold = positiveInt(record.gold ?? fallback.gold)
+  if (record.hub !== undefined) result.hub = cleanHubSnapshot(record.hub)
   if (record.inventoryCount !== undefined || fallback.inventoryCount !== undefined) {
     result.inventoryCount = positiveInt(record.inventoryCount ?? fallback.inventoryCount)
   }
@@ -629,6 +677,93 @@ function cleanInventoryItems(value: unknown) {
     .map((item) => String(item || "").replace(/[^\w .,:;!?'"()+/-]/g, "").replace(/\s+/g, " ").trim().slice(0, 48))
     .filter(Boolean)
     .slice(0, 32)
+}
+
+function cleanHubSnapshot(value: unknown): LobbyHubSnapshot | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const record = value as Partial<LobbyHubSnapshot>
+  return {
+    calendar: cleanCalendarSnapshot(record.calendar),
+    coins: positiveInt(record.coins),
+    farm: cleanFarmSnapshot(record.farm),
+    houses: cleanHouseSnapshots(record.houses),
+    lootSold: positiveInt(record.lootSold),
+    preparedFood: cleanHubStringList(record.preparedFood, 12, 40),
+    stations: cleanStationSnapshots(record.stations),
+    unlocked: record.unlocked === true,
+    unlockedGear: cleanHubStringList(record.unlockedGear, 20, 50),
+    village: cleanVillageSnapshot(record.village),
+  }
+}
+
+function cleanStationSnapshots(value: unknown): LobbyHubStationSnapshot[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((station) => {
+    const record = station && typeof station === "object" ? (station as Partial<LobbyHubStationSnapshot>) : null
+    const id = cleanHubToken(record?.id, 32)
+    if (!record || !id) return []
+    return [{ id, built: record.built === true, level: positiveInt(record.level) }]
+  }).slice(0, 12)
+}
+
+function cleanFarmSnapshot(value: unknown): LobbyFarmSnapshot {
+  const record = value && typeof value === "object" ? (value as Partial<LobbyFarmSnapshot>) : {}
+  return {
+    planted: positiveInt(record.planted),
+    plots: Math.max(1, positiveInt(record.plots) || 1),
+    ready: positiveInt(record.ready),
+    sprinklers: positiveInt(record.sprinklers),
+  }
+}
+
+function cleanHouseSnapshots(value: unknown): LobbyHouseSnapshot[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((house) => {
+    const record = house && typeof house === "object" ? (house as Partial<LobbyHouseSnapshot>) : null
+    const playerId = cleanHubToken(record?.playerId, 64)
+    const name = cleanActionLabel(record?.name || "Crawler").slice(0, 32)
+    if (!record || !playerId) return []
+    return [{ playerId, name, built: record.built === true }]
+  }).slice(0, 8)
+}
+
+function cleanVillageSnapshot(value: unknown): LobbyVillageSnapshot {
+  const record = value && typeof value === "object" ? (value as Partial<LobbyVillageSnapshot>) : {}
+  const rawPermissions = record.permissions && typeof record.permissions === "object" ? record.permissions : {}
+  const permissions: Record<string, string> = {}
+  for (const [key, raw] of Object.entries(rawPermissions)) {
+    const area = cleanHubToken(key, 32)
+    const permission = cleanHubToken(raw, 32)
+    if (area && permission) permissions[area] = permission
+  }
+  return {
+    permissions,
+    selectedLocation: cleanHubToken(record.selectedLocation, 32) || "portal",
+    selectedPermission: cleanHubToken(record.selectedPermission, 32) || "houses",
+    shopLog: cleanHubStringList(record.shopLog, 8, 80),
+  }
+}
+
+function cleanCalendarSnapshot(value: unknown): LobbyCalendarSnapshot {
+  const record = value && typeof value === "object" ? (value as Partial<LobbyCalendarSnapshot>) : {}
+  return {
+    day: Math.max(1, positiveInt(record.day) || 1),
+    festival: cleanHubToken(record.festival, 32) || "none",
+    season: cleanHubToken(record.season, 32) || "spring",
+    weather: cleanHubToken(record.weather, 32) || "clear",
+  }
+}
+
+function cleanHubStringList(value: unknown, limit: number, textLimit: number) {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => String(item || "").replace(/[^\w .,:;!?'"()+/-]/g, "").replace(/\s+/g, " ").trim().slice(0, textLimit))
+    .filter(Boolean)
+    .slice(0, limit)
+}
+
+function cleanHubToken(value: unknown, limit: number) {
+  return String(value || "").replace(/[^\w-]/g, "").slice(0, limit)
 }
 
 function sortLeaderboard(results: RaceResult[]) {

@@ -19,6 +19,7 @@ import {
   cycleContentPack,
   cycleCoopVillagePermission,
   heroClassIds,
+  hubStationIds,
   completeVillageQuest,
   customizeVillageHouse,
   dismissSkillCheck,
@@ -44,11 +45,16 @@ import {
   tryMove,
   upgradeWeapon,
   visitVillageLocation,
+  villageLocationIds,
+  villagePermissionAreas,
   usePotion,
   type GameSession,
   type HeroClass,
+  type HubStationId,
   type MultiplayerMode,
   type RunToast,
+  type VillageLocationId,
+  type VillagePermissionArea,
 } from "./game/session.js"
 import { openingStoryBranches } from "./game/story.js"
 import { deleteSave, exportSave, listSaves, loadSave, renameSave, saveAutosave, saveSession, type SaveSummary } from "./game/saveStore.js"
@@ -92,7 +98,7 @@ import { acquireLocalRunLock, releaseLocalRunLock, terminalAppName, type LocalRu
 import { debugOverlaysEnabled } from "./system/debugFlags.js"
 import { checkInternetConnectivity } from "./net/connectivity.js"
 import { lobbyInviteErrorMessage, lobbyInviteMismatchNotice, lobbyJoinUsageMessage, normalizeLobbyBaseUrl } from "./net/hostConfig.js"
-import type { CoopSyncState, LobbyActionType, LobbyCommandEntry, LobbyCommandResult, LobbySnapshot } from "./net/lobbyState.js"
+import type { CoopSyncState, LobbyActionType, LobbyCommandEntry, LobbyCommandResult, LobbyHubSnapshot, LobbySnapshot } from "./net/lobbyState.js"
 import { checkForUpdate, checkingUpdateStatus, handleUpdateCommand } from "./system/updateCheck.js"
 import { easeInOutQuart, lerp } from "./shared/numeric.js"
 import { transitionDurationForKind } from "./ui/teleportAnimation.js"
@@ -2187,12 +2193,69 @@ function applyHostResultToLocalSession(result: LobbyCommandResult, accepted: boo
   model.session.combat.active = result.combatActive ?? model.session.combat.active
   model.session.combat.round = Math.max(0, finiteHostInt(result.combatRound, model.session.combat.round))
   if (result.combatMessage) model.session.combat.message = result.combatMessage
+  applyHostHubSnapshot(result.hub)
   applyHostTutorialResult(result)
 }
 
 function finiteHostInt(value: unknown, fallback: number) {
   const number = Number(value)
   return Number.isFinite(number) ? Math.floor(number) : fallback
+}
+
+function applyHostHubSnapshot(hubSnapshot: LobbyHubSnapshot | undefined) {
+  if (!hubSnapshot) return
+  const hub = model.session.hub
+  hub.unlocked = hubSnapshot.unlocked
+  hub.coins = Math.max(0, finiteHostInt(hubSnapshot.coins, hub.coins))
+  hub.lootSold = Math.max(0, finiteHostInt(hubSnapshot.lootSold, hub.lootSold))
+
+  const stationIds = new Set<HubStationId>(hubStationIds)
+  const seenStations = new Set<HubStationId>()
+  for (const stationSnapshot of hubSnapshot.stations) {
+    if (!stationIds.has(stationSnapshot.id as HubStationId)) continue
+    const stationId = stationSnapshot.id as HubStationId
+    const station = hub.stations[stationId]
+    station.built = stationSnapshot.built
+    station.level = Math.max(0, finiteHostInt(stationSnapshot.level, station.level))
+    seenStations.add(stationId)
+  }
+  for (const stationId of hubStationIds) {
+    if (!seenStations.has(stationId)) hub.stations[stationId].built = false
+  }
+
+  hub.farm = {
+    planted: Math.max(0, finiteHostInt(hubSnapshot.farm.planted, hub.farm.planted)),
+    plots: Math.max(1, finiteHostInt(hubSnapshot.farm.plots, hub.farm.plots)),
+    ready: Math.max(0, finiteHostInt(hubSnapshot.farm.ready, hub.farm.ready)),
+    sprinklers: Math.max(0, finiteHostInt(hubSnapshot.farm.sprinklers, hub.farm.sprinklers)),
+  }
+  hub.houses = hubSnapshot.houses.map((house) => ({
+    built: house.built,
+    name: house.name,
+    playerId: house.playerId,
+  }))
+  hub.preparedFood = hubSnapshot.preparedFood.slice(0, 12)
+  hub.unlockedGear = hubSnapshot.unlockedGear.slice(0, 20)
+  if ((villageLocationIds as readonly string[]).includes(hubSnapshot.village.selectedLocation)) {
+    hub.village.selectedLocation = hubSnapshot.village.selectedLocation as VillageLocationId
+  }
+  if ((villagePermissionAreas as readonly string[]).includes(hubSnapshot.village.selectedPermission)) {
+    hub.village.selectedPermission = hubSnapshot.village.selectedPermission as VillagePermissionArea
+  }
+  for (const area of villagePermissionAreas) {
+    const permission = hubSnapshot.village.permissions[area]
+    if (permission === "owner-only" || permission === "friends" || permission === "everyone") {
+      hub.village.permissions[area] = permission
+    }
+  }
+  hub.village.shopLog = hubSnapshot.village.shopLog.slice(0, 8)
+  hub.calendar = {
+    ...hub.calendar,
+    day: Math.max(1, finiteHostInt(hubSnapshot.calendar.day, hub.calendar.day)),
+    festival: hubSnapshot.calendar.festival as typeof hub.calendar.festival,
+    season: hubSnapshot.calendar.season as typeof hub.calendar.season,
+    weather: hubSnapshot.calendar.weather as typeof hub.calendar.weather,
+  }
 }
 
 function applyHostTutorialResult(result: LobbyCommandResult) {
