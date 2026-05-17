@@ -149,6 +149,38 @@ test("host keeps co-op tutorial movement streams smooth per player", async () =>
   }
 }, 10_000)
 
+test("host shutdown closes connected clients", async () => {
+  const port = await freePort()
+  const baseUrl = `http://127.0.0.1:${port}`
+  const host = spawn(process.execPath, ["run", "src/net/host.ts", "--host", "127.0.0.1", "--mode", "coop", "--seed", "2423368", "--port", String(port)], {
+    cwd: process.cwd(),
+    env: { ...process.env, NO_COLOR: "1" },
+  })
+  drain(host)
+
+  const sockets: WebSocket[] = []
+  try {
+    await waitForHealth(baseUrl)
+    const mira = await openLobbySocket(`${baseUrl}/ws?name=Mira&clientId=mira`)
+    sockets.push(mira)
+    await waitForSnapshot(mira, (snapshot) => snapshot.players.some((player) => player.name === "Mira"))
+
+    const closed = once(mira, "close")
+    await stopHost(host)
+    const [code] = (await Promise.race([
+      closed,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timed out waiting for client socket close after host shutdown.")), 2_000)),
+    ])) as [number]
+    expect(typeof code).toBe("number")
+    expect(mira.readyState).toBe(WebSocket.CLOSED)
+  } finally {
+    for (const socket of sockets) {
+      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) socket.close()
+    }
+    await stopHost(host)
+  }
+}, 10_000)
+
 async function freePort() {
   const server = createServer()
   server.listen(0, "127.0.0.1")
