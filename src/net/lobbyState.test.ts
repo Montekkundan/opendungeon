@@ -494,38 +494,79 @@ describe("multiplayer lobby state", () => {
     const lobby = new MultiplayerLobbyState({ mode: "coop", seed: 1234, now: () => now++ })
     lobby.join("p1", "Mira")
 
-    const command = lobby.recordCommand({
+    lobby.recordCommand({
       playerId: "p1",
       type: "move",
       label: "Moved east",
       payload: { floor: 1, hp: 19, turn: 2, x: 5, y: 5 },
       result: {
         accepted: true,
+        combatMessage: "Clear path.",
         floor: 1,
+        gold: 4,
         hp: 18,
+        inventoryItems: ["Bound relic", "<bad>"],
         message: "Mira moved east.",
+        progress: {
+          equipment: [],
+          knowledge: [{ id: "note-1", title: "Gate note", text: "Open together.", kind: "note", floor: 1, discoveredAtTurn: 3 }],
+          levelUp: null,
+          log: ["Mira moved east."],
+          statusEffects: [],
+          talents: ["pathfinder"],
+          toasts: [],
+        },
         status: "running",
         turn: 3,
+        world: {
+          dungeon: {
+            actors: [],
+            anchors: [],
+            floor: 1,
+            height: 2,
+            playerStart: { x: 1, y: 1 },
+            secrets: [],
+            seed: 1234,
+            tiles: [
+              ["floor", "wall"],
+              ["floor", "floor"],
+            ],
+            width: 2,
+          },
+          floorModifier: {
+            id: "steady",
+            name: "Steady Stone",
+            text: "Plain floors.",
+            visionBonus: 0,
+            restFocusBonus: 0,
+            trapDamageBonus: 0,
+            goldBonus: 0,
+          },
+        },
         x: 6,
         y: 5,
       },
     })
 
-    lobby.updateAuthoritativeState({
-      ...command.result,
-      commandSequence: command.sequence,
-      playerId: "p1",
-    })
-
-    expect(lobby.snapshot().hostState).toMatchObject({
+    const hostState = lobby.snapshot().hostState
+    expect(hostState).toMatchObject({
       accepted: true,
+      combatMessage: "Clear path.",
       commandSequence: 1,
+      gold: 4,
       hp: 18,
+      inventoryItems: ["Bound relic", "bad"],
       name: "Mira",
+      progress: {
+        knowledge: [{ id: "note-1", title: "Gate note" }],
+        talents: ["pathfinder"],
+      },
       turn: 3,
       x: 6,
       y: 5,
     })
+    expect(hostState?.world?.dungeon.tiles[0]?.slice(0, 2)).toEqual(["floor", "wall"])
+    expect(hostState?.world?.dungeon.tiles[1]?.slice(0, 2)).toEqual(["floor", "floor"])
   })
 
   test("stress-tests larger co-op party state and combat turn order", () => {

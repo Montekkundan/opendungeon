@@ -229,7 +229,7 @@ function handleSocketMessage(ws: LobbyWebSocket, message: RawData) {
       playerId: ws.data.id,
       type: commandType === "move" || commandType === "combat" || commandType === "inventory" || commandType === "village" ? commandType : "interact",
     })
-    const command = lobby.recordCommand({
+    lobby.recordCommand({
       playerId: ws.data.id,
       type: commandType,
       label,
@@ -240,12 +240,6 @@ function handleSocketMessage(ws: LobbyWebSocket, message: RawData) {
       y: payload.y,
       payload: commandPayload,
       result,
-    })
-    lobby.updateAuthoritativeState({
-      ...result,
-      commandSequence: command.sequence,
-      message: result.message,
-      playerId: ws.data.id,
     })
     broadcastState()
   }

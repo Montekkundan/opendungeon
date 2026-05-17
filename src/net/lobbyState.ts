@@ -650,6 +650,13 @@ export class MultiplayerLobbyState {
     }
     this.commands.unshift(entry)
     this.applyCommandResultToCoopState(player.id, result, acceptedAt)
+    this.hostState = {
+      ...result,
+      commandSequence: entry.sequence,
+      name: player.name,
+      playerId: player.id,
+      updatedAt: acceptedAt,
+    }
     this.trimCommands()
     this.recordAction({
       playerId: player.id,
@@ -678,19 +685,13 @@ export class MultiplayerLobbyState {
   }) {
     const player = this.players.get(String(input.playerId || ""))
     if (!player || player.role === "spectator") throw new Error(`Unknown host state player: ${String(input.playerId || "")}`)
+    const result = normalizeCommandResult(input, {})
     this.hostState = {
-      accepted: input.accepted !== false,
+      ...result,
       commandSequence: positiveInt(input.commandSequence),
-      floor: positiveInt(input.floor),
-      hp: positiveInt(input.hp),
-      message: cleanActionLabel(input.message),
       name: player.name,
       playerId: player.id,
-      status: String(input.status || "running").replace(/[^\w -]/g, "").slice(0, 24) || "running",
-      turn: positiveInt(input.turn),
       updatedAt: this.now(),
-      x: integer(input.x),
-      y: integer(input.y),
     }
     return this.hostState
   }
