@@ -71,6 +71,25 @@ describe("host command relay", () => {
     })
   })
 
+  test("does not infer movement from the visible label", () => {
+    const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
+    const before = relay.apply(command({ label: "Moved east", payload: { direction: "east" } }))
+
+    const rejected = relay.apply(command({ label: "Moved west", payload: {} }))
+
+    expect(rejected).toMatchObject({ accepted: false, turn: before.turn, x: before.x, y: before.y })
+    expect(rejected.message).toContain("direction")
+  })
+
+  test("uses movement payload over misleading labels", () => {
+    const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
+    const start = relay.apply(command({ label: "Moved east", payload: { direction: "east" } }))
+
+    const moved = relay.apply(command({ label: "Moved east", payload: { direction: "west", turn: start.turn, x: start.x, y: start.y } }))
+
+    expect(moved).toMatchObject({ accepted: true, x: start.x - 1, y: start.y })
+  })
+
   test("keeps player command streams on separate host sessions", () => {
     const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
     const payload = { classId: "ranger", direction: "east", tutorialEnabled: true, tutorialStage: "movement" }
@@ -155,7 +174,7 @@ describe("host command relay", () => {
     const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
 
     const dropped = relay.apply(command({
-      label: "drop inventory slot 1: Rusty blade dropped from the pack.",
+      label: "Client activated inventory slot",
       payload: { inventoryAction: "drop", inventorySlot: 0 },
       type: "inventory",
     }))
@@ -169,6 +188,19 @@ describe("host command relay", () => {
     expect(dropped.message).toContain("dropped")
     expect(rejected).toMatchObject({ accepted: false, gold: 0, inventoryCount: 2 })
     expect(rejected.message).toContain("Empty slot")
+  })
+
+  test("does not infer inventory actions from the visible label", () => {
+    const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
+
+    const rejected = relay.apply(command({
+      label: "drop inventory slot 1",
+      payload: {},
+      type: "inventory",
+    }))
+
+    expect(rejected).toMatchObject({ accepted: false, gold: 0, inventoryCount: 3 })
+    expect(rejected.message).toContain("Inventory command needs an action")
   })
 
   test("uses explicit inventory utility payloads without label parsing", () => {

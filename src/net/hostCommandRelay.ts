@@ -104,23 +104,21 @@ export class HostCommandRelay {
   }
 
   private applyInteraction(session: GameSession, command: HostRelayCommand) {
-    const label = command.label.toLowerCase()
     const action = interactionActionFromPayload(command.payload.interactionAction)
-    const tutorialAction = tutorialActionFromPayload(command.payload.tutorialAction) ?? tutorialActionFromLabel(label)
+    const tutorialAction = tutorialActionFromPayload(command.payload.tutorialAction)
     if (tutorialAction) {
       recordTutorialAction(session, tutorialAction)
       return
     }
-    if (this.applyTutorialUiAction(session, label)) return
-    if (action === "cancel-skill-check" || label.includes("stepped away")) {
+    if (action === "cancel-skill-check") {
       if (!cancelSkillCheck(session)) throw new Error("No pending talent check to cancel.")
       return
     }
-    if (action === "dismiss-skill-check" || label.includes("closed talent")) {
+    if (action === "dismiss-skill-check") {
       dismissSkillCheck(session)
       return
     }
-    if (action === "roll-skill-check" || label.includes("rolled a talent")) {
+    if (action === "roll-skill-check") {
       const roll = resolveSkillCheck(session)
       if (!roll) throw new Error("No pending talent check to roll.")
       return
@@ -131,115 +129,116 @@ export class HostCommandRelay {
       session.log.unshift("Conversation closed.")
       return
     }
-    const option = conversationOptionFromPayload(command.payload.conversationOption) ?? conversationOptionIndex(label)
-    if (option !== null) {
+    if (action === "advance-conversation") {
+      if (!session.conversation) throw new Error("No active NPC conversation.")
+      interactWithWorld(session)
+      return
+    }
+    if (action === "conversation-option") {
+      const option = conversationOptionFromPayload(command.payload.conversationOption)
+      if (option === null) throw new Error("Conversation option command needs an option index.")
       if (!session.conversation) throw new Error("No active NPC conversation.")
       chooseConversationOption(session, option)
       return
     }
-    interactWithWorld(session)
+    if (action === "world") {
+      interactWithWorld(session)
+      return
+    }
+    throw new Error("Interaction command needs an action.")
   }
 
   private applyCombat(session: GameSession, command: HostRelayCommand) {
-    const label = command.label.toLowerCase()
     const action = combatActionFromPayload(command.payload.combatAction)
-    const skillIndex = combatSkillIndexFromPayload(command.payload.combatSkillIndex) ?? combatSkillIndex(label)
-    if (action === "select-skill" || skillIndex !== null) {
+    if (action === "select-skill") {
       if (!session.combat.active) throw new Error("No active combat for skill selection.")
+      const skillIndex = combatSkillIndexFromPayload(command.payload.combatSkillIndex)
       if (skillIndex === null) throw new Error("Combat skill selection needs a skill index.")
       selectSkill(session, skillIndex)
       session.log.unshift(session.combat.message)
       return
     }
-    if (action === "flee" || label.includes("flee")) {
+    if (action === "flee") {
       if (!attemptFlee(session)) throw new Error("No active combat to flee.")
       return
     }
+    if (action !== "roll" && action !== "resolve") throw new Error("Combat command needs an action.")
     if (!session.combat.active) throw new Error("No active combat to resolve.")
     performCombatAction(session)
   }
 
   private applyInventory(session: GameSession, command: HostRelayCommand) {
-    const label = command.label.toLowerCase()
     const tutorialAction = tutorialActionFromPayload(command.payload.tutorialAction)
     if (tutorialAction) {
       recordTutorialAction(session, tutorialAction)
       return
     }
-    if (this.applyTutorialUiAction(session, label)) return
     const utilityAction = inventoryUtilityActionFromPayload(command.payload.inventoryUtilityAction)
-    if (utilityAction === "use-potion" || label.includes("used potion")) {
+    if (utilityAction === "use-potion") {
       usePotion(session)
       return
     }
-    if (utilityAction === "rest" || label === "rested" || label.includes("rested")) {
+    if (utilityAction === "rest") {
       rest(session)
       return
     }
-    const action = inventoryActionFromPayload(command.payload.inventoryAction) ?? inventoryActionFromLabel(label)
-    const index = inventorySlotFromPayload(command.payload.inventorySlot) ?? inventorySlotFromLabel(label)
-    if (action && index !== null) {
-      const result = performInventoryAction(session, index, action)
-      if (!result.used && action !== "inspect") throw new Error(result.message)
-    }
+    const action = inventoryActionFromPayload(command.payload.inventoryAction)
+    if (!action) throw new Error("Inventory command needs an action.")
+    const index = inventorySlotFromPayload(command.payload.inventorySlot)
+    if (index === null) throw new Error("Inventory command needs a slot.")
+    const result = performInventoryAction(session, index, action)
+    if (!result.used && action !== "inspect") throw new Error(result.message)
   }
 
   private applyVillage(session: GameSession, command: HostRelayCommand) {
     if (!session.hub.unlocked) unlockHub(session, "Co-op village command opened the shared road.")
-    const label = command.label.toLowerCase()
     const action = villageActionFromPayload(command.payload.villageAction)
+    if (!action) throw new Error("Village command needs an action.")
     if (action === "move") {
       const dx = finitePayloadInt(command.payload.dx) ?? 0
       const dy = finitePayloadInt(command.payload.dy) ?? 0
       moveVillagePlayer(session, dx, dy)
       return
     }
-    if (action === "next-descent" || label.includes("started next descent")) {
+    if (action === "next-descent") {
       const nextSeed = finitePayloadInt(command.payload.nextSeed) ?? this.seed + 1
       Object.assign(session, createNextDescentSession(session, nextSeed))
       return
     }
-    const station = hubStationFromPayload(command.payload.station) ?? hubStationFromLabel(label)
-    if (station) {
+    if (action === "build-station") {
+      const station = hubStationFromPayload(command.payload.station)
+      if (!station) throw new Error("Village build command needs a station.")
       buildHubStation(session, station)
       return
     }
-    if (action === "sell-loot" || label.includes("sold loot") || label.includes("checked market with no loot")) {
+    if (action === "sell-loot") {
       sellLootToVillage(session)
       return
     }
-    if (action === "prepare-food" || label.includes("prepared food")) {
+    if (action === "prepare-food") {
       prepareFood(session)
       return
     }
-    if (action === "craft" || label.includes("crafted") || label.includes("checked crafting")) {
+    if (action === "craft") {
       craftVillageRecipe(session)
       return
     }
-    if (action === "market-sale" || label.includes("ran market sale") || label.includes("checked market sale")) {
+    if (action === "market-sale") {
       runVillageShopSale(session)
       return
     }
-    if (action === "customize-house" || label.includes("customized")) {
+    if (action === "customize-house") {
       customizeVillageHouse(session, command.playerId)
       return
     }
-    if (action === "cycle-permission" || label.includes("permission")) {
+    if (action === "cycle-permission") {
       cycleCoopVillagePermission(session)
       return
     }
-    if (action === "visit-location" || label.includes("visited village location")) {
+    if (action === "visit-location") {
       visitVillageLocation(session)
       return
     }
-    session.log.unshift(command.label)
-  }
-
-  private applyTutorialUiAction(session: GameSession, label: string) {
-    const action = tutorialActionFromLabel(label)
-    if (!action) return false
-    recordTutorialAction(session, action)
-    return true
   }
 
   private hydrateFromClientSnapshot(session: GameSession, command: HostRelayCommand) {
@@ -332,31 +331,18 @@ function classIdFromPayload(value: unknown): HeroClass {
   return isHeroClass(classId) ? classId : "ranger"
 }
 
-function tutorialActionFromLabel(label: string): TutorialActionId | null {
-  if (label.includes("opened inventory")) return "inventory"
-  if (label.includes("opened book")) return "book"
-  if (label.includes("opened quest")) return "quests"
-  return null
-}
-
 function tutorialActionFromPayload(value: unknown): TutorialActionId | null {
   if (value === "inventory" || value === "book" || value === "quests") return value
   return null
 }
 
 function directionFromCommand(command: HostRelayCommand) {
-  const direction = String(command.payload.direction || command.label).toLowerCase()
+  const direction = typeof command.payload.direction === "string" ? command.payload.direction.toLowerCase() : ""
   if (direction.includes("north") || direction.includes("up")) return { dx: 0, dy: -1 }
   if (direction.includes("south") || direction.includes("down")) return { dx: 0, dy: 1 }
   if (direction.includes("west") || direction.includes("left")) return { dx: -1, dy: 0 }
   if (direction.includes("east") || direction.includes("right")) return { dx: 1, dy: 0 }
   return null
-}
-
-function conversationOptionIndex(label: string) {
-  const match = label.match(/option (\d+)/)
-  if (!match) return null
-  return Math.max(0, Number(match[1]) - 1)
 }
 
 function conversationOptionFromPayload(value: unknown) {
@@ -380,12 +366,6 @@ function interactionActionFromPayload(value: unknown) {
   return null
 }
 
-function combatSkillIndex(label: string) {
-  const match = label.match(/skill (\d+)/)
-  if (!match) return null
-  return Math.max(0, Number(match[1]) - 1)
-}
-
 function combatActionFromPayload(value: unknown) {
   if (value === "select-skill" || value === "flee" || value === "roll" || value === "resolve") return value
   return null
@@ -396,16 +376,6 @@ function combatSkillIndexFromPayload(value: unknown) {
   return index !== null && index >= 0 ? index : null
 }
 
-function inventoryActionFromLabel(label: string): InventoryActionId | null {
-  if (label.startsWith("inspect ")) return "inspect"
-  if (label.startsWith("use ")) return "use"
-  if (label.startsWith("equip ")) return "equip"
-  if (label.startsWith("drop ")) return "drop"
-  if (label.startsWith("stash ")) return "stash"
-  if (label.startsWith("sell ")) return "sell"
-  return null
-}
-
 function inventoryActionFromPayload(value: unknown): InventoryActionId | null {
   if (value === "inspect" || value === "use" || value === "equip" || value === "drop" || value === "stash" || value === "sell") return value
   return null
@@ -414,12 +384,6 @@ function inventoryActionFromPayload(value: unknown): InventoryActionId | null {
 function inventoryUtilityActionFromPayload(value: unknown) {
   if (value === "rest" || value === "use-potion") return value
   return null
-}
-
-function inventorySlotFromLabel(label: string) {
-  const match = label.match(/slot (\d+)/)
-  if (!match) return null
-  return Math.max(0, Number(match[1]) - 1)
 }
 
 function inventorySlotFromPayload(value: unknown) {
@@ -442,14 +406,6 @@ function villageActionFromPayload(value: unknown) {
   ) {
     return value
   }
-  return null
-}
-
-function hubStationFromLabel(label: string): HubStationId | null {
-  if (label.includes("blacksmith")) return "blacksmith"
-  if (label.includes("kitchen")) return "kitchen"
-  if (label.includes("farm")) return "farm"
-  if (label.includes("upgrade")) return "upgrade-bench"
   return null
 }
 

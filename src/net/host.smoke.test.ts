@@ -43,7 +43,7 @@ test("host starts, accepts two players plus a spectator, syncs state, disconnect
     expect(synced.coopStates.find((state) => state.name === "Mira")).toMatchObject({ x: 4, y: 5, tutorialReady: true })
 
     mira.send(JSON.stringify({ type: "command", commandType: "move", label: "Moved east", floor: 1, turn: 2, hp: 19, x: 5, y: 5, payload: { direction: "east" } }))
-    sol.send(JSON.stringify({ type: "command", commandType: "interact", label: "Opened Book", floor: 1, turn: 3, hp: 19, x: 5, y: 5, payload: { target: "book" } }))
+    sol.send(JSON.stringify({ type: "command", commandType: "interact", label: "Opened Book", floor: 1, turn: 3, hp: 19, x: 5, y: 5, payload: { tutorialAction: "book" } }))
     const actionState = await waitForSnapshot(spectator, (snapshot) => snapshot.actions.length === 2 && snapshot.commands.length === 2)
     expect(actionState.actions.map((action) => action.name).sort()).toEqual(["Mira", "Sol"])
     expect(actionState.actions).toContainEqual(expect.objectContaining({ label: "Opened Book", type: "interact" }))
