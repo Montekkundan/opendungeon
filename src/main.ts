@@ -88,6 +88,8 @@ import {
   type ScreenTransition,
 } from "./ui/screens.js"
 import { challengeCadenceForVillageSeedMode, nextVillageSeedMode, seedForVillageDescent, villageSeedPlanText } from "./game/descentSeed.js"
+import { isNpcActorId } from "./game/domainTypes.js"
+import type { StatId } from "./game/stats.js"
 import { shouldUseThreeRenderer } from "./rendering/threeAssets.js"
 import { authHelpText, handleAuthCommand } from "./cloud/authCli.js"
 import { loadAuthSession } from "./cloud/authStore.js"
@@ -98,7 +100,7 @@ import { acquireLocalRunLock, releaseLocalRunLock, terminalAppName, type LocalRu
 import { debugOverlaysEnabled } from "./system/debugFlags.js"
 import { checkInternetConnectivity } from "./net/connectivity.js"
 import { lobbyInviteErrorMessage, lobbyInviteMismatchNotice, lobbyJoinUsageMessage, normalizeLobbyBaseUrl } from "./net/hostConfig.js"
-import type { CoopSyncState, LobbyActionType, LobbyCommandEntry, LobbyCommandResult, LobbyHubSnapshot, LobbyProgressSnapshot, LobbySnapshot } from "./net/lobbyState.js"
+import type { CoopSyncState, LobbyActionType, LobbyCommandEntry, LobbyCommandResult, LobbyContextSnapshot, LobbyHubSnapshot, LobbyProgressSnapshot, LobbySnapshot } from "./net/lobbyState.js"
 import { checkForUpdate, checkingUpdateStatus, handleUpdateCommand } from "./system/updateCheck.js"
 import { easeInOutQuart, lerp } from "./shared/numeric.js"
 import { transitionDurationForKind } from "./ui/teleportAnimation.js"
@@ -2195,6 +2197,7 @@ function applyHostResultToLocalSession(result: LobbyCommandResult, accepted: boo
   if (result.combatMessage) model.session.combat.message = result.combatMessage
   applyHostHubSnapshot(result.hub)
   applyHostProgressSnapshot(result.progress)
+  applyHostContextSnapshot(result.context)
   applyHostTutorialResult(result)
 }
 
@@ -2312,6 +2315,119 @@ function applyHostProgressSnapshot(progress: LobbyProgressSnapshot | undefined) 
       targetId: effect.targetId,
     }))
   model.session.log = progress.log.slice(0, 10)
+}
+
+function applyHostContextSnapshot(context: LobbyContextSnapshot | undefined) {
+  if (!context) return
+  model.session.combat.active = context.combat.active
+  model.session.combat.actorIds = context.combat.actorIds.slice(0, 16)
+  model.session.combat.selectedTarget = Math.max(0, finiteHostInt(context.combat.selectedTarget, 0))
+  model.session.combat.selectedSkill = Math.max(0, finiteHostInt(context.combat.selectedSkill, 0))
+  model.session.combat.round = Math.max(0, finiteHostInt(context.combat.round, model.session.combat.round))
+  model.session.combat.message = context.combat.message
+  model.session.combat.lastRoll = validCombatRoll(context.combat.lastRoll)
+
+  model.session.skillCheck = context.skillCheck && isSkillCheckSource(context.skillCheck.source) && isStatId(context.skillCheck.stat) && isSkillCheckStatus(context.skillCheck.status)
+    ? {
+        actor: context.skillCheck.actor,
+        dc: Math.max(1, finiteHostInt(context.skillCheck.dc, 1)),
+        failureText: context.skillCheck.failureText,
+        id: context.skillCheck.id,
+        point: {
+          x: Math.max(0, finiteHostInt(context.skillCheck.x, 0)),
+          y: Math.max(0, finiteHostInt(context.skillCheck.y, 0)),
+        },
+        prompt: context.skillCheck.prompt,
+        roll: validSkillCheckRoll(context.skillCheck.roll),
+        source: context.skillCheck.source,
+        stat: context.skillCheck.stat,
+        status: context.skillCheck.status,
+        successText: context.skillCheck.successText,
+        title: context.skillCheck.title,
+      }
+    : null
+
+  model.session.conversation = context.conversation && isNpcActorId(context.conversation.kind) && isConversationStatus(context.conversation.status)
+    ? {
+        actorId: context.conversation.actorId,
+        id: context.conversation.id,
+        kind: context.conversation.kind,
+        options: context.conversation.options.slice(0, 6).map((option) => ({
+          id: option.id,
+          label: option.label,
+          text: option.text,
+        })),
+        selectedOption: Math.max(0, finiteHostInt(context.conversation.selectedOption, 0)),
+        speaker: context.conversation.speaker,
+        status: context.conversation.status,
+        text: context.conversation.text,
+        trade: context.conversation.trade
+          ? {
+              item: context.conversation.trade.item,
+              price: Math.max(0, finiteHostInt(context.conversation.trade.price, 0)),
+              purchased: context.conversation.trade.purchased,
+            }
+          : undefined,
+      }
+    : null
+}
+
+const hostStatIds = ["vigor", "mind", "endurance", "strength", "dexterity", "intelligence", "faith", "luck"] as const
+
+function isStatId(value: string): value is StatId {
+  return (hostStatIds as readonly string[]).includes(value)
+}
+
+function isSkillCheckSource(value: string): value is NonNullable<GameSession["skillCheck"]>["source"] {
+  return value === "potion" || value === "relic" || value === "chest"
+}
+
+function isSkillCheckStatus(value: string): value is NonNullable<GameSession["skillCheck"]>["status"] {
+  return value === "pending" || value === "resolved"
+}
+
+function isConversationStatus(value: string): value is NonNullable<GameSession["conversation"]>["status"] {
+  return value === "open" || value === "completed"
+}
+
+function validCombatRoll(roll: LobbyContextSnapshot["combat"]["lastRoll"]): GameSession["combat"]["lastRoll"] {
+  if (!roll || !isStatId(roll.stat)) return undefined
+  return {
+    affinity: isCombatAffinity(roll.affinity) ? roll.affinity : undefined,
+    critical: roll.critical,
+    d20: Math.max(1, Math.min(20, finiteHostInt(roll.d20, 1))),
+    dc: Math.max(1, finiteHostInt(roll.dc, 1)),
+    hit: roll.hit,
+    matchup: isCombatMatchup(roll.matchup) ? roll.matchup : undefined,
+    modifier: finiteHostInt(roll.modifier, 0),
+    skill: roll.skill,
+    stat: roll.stat,
+    target: roll.target,
+    total: finiteHostInt(roll.total, 0),
+  }
+}
+
+function validSkillCheckRoll(roll: NonNullable<LobbyContextSnapshot["skillCheck"]>["roll"]): NonNullable<GameSession["skillCheck"]>["roll"] {
+  if (!roll || !isStatId(roll.stat)) return undefined
+  return {
+    consequence: roll.consequence,
+    critical: roll.critical,
+    d20: Math.max(1, Math.min(20, finiteHostInt(roll.d20, 1))),
+    dc: Math.max(1, finiteHostInt(roll.dc, 1)),
+    fumble: roll.fumble,
+    modifier: finiteHostInt(roll.modifier, 0),
+    stat: roll.stat,
+    success: roll.success,
+    total: finiteHostInt(roll.total, 0),
+  }
+}
+
+function isCombatAffinity(value: string | undefined): value is NonNullable<NonNullable<GameSession["combat"]["lastRoll"]>["affinity"]> {
+  return value === "physical" || value === "precision" || value === "arcane" || value === "holy" || value === "shadow" || value === "luck"
+}
+
+function isCombatMatchup(value: string | undefined): value is NonNullable<NonNullable<GameSession["combat"]["lastRoll"]>["matchup"]> {
+  return value === "weak" || value === "resisted" || value === "neutral"
 }
 
 function applyHostTutorialResult(result: LobbyCommandResult) {

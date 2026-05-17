@@ -256,6 +256,13 @@ describe("host command relay", () => {
       combatActive: true,
       combatMessage: expect.stringContaining("Aimed Shot"),
       combatRound: 1,
+      context: {
+        combat: {
+          active: true,
+          selectedSkill: 1,
+          round: 1,
+        },
+      },
       maxFocus: expect.any(Number),
       maxHp: expect.any(Number),
       turn: start.turn,
@@ -266,6 +273,7 @@ describe("host command relay", () => {
     expect(rolled.accepted).toBe(true)
     expect(rolled.turn).toBeGreaterThan(selected.turn)
     expect(rolled).toMatchObject({ focus: expect.any(Number), level: 1, tutorialStage: "combat", xp: expect.any(Number) })
+    expect(rolled.context?.combat.lastRoll).toMatchObject({ d20: expect.any(Number), total: expect.any(Number) })
     expect(rolled.progress?.toasts).toEqual(expect.any(Array))
   })
 
@@ -289,9 +297,12 @@ describe("host command relay", () => {
 
     expect(start.accepted).toBe(true)
     expect(start.message).toContain("Whispering Relic")
+    expect(start.context?.skillCheck).toMatchObject({ status: "pending", title: "Whispering Relic" })
     expect(rolled.accepted).toBe(true)
     expect(rolled.message).toMatch(/success|failure|Critical/i)
+    expect(rolled.context?.skillCheck?.roll).toMatchObject({ total: expect.any(Number) })
     expect(dismissed).toMatchObject({ accepted: true })
+    expect(dismissed.context?.skillCheck).toBeNull()
     expect(dismissed.progress?.knowledge).toEqual(expect.any(Array))
     expect(dismissed.progress?.log).toEqual(expect.any(Array))
   })

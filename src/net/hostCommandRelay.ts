@@ -34,7 +34,7 @@ import {
   type TutorialActionId,
   type TutorialStageId,
 } from "../game/session.js"
-import type { LobbyCommandResult, LobbyCommandType, LobbyHubSnapshot, LobbyProgressSnapshot } from "./lobbyState.js"
+import type { LobbyCommandResult, LobbyCommandType, LobbyContextSnapshot, LobbyHubSnapshot, LobbyProgressSnapshot } from "./lobbyState.js"
 
 export type HostRelayCommand = {
   name: string
@@ -263,6 +263,7 @@ export class HostCommandRelay {
       combatActive: session.combat.active,
       combatMessage: session.combat.message,
       combatRound: session.combat.round,
+      context: contextSnapshot(session),
       floor: session.floor,
       focus: session.focus,
       gold: session.gold,
@@ -424,6 +425,50 @@ function hubStationFromPayload(value: unknown): HubStationId | null {
 function finitePayloadInt(value: unknown) {
   const number = Number(value)
   return Number.isFinite(number) ? Math.floor(number) : null
+}
+
+function contextSnapshot(session: GameSession): LobbyContextSnapshot {
+  return {
+    combat: {
+      active: session.combat.active,
+      actorIds: [...session.combat.actorIds],
+      lastRoll: session.combat.lastRoll ? { ...session.combat.lastRoll } : undefined,
+      message: session.combat.message,
+      round: session.combat.round,
+      selectedSkill: session.combat.selectedSkill,
+      selectedTarget: session.combat.selectedTarget,
+    },
+    conversation: session.conversation
+      ? {
+          actorId: session.conversation.actorId,
+          id: session.conversation.id,
+          kind: session.conversation.kind,
+          options: session.conversation.options.map((option) => ({ ...option })),
+          selectedOption: session.conversation.selectedOption,
+          speaker: session.conversation.speaker,
+          status: session.conversation.status,
+          text: session.conversation.text,
+          trade: session.conversation.trade ? { ...session.conversation.trade } : undefined,
+        }
+      : null,
+    skillCheck: session.skillCheck
+      ? {
+          actor: session.skillCheck.actor,
+          dc: session.skillCheck.dc,
+          failureText: session.skillCheck.failureText,
+          id: session.skillCheck.id,
+          prompt: session.skillCheck.prompt,
+          roll: session.skillCheck.roll ? { ...session.skillCheck.roll } : undefined,
+          source: session.skillCheck.source,
+          stat: session.skillCheck.stat,
+          status: session.skillCheck.status,
+          successText: session.skillCheck.successText,
+          title: session.skillCheck.title,
+          x: session.skillCheck.point.x,
+          y: session.skillCheck.point.y,
+        }
+      : null,
+  }
 }
 
 function hubSnapshot(session: GameSession): LobbyHubSnapshot {

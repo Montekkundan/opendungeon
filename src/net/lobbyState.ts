@@ -140,6 +140,7 @@ export type LobbyCommandResult = {
   gold?: number
   hub?: LobbyHubSnapshot
   progress?: LobbyProgressSnapshot
+  context?: LobbyContextSnapshot
   tutorialStage?: string
   tutorialReady?: boolean
   tutorialCompleted?: boolean
@@ -192,6 +193,88 @@ export type LobbyCalendarSnapshot = {
   season: string
   weather: string
   festival: string
+}
+
+export type LobbyContextSnapshot = {
+  combat: LobbyCombatContextSnapshot
+  skillCheck: LobbySkillCheckSnapshot | null
+  conversation: LobbyConversationSnapshot | null
+}
+
+export type LobbyCombatContextSnapshot = {
+  active: boolean
+  actorIds: string[]
+  selectedTarget: number
+  selectedSkill: number
+  round: number
+  message: string
+  lastRoll?: LobbyCombatRollSnapshot
+}
+
+export type LobbyCombatRollSnapshot = {
+  d20: number
+  modifier: number
+  total: number
+  dc: number
+  hit: boolean
+  critical: boolean
+  stat: string
+  skill: string
+  target: string
+  affinity?: string
+  matchup?: string
+}
+
+export type LobbySkillCheckSnapshot = {
+  id: string
+  source: string
+  title: string
+  actor: string
+  stat: string
+  dc: number
+  x: number
+  y: number
+  prompt: string
+  successText: string
+  failureText: string
+  status: string
+  roll?: LobbySkillCheckRollSnapshot
+}
+
+export type LobbySkillCheckRollSnapshot = {
+  d20: number
+  modifier: number
+  total: number
+  dc: number
+  success: boolean
+  critical: boolean
+  fumble: boolean
+  stat: string
+  consequence: string
+}
+
+export type LobbyConversationSnapshot = {
+  id: string
+  actorId: string
+  kind: string
+  speaker: string
+  text: string
+  status: string
+  selectedOption: number
+  options: LobbyConversationOptionSnapshot[]
+  trade?: LobbyConversationTradeSnapshot
+}
+
+export type LobbyConversationOptionSnapshot = {
+  id: string
+  label: string
+  text: string
+}
+
+export type LobbyConversationTradeSnapshot = {
+  item: string
+  price: number
+  purchased: boolean
 }
 
 export type LobbyProgressSnapshot = {
@@ -717,6 +800,7 @@ function normalizeCommandResult(value: unknown, fallback: Record<string, string 
   if (record.gold !== undefined || fallback.gold !== undefined) result.gold = positiveInt(record.gold ?? fallback.gold)
   if (record.hub !== undefined) result.hub = cleanHubSnapshot(record.hub)
   if (record.progress !== undefined) result.progress = cleanProgressSnapshot(record.progress)
+  if (record.context !== undefined) result.context = cleanContextSnapshot(record.context)
   if (record.inventoryCount !== undefined || fallback.inventoryCount !== undefined) {
     result.inventoryCount = positiveInt(record.inventoryCount ?? fallback.inventoryCount)
   }
@@ -823,6 +907,130 @@ function cleanHubStringList(value: unknown, limit: number, textLimit: number) {
 
 function cleanHubToken(value: unknown, limit: number) {
   return String(value || "").replace(/[^\w-]/g, "").slice(0, limit)
+}
+
+function cleanContextSnapshot(value: unknown): LobbyContextSnapshot | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const record = value as Partial<LobbyContextSnapshot>
+  const combat = cleanCombatContextSnapshot(record.combat)
+  if (!combat) return undefined
+  return {
+    combat,
+    conversation: cleanConversationSnapshot(record.conversation),
+    skillCheck: cleanSkillCheckSnapshot(record.skillCheck),
+  }
+}
+
+function cleanCombatContextSnapshot(value: unknown): LobbyCombatContextSnapshot | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const record = value as Partial<LobbyCombatContextSnapshot>
+  return {
+    active: record.active === true,
+    actorIds: cleanHubStringList(record.actorIds, 32, 64),
+    lastRoll: cleanCombatRollSnapshot(record.lastRoll),
+    message: cleanActionLabel(record.message || "").slice(0, 180),
+    round: positiveInt(record.round),
+    selectedSkill: positiveInt(record.selectedSkill),
+    selectedTarget: positiveInt(record.selectedTarget),
+  }
+}
+
+function cleanCombatRollSnapshot(value: unknown): LobbyCombatRollSnapshot | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const record = value as Partial<LobbyCombatRollSnapshot>
+  return {
+    affinity: record.affinity === undefined ? undefined : cleanHubToken(record.affinity, 24),
+    critical: record.critical === true,
+    d20: positiveInt(record.d20),
+    dc: positiveInt(record.dc),
+    hit: record.hit === true,
+    matchup: record.matchup === undefined ? undefined : cleanHubToken(record.matchup, 24),
+    modifier: finiteSignedInt(record.modifier),
+    skill: cleanActionLabel(record.skill || "").slice(0, 64),
+    stat: cleanHubToken(record.stat, 24),
+    target: cleanActionLabel(record.target || "").slice(0, 64),
+    total: finiteSignedInt(record.total),
+  }
+}
+
+function cleanSkillCheckSnapshot(value: unknown): LobbySkillCheckSnapshot | null {
+  if (!value || typeof value !== "object") return null
+  const record = value as Partial<LobbySkillCheckSnapshot>
+  const id = cleanHubToken(record.id, 80)
+  const title = cleanActionLabel(record.title || "").slice(0, 80)
+  if (!id || !title) return null
+  return {
+    actor: cleanActionLabel(record.actor || "").slice(0, 64),
+    dc: positiveInt(record.dc),
+    failureText: cleanActionLabel(record.failureText || "").slice(0, 180),
+    id,
+    prompt: cleanActionLabel(record.prompt || "").slice(0, 180),
+    roll: cleanSkillCheckRollSnapshot(record.roll),
+    source: cleanHubToken(record.source, 24),
+    stat: cleanHubToken(record.stat, 24),
+    status: cleanHubToken(record.status, 24),
+    successText: cleanActionLabel(record.successText || "").slice(0, 180),
+    title,
+    x: positiveInt(record.x),
+    y: positiveInt(record.y),
+  }
+}
+
+function cleanSkillCheckRollSnapshot(value: unknown): LobbySkillCheckRollSnapshot | undefined {
+  if (!value || typeof value !== "object") return undefined
+  const record = value as Partial<LobbySkillCheckRollSnapshot>
+  return {
+    consequence: cleanActionLabel(record.consequence || "").slice(0, 180),
+    critical: record.critical === true,
+    d20: positiveInt(record.d20),
+    dc: positiveInt(record.dc),
+    fumble: record.fumble === true,
+    modifier: finiteSignedInt(record.modifier),
+    stat: cleanHubToken(record.stat, 24),
+    success: record.success === true,
+    total: finiteSignedInt(record.total),
+  }
+}
+
+function cleanConversationSnapshot(value: unknown): LobbyConversationSnapshot | null {
+  if (!value || typeof value !== "object") return null
+  const record = value as Partial<LobbyConversationSnapshot>
+  const id = cleanHubToken(record.id, 80)
+  const speaker = cleanActionLabel(record.speaker || "").slice(0, 80)
+  if (!id || !speaker) return null
+  const options = Array.isArray(record.options)
+    ? record.options.flatMap((option) => {
+        const optionRecord = option && typeof option === "object" ? (option as Partial<LobbyConversationOptionSnapshot>) : null
+        const optionId = cleanHubToken(optionRecord?.id, 64)
+        const label = cleanActionLabel(optionRecord?.label || "").slice(0, 90)
+        return optionRecord && optionId && label
+          ? [{ id: optionId, label, text: cleanActionLabel(optionRecord.text || "").slice(0, 180) }]
+          : []
+      }).slice(0, 6)
+    : []
+  const trade = record.trade && typeof record.trade === "object" ? (record.trade as Partial<LobbyConversationTradeSnapshot>) : null
+  return {
+    actorId: cleanHubToken(record.actorId, 80),
+    id,
+    kind: cleanHubToken(record.kind, 32),
+    options,
+    selectedOption: positiveInt(record.selectedOption),
+    speaker,
+    status: cleanHubToken(record.status, 24),
+    text: cleanActionLabel(record.text || "").slice(0, 240),
+    trade: trade
+      ? {
+          item: cleanActionLabel(trade.item || "").slice(0, 80),
+          price: positiveInt(trade.price),
+          purchased: trade.purchased === true,
+        }
+      : undefined,
+  }
+}
+
+function finiteSignedInt(value: unknown) {
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? Math.trunc(numeric) : 0
 }
 
 function cleanProgressSnapshot(value: unknown): LobbyProgressSnapshot | undefined {
