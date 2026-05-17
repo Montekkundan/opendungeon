@@ -186,6 +186,29 @@ describe("host command relay", () => {
     expect(permission.message).toMatch(/permission|owner|friends/i)
   })
 
+  test("rolls back all host state when village commands fail after partial setup", () => {
+    const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
+
+    const rejected = relay.apply(command({
+      label: "Client activated village command",
+      payload: { villageAction: "build-station", station: "unknown-station" },
+      type: "village",
+    }))
+    const built = relay.apply(command({
+      label: "Client activated village command",
+      payload: { villageAction: "build-station", station: "blacksmith" },
+      type: "village",
+    }))
+
+    expect(rejected.accepted).toBe(false)
+    expect(rejected.message).toContain("station")
+    expect(rejected.hub?.unlocked).toBe(false)
+    expect(rejected.hub?.stations.find((station) => station.id === "blacksmith")).toMatchObject({ built: false })
+    expect(built.accepted).toBe(true)
+    expect(built.hub?.unlocked).toBe(true)
+    expect(built.message).toMatch(/Blacksmith|already/i)
+  })
+
   test("uses explicit inventory payloads and returns host item counts", () => {
     const relay = new HostCommandRelay({ mode: "coop", seed: 2423368 })
 

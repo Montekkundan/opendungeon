@@ -141,6 +141,7 @@ export interface GmHostSnapshot {
   coopStates: GmHostCoopState[];
   gmPatches: GmHostDeliveredPatch[];
   hostState: GmHostAuthoritativeState | null;
+  hostStates?: GmHostAuthoritativeState[];
   inviteCode: string;
   mode: "coop" | "race";
   players: GmHostPlayer[];

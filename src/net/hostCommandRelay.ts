@@ -592,43 +592,9 @@ function progressSnapshot(session: GameSession): LobbyProgressSnapshot {
 }
 
 function snapshot(session: GameSession) {
-  return {
-    combat: structuredClone(session.combat),
-    conversation: structuredClone(session.conversation),
-    floor: session.floor,
-    focus: session.focus,
-    gold: session.gold,
-    hp: session.hp,
-    inventory: [...session.inventory],
-    level: session.level,
-    levelUp: structuredClone(session.levelUp),
-    log: [...session.log],
-    player: { ...session.player },
-    skillCheck: structuredClone(session.skillCheck),
-    status: session.status,
-    talents: [...session.talents],
-    turn: session.turn,
-    tutorial: structuredClone(session.tutorial),
-    xp: session.xp,
-  }
+  return structuredClone(session)
 }
 
 function restore(session: GameSession, state: ReturnType<typeof snapshot>) {
-  session.combat = state.combat
-  session.conversation = state.conversation
-  session.floor = state.floor
-  session.focus = state.focus
-  session.gold = state.gold
-  session.hp = state.hp
-  session.inventory = state.inventory
-  session.level = state.level
-  session.levelUp = state.levelUp
-  session.log = state.log
-  session.player = state.player
-  session.skillCheck = state.skillCheck
-  session.status = state.status
-  session.talents = state.talents
-  session.turn = state.turn
-  session.tutorial = state.tutorial
-  session.xp = state.xp
+  Object.assign(session, structuredClone(state))
 }

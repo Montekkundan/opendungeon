@@ -338,6 +338,7 @@ function renderLobbyPage(publicUrl: string): string {
       <section>
         <h2>Co-op State</h2>
         <p id="host-state" class="muted">Host authority has not applied a player command yet.</p>
+        <ul id="host-states"><li class="muted">No per-player host state yet.</li></ul>
         <ul id="coop"><li class="muted">No sync packets yet.</li></ul>
         <p id="combat" class="muted">Combat turn coordination idle.</p>
       </section>
@@ -377,6 +378,9 @@ function renderLobbyPage(publicUrl: string): string {
         document.querySelector("#host-state").textContent = state.hostState
           ? "Host authority #" + state.hostState.commandSequence + " · " + (state.hostState.accepted ? "accepted" : "rejected") + " · " + state.hostState.name + " · floor " + state.hostState.floor + " · turn " + state.hostState.turn + " · hp " + state.hostState.hp + " · (" + state.hostState.x + "," + state.hostState.y + ") · " + state.hostState.message
           : "Host authority has not applied a player command yet.";
+        document.querySelector("#host-states").innerHTML = state.hostStates && state.hostStates.length
+          ? state.hostStates.map((hostState) => "<li>#" + hostState.commandSequence + " · " + (hostState.accepted ? "accepted" : "rejected") + " · " + hostState.name + " · floor " + hostState.floor + " · turn " + hostState.turn + " · hp " + hostState.hp + " · (" + hostState.x + "," + hostState.y + ") · " + hostState.message + "</li>").join("")
+          : '<li class="muted">No per-player host state yet.</li>';
         document.querySelector("#combat").textContent = state.combat.active
           ? "Round " + state.combat.round + " · active player " + state.combat.activePlayerId
           : "Combat turn coordination idle.";

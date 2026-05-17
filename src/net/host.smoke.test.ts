@@ -50,6 +50,9 @@ test("host starts, accepts two players plus a spectator, syncs state, disconnect
     expect(actionState.commands.map((command) => command.sequence).sort()).toEqual([1, 2])
     expect(actionState.commands).toContainEqual(expect.objectContaining({ accepted: true, label: "Opened Book", type: "interact" }))
     expect(actionState.commands.find((command) => command.label === "Opened Book")?.result.message).toBeTruthy()
+    expect(actionState.hostStates.map((state) => state.name).sort()).toEqual(["Mira", "Sol"])
+    expect(actionState.hostStates.find((state) => state.name === "Mira")).toMatchObject({ accepted: true, x: 6 })
+    expect(actionState.hostStates.find((state) => state.name === "Sol")).toMatchObject({ accepted: true })
     const actions = (await fetchJson(`${baseUrl}/actions`)) as Array<{ label: string }>
     expect(actions.map((action) => action.label)).toContain("Moved east")
     const commands = (await fetchJson(`${baseUrl}/commands`)) as Array<{ label: string; payload: Record<string, string>; result: { accepted: boolean } }>
@@ -133,6 +136,9 @@ test("host keeps co-op tutorial movement streams smooth per player", async () =>
     expect(solFirst).toMatchObject({ accepted: true, x: 13, y: 10 })
     expect(moved.coopStates.find((state) => state.name === "Mira")).toMatchObject({ x: miraSecond?.x, y: 10 })
     expect(moved.coopStates.find((state) => state.name === "Sol")).toMatchObject({ x: 13, y: 10 })
+    expect(moved.hostStates.map((state) => state.name).sort()).toEqual(["Mira", "Sol"])
+    expect(moved.hostStates.find((state) => state.name === "Mira")).toMatchObject({ x: miraSecond?.x, y: 10 })
+    expect(moved.hostStates.find((state) => state.name === "Sol")).toMatchObject({ x: 13, y: 10 })
 
     mira.send(JSON.stringify({ type: "sync", state: syncState("ranger", 1, 99, 99, "movement", false, { turn: 99 }) }))
     await waitForSnapshot(sol, (snapshot) => snapshot.coopStates.find((state) => state.name === "Mira")?.x === 99)

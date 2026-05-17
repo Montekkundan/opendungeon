@@ -435,6 +435,7 @@ export type LobbySnapshot = {
   leaderboard: RaceResult[]
   gmPatches: GmDeliveredPatch[]
   hostState: HostAuthoritativeState | null
+  hostStates: HostAuthoritativeState[]
   syncWarnings: string[]
 }
 
@@ -457,6 +458,7 @@ export class MultiplayerLobbyState {
   private readonly gmPatches = new Map<string, GmDeliveredPatch>()
   private readonly actions: LobbyActionEntry[] = []
   private readonly commands: LobbyCommandEntry[] = []
+  private readonly hostStates = new Map<string, HostAuthoritativeState>()
   private hostState: HostAuthoritativeState | null = null
   private commandSequence = 0
   private combat: CombatTurnState = { active: false, round: 0, order: [] }
@@ -495,6 +497,8 @@ export class MultiplayerLobbyState {
   leave(id: string) {
     this.players.delete(id)
     this.coopStates.delete(id)
+    this.hostStates.delete(id)
+    if (this.hostState?.playerId === id) this.hostState = latestHostState(this.hostStates.values())
     this.combat.order = this.combat.order.filter((playerId) => playerId !== id)
     if (this.combat.activePlayerId === id) this.combat.activePlayerId = this.combat.order[0]
   }
@@ -656,13 +660,15 @@ export class MultiplayerLobbyState {
     }
     this.commands.unshift(entry)
     this.applyCommandResultToCoopState(player.id, result, acceptedAt)
-    this.hostState = {
+    const hostState = {
       ...result,
       commandSequence: entry.sequence,
       name: player.name,
       playerId: player.id,
       updatedAt: acceptedAt,
     }
+    this.hostState = hostState
+    this.hostStates.set(player.id, hostState)
     this.trimCommands()
     this.recordAction({
       playerId: player.id,
@@ -692,13 +698,15 @@ export class MultiplayerLobbyState {
     const player = this.players.get(String(input.playerId || ""))
     if (!player || player.role === "spectator") throw new Error(`Unknown host state player: ${String(input.playerId || "")}`)
     const result = normalizeCommandResult(input, {})
-    this.hostState = {
+    const hostState = {
       ...result,
       commandSequence: positiveInt(input.commandSequence),
       name: player.name,
       playerId: player.id,
       updatedAt: this.now(),
     }
+    this.hostState = hostState
+    this.hostStates.set(player.id, hostState)
     return this.hostState
   }
 
@@ -721,6 +729,7 @@ export class MultiplayerLobbyState {
       leaderboard: this.leaderboard(),
       gmPatches: [...this.gmPatches.values()].sort((left, right) => right.approvedAt - left.approvedAt),
       hostState: this.hostState ? { ...this.hostState } : null,
+      hostStates: [...this.hostStates.values()].sort((left, right) => left.name.localeCompare(right.name)).map((state) => ({ ...state })),
       syncWarnings: coopSyncWarnings([...this.coopStates.values()]),
     }
   }
@@ -734,7 +743,8 @@ export class MultiplayerLobbyState {
   }
 
   private applyCommandResultToCoopState(playerId: string, result: LobbyCommandResult, updatedAt: number) {
-    const state = this.coopStates.get(playerId)
+    const player = this.players.get(playerId)
+    const state = this.coopStates.get(playerId) ?? (player ? coopStateFromHostResult(player, result, updatedAt) : null)
     if (!state) return
     if (!result.accepted) {
       this.coopStates.set(playerId, {
@@ -780,6 +790,40 @@ export class MultiplayerLobbyState {
       y: result.y,
     })
   }
+}
+
+function coopStateFromHostResult(player: LobbyPlayer, result: LobbyCommandResult, updatedAt: number): CoopSyncState {
+  return {
+    classId: "ranger",
+    combatActive: Boolean(result.combatActive),
+    connected: true,
+    floor: result.floor,
+    focus: result.focus ?? 0,
+    gold: result.gold ?? 0,
+    hp: result.hp,
+    inventoryCount: result.inventoryCount ?? 0,
+    level: result.level ?? 1,
+    name: player.name,
+    playerId: player.id,
+    saveRevision: result.turn,
+    turn: result.turn,
+    tutorialCompleted: Boolean(result.tutorialCompleted),
+    tutorialReady: Boolean(result.tutorialReady),
+    tutorialStage: result.tutorialStage ? cleanTutorialStage(result.tutorialStage) : "complete",
+    unspentStatPoints: 0,
+    updatedAt,
+    x: result.x,
+    xp: result.xp ?? 0,
+    y: result.y,
+  }
+}
+
+function latestHostState(states: Iterable<HostAuthoritativeState>) {
+  let latest: HostAuthoritativeState | null = null
+  for (const state of states) {
+    if (!latest || state.commandSequence > latest.commandSequence) latest = state
+  }
+  return latest ? { ...latest } : null
 }
 
 export function createInviteCode(seed: number, mode: LobbyMode, salt = "opendungeon") {

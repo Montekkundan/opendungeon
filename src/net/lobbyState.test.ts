@@ -567,6 +567,96 @@ describe("multiplayer lobby state", () => {
     })
     expect(hostState?.world?.dungeon.tiles[0]?.slice(0, 2)).toEqual(["floor", "wall"])
     expect(hostState?.world?.dungeon.tiles[1]?.slice(0, 2)).toEqual(["floor", "floor"])
+    expect(lobby.snapshot().hostStates).toHaveLength(1)
+    expect(lobby.snapshot().hostStates[0]).toMatchObject({
+      commandSequence: 1,
+      name: "Mira",
+      playerId: "p1",
+      progress: { talents: ["pathfinder"] },
+    })
+  })
+
+  test("keeps per-player host command results even before client sync", () => {
+    let now = 70
+    const lobby = new MultiplayerLobbyState({ mode: "coop", seed: 4321, now: () => now++ })
+    lobby.join("mira", "Mira")
+    lobby.join("sol", "Sol")
+
+    lobby.recordCommand({
+      playerId: "mira",
+      type: "move",
+      label: "Moved east",
+      floor: 1,
+      turn: 1,
+      hp: 19,
+      x: 5,
+      y: 5,
+      payload: { direction: "east" },
+      result: {
+        accepted: true,
+        floor: 1,
+        focus: 10,
+        gold: 1,
+        hp: 19,
+        inventoryCount: 2,
+        message: "Mira moved east.",
+        status: "running",
+        tutorialReady: true,
+        tutorialStage: "movement",
+        turn: 2,
+        x: 6,
+        y: 5,
+      },
+    })
+    lobby.recordCommand({
+      playerId: "sol",
+      type: "inventory",
+      label: "Drank potion",
+      floor: 1,
+      turn: 1,
+      hp: 11,
+      x: 8,
+      y: 5,
+      payload: { inventoryAction: "potion" },
+      result: {
+        accepted: false,
+        floor: 1,
+        hp: 11,
+        message: "No potion.",
+        status: "running",
+        turn: 1,
+        x: 8,
+        y: 5,
+      },
+    })
+
+    const snapshot = lobby.snapshot()
+    expect(snapshot.coopStates.map((state) => state.name).sort()).toEqual(["Mira", "Sol"])
+    expect(snapshot.coopStates.find((state) => state.name === "Mira")).toMatchObject({
+      floor: 1,
+      focus: 10,
+      gold: 1,
+      inventoryCount: 2,
+      tutorialReady: true,
+      tutorialStage: "movement",
+      x: 6,
+      y: 5,
+    })
+    expect(snapshot.coopStates.find((state) => state.name === "Sol")).toMatchObject({
+      floor: 1,
+      hp: 11,
+      x: 8,
+      y: 5,
+    })
+    expect(snapshot.hostState).toMatchObject({ accepted: false, commandSequence: 2, name: "Sol", playerId: "sol" })
+    expect(snapshot.hostStates.map((state) => [state.name, state.commandSequence, state.accepted])).toEqual([
+      ["Mira", 1, true],
+      ["Sol", 2, false],
+    ])
+
+    lobby.leave("sol")
+    expect(lobby.snapshot().hostState).toMatchObject({ commandSequence: 1, name: "Mira" })
+    expect(lobby.snapshot().hostStates.map((state) => state.name)).toEqual(["Mira"])
   })
 
   test("stress-tests larger co-op party state and combat turn order", () => {

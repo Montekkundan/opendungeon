@@ -654,24 +654,28 @@ function HostAuthorityState({ snapshot }: { snapshot: GmHostSnapshot | null }) {
     return <p>Enter the `opendungeon-host` URL to see host-owned state.</p>;
   }
 
-  if (!snapshot.hostState) {
+  const states =
+    snapshot.hostStates?.length ? snapshot.hostStates : snapshot.hostState ? [snapshot.hostState] : [];
+
+  if (!states.length) {
     return <p>The host has not applied a player command yet.</p>;
   }
 
-  const state = snapshot.hostState;
   return (
     <div data-component="gm-live-list">
-      <div>
-        <strong>
-          Host #{state.commandSequence}{" "}
-          {state.accepted ? "accepted" : "rejected"} {state.name}
-        </strong>
-        <span>
-          Floor {state.floor} · turn {state.turn} · HP {state.hp} · ({state.x},{" "}
-          {state.y}) · {state.status}
-        </span>
-        <span>{state.message}</span>
-      </div>
+      {states.map((state) => (
+        <div key={state.playerId}>
+          <strong>
+            Host #{state.commandSequence}{" "}
+            {state.accepted ? "accepted" : "rejected"} {state.name}
+          </strong>
+          <span>
+            Floor {state.floor} · turn {state.turn} · HP {state.hp} · ({state.x},{" "}
+            {state.y}) · {state.status}
+          </span>
+          <span>{state.message}</span>
+        </div>
+      ))}
     </div>
   );
 }
